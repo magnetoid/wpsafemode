@@ -1,0 +1,50 @@
+License Agreement
+
+This license is a legal agreement between you and Cloud Industry LLC for the use of our WP Safe Mode (the “Software”). By downloading the software you agree to be bound by the terms and conditions of this license. Cloud Industry LLC reserves the right to alter this agreement at any time, for any reason, without notice.
+
+Permitted Use
+Beta versions of the Software are for testing purpose and can be installed and tested for free, until its restrictions are changed within this agreement.
+
+For full major version of the Software or for commercial use of the Software, you may contact Cloud Industry LLC.
+
+Restrictions
+Unless you have been granted prior, written consent from Cloud Industry LLC, you may not:
+
+Reproduce, distribute, or transfer the Software, or portions thereof, to any third party. Sell, rent, lease, assign, or sublet the Software or portions thereof. Grant rights to any other person. Use the Software in violation of any U.S. or international law or regulation.
+Display of Copyright Notices and Trademark
+All copyright and proprietary notices and logos within the Software files must remain intact. WP Safe Mode is a trademark of Cloud Industry LLC.
+
+Making Copies
+You may make copies of the Software for backup purposes, and personal use, provided that you reproduce the Software in its original form and with all proprietary notices on the back-up copy. For commercial use, you may contact Cloud Industry LLC.
+
+Software Modification
+You may alter, modify, or extend the Software for your own use, or commission a third-party to perform modifications for you, but you may not resell, redistribute or transfer the modified or derivative version without prior written consent from Cloud Industry LLC. Components from the Software may not be extracted and used in other programs without prior written consent from Cloud Industry LLC.
+
+Technical Support
+Technical support is available through email or the http://wpsafemode.com/contact-us/. No representations or guarantees are made regarding the response time in which support questions are answered.
+
+License Transfers
+You may transfer your right to use the Licensed Copy to a third party, provided (a) that you transfer this License Agreement and the transferee accepts this License Agreement, (b) that you retain no copies of the Licensed Copy and its associated license key, and (c) that you notify Cloud Industry LLC about the transfer in writing or by email, providing the details of the new licensee. Such transfer involves the termination of the initial license granted to you under this License Agreement. After the transfer you will no longer have any right to use the Licensed Copy and the License may not be transferred again.
+
+To be clear: A LICENSE MAY ONLY BE TRANSFERRED 1 TIME AND ONLY TO THE REPRESENTATIVE OF THE FIRST WEBSITE THE SOFTWARE IS INSTALLED ON. ONCE INSTALLED THE LICENSE MAY NOT BE TRANSFERRED TO ANY OTHER DOMAIN
+
+Updates
+Cloud Industry LLC will provide you with free updates to the Software applicable to your Licensed Copy for the remainder of the Software’s lifespan for major version purchased. Such updates will include any updates for the Software that are released by Cloud Industry LLC for general distribution to the Software licensees. Cloud Industry LLC has no obligation to provide you with any updates that are not released for general distribution to Cloud Industry LLC’s other licensees. Nothing in this Agreement shall be construed to obligate Cloud Industry LLC to provide updates to you under any circumstances.
+
+Cloud Industry LLC may develop and release future incremental versions of the Software. Such future versions of the Software may, at Cloud Industry LLC’s sole discretion, be released pursuant to different terms and conditions different from this License Agreement, and may be subject to additional license fees.
+
+Any violation of this agreement, for example, but not limited to, installing existing licenses on multiple, unlicensed, domains, or transferring licenses for profit, will cause a forfeiture of the abused licenses and may remove your ability to download updates and/or have access to support.
+
+Consent to Use of Data
+You agree that Cloud Industry LLC may collect and use technical data and related information, including but not limited to information about your server environment, that is gathered periodically to facilitate the provision of software updates, product support, and other services to you (if any) related to the Software. Cloud Industry LLC may use this information to improve its products or to provide services or technologies to you.
+
+Indemnity
+You agree to indemnify and hold harmless Cloud Industry LLC and WP Safe Mode for any third-party claims, actions or suits, as well as any related expenses, liabilities, damages, settlements or fees arising from your use or misuse of the Software, or a violation of any terms of this license.
+
+Disclaimer Of Warranty
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, WARRANTIES OF QUALITY, PERFORMANCE, NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. FURTHER, CLOUD INDUSTRY LLC DOES NOT WARRANT THAT THE SOFTWARE OR ANY RELATED SERVICE WILL ALWAYS BE AVAILABLE.
+
+Limitations Of Liability
+YOU ASSUME ALL RISK ASSOCIATED WITH THE INSTALLATION AND USE OF THE SOFTWARE. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS OF THE SOFTWARE BE LIABLE FOR CLAIMS, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE. LICENSE HOLDERS ARE SOLELY RESPONSIBLE FOR DETERMINING THE APPROPRIATENESS OF USE AND ASSUME ALL RISKS ASSOCIATED WITH ITS USE, INCLUDING BUT NOT LIMITED TO THE RISKS OF PROGRAM ERRORS, DAMAGE TO EQUIPMENT, LOSS OF DATA OR SOFTWARE PROGRAMS, OR UNAVAILABILITY OR INTERRUPTION OF OPERATIONS.
+
+Revised on: November 1 2015

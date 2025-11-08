@@ -7,6 +7,8 @@ Beta version is currently free to download and use for testing and work with you
 It helps with migration, backup, fixing, plugin activations, themes, debugging, htaccess modifications and much, much more..
 The WP safe mode tool is an essential for WordPress end users and developers.
 
+Managed by: imbamarketing.com and cloud-industry.com
+
 
 Features
 -----------------------
@@ -113,6 +115,7 @@ Please visit http://wpsafemode.com/ to signup and leave a feedback so we can imp
 Best Regards, 
 
 Cloud Industry Team 
+
 
 
 

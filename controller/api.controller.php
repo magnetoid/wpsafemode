@@ -201,15 +201,42 @@ class ApiController extends MainController {
         $dashboard->init_data();
         $dashboard->get_message();
         
+        // Ensure view_url is normalized
+        $view_url = rtrim($this->settings['view_url'] ?? 'view/', '/\\') . '/';
+
         // Try admin view first, fallback to regular view
-        $admin_view_file = $this->settings['view_url'] . $view . '-admin.php';
-        $view_file = $this->settings['view_url'] . $view . '.php';
-        
+        $admin_template = $view_url . $view . '-admin.php';
+        $regular_template = $view_url . $view . '.php';
+
+        // Try the old approach first for debugging
+        $admin_view_file_old = dirname(__DIR__) . '/' . $admin_template;
+        $view_file_old = dirname(__DIR__) . '/' . $regular_template;
+
         $file_to_load = null;
-        if (file_exists($admin_view_file)) {
-            $file_to_load = $admin_view_file;
-        } elseif (file_exists($view_file)) {
-            $file_to_load = $view_file;
+        if (file_exists($admin_view_file_old)) {
+            $file_to_load = $admin_view_file_old;
+        } elseif (file_exists($view_file_old)) {
+            $file_to_load = $view_file_old;
+        } else {
+            // Fallback to resolveTemplatePath
+            $admin_view_file = $this->resolveTemplatePath($admin_template);
+            $view_file = $this->resolveTemplatePath($regular_template);
+
+            if ($admin_view_file && file_exists($admin_view_file)) {
+                $file_to_load = $admin_view_file;
+            } elseif ($view_file && file_exists($view_file)) {
+                $file_to_load = $view_file;
+            }
+        }
+
+        // Debug logging
+        if ($this->settings['debug'] ?? false) {
+            error_log("API View Debug - View: $view");
+            error_log("API View Debug - Admin template: $admin_template");
+            error_log("API View Debug - Old admin path: $admin_view_file_old (exists: " . (file_exists($admin_view_file_old) ? 'yes' : 'no') . ")");
+            error_log("API View Debug - Old regular path: $view_file_old (exists: " . (file_exists($view_file_old) ? 'yes' : 'no') . ")");
+            error_log("API View Debug - Base path: " . ($this->base_path ?? 'not set'));
+            error_log("API View Debug - Final file to load: " . ($file_to_load ?? 'none'));
         }
         
         if ($file_to_load) {

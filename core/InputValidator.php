@@ -101,5 +101,36 @@ class InputValidator {
         $basename = basename($filename);
         return preg_match('/^[a-zA-Z0-9._-]+$/', $basename) === 1;
     }
+    
+    /**
+     * Generic validation method
+     * 
+     * @param mixed $input Input to validate
+     * @param string $pattern Validation pattern/type
+     * @return bool
+     */
+    public static function validate($input, string $pattern): bool {
+        if (class_exists('SecureInput') && method_exists('SecureInput', 'validate')) {
+            return SecureInput::validate($input, $pattern);
+        }
+        
+        // Fallback validation
+        switch ($pattern) {
+            case 'email':
+                return self::validateEmail($input);
+            case 'url':
+                return self::validateUrl($input);
+            case 'filename':
+                return self::validateFilename($input);
+            case 'table_name':
+                return self::validateTableName($input);
+            case 'int':
+                return filter_var($input, FILTER_VALIDATE_INT) !== false;
+            case 'ip':
+                return filter_var($input, FILTER_VALIDATE_IP) !== false;
+            default:
+                return true;
+        }
+    }
 }
 

@@ -89,7 +89,7 @@ class AIController extends MainController {
             return;
         }
         
-        $error_log = SecureInput::get_input('error_log', INPUT_POST, 'string');
+        $error_log = InputValidator::getInput('error_log', INPUT_POST, 'string');
         
         if (empty($error_log)) {
             $this->error('Error log content is required', 400);
@@ -114,7 +114,7 @@ class AIController extends MainController {
         }
         
         $plugins_raw = filter_input(INPUT_POST, 'plugins', FILTER_DEFAULT, FILTER_REQUIRE_ARRAY);
-        $error_log = SecureInput::get_input('error_log', INPUT_POST, 'string');
+        $error_log = InputValidator::getInput('error_log', INPUT_POST, 'string');
         
         $plugins = array();
         if (is_array($plugins_raw)) {
@@ -191,7 +191,7 @@ class AIController extends MainController {
             return;
         }
         
-        $message = SecureInput::get_input('message', INPUT_POST, 'string');
+        $message = InputValidator::getInput('message', INPUT_POST, 'string');
         $history_raw = filter_input(INPUT_POST, 'history', FILTER_DEFAULT, FILTER_REQUIRE_ARRAY);
         $context_raw = filter_input(INPUT_POST, 'context', FILTER_DEFAULT, FILTER_REQUIRE_ARRAY);
         
@@ -229,7 +229,7 @@ class AIController extends MainController {
             return;
         }
         
-        $error = SecureInput::get_input('error', INPUT_POST, 'string');
+        $error = InputValidator::getInput('error', INPUT_POST, 'string');
         
         if (empty($error)) {
             $this->error('Error message is required', 400);
@@ -253,8 +253,8 @@ class AIController extends MainController {
             return;
         }
         
-        $description = SecureInput::get_input('description', INPUT_POST, 'string');
-        $context = SecureInput::get_input('context', INPUT_POST, 'string');
+        $description = InputValidator::getInput('description', INPUT_POST, 'string');
+        $context = InputValidator::getInput('context', INPUT_POST, 'string');
         
         if (empty($description)) {
             $this->error('Description is required', 400);

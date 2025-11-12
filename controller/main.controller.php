@@ -488,10 +488,10 @@ class MainController {
 		
 		RateLimiter::record_attempt('login');
 		
-		// SECURITY FIX: Use SecureInput for sanitization
+		// SECURITY FIX: Use InputValidator for sanitization
 		$user_data = array(
-		'username' => SecureInput::get_input('username', INPUT_POST, 'string'),
-		'password' => SecureInput::get_input('password', INPUT_POST, 'string'),					
+		'username' => InputValidator::getInput('username', INPUT_POST, 'string'),
+		'password' => InputValidator::getInput('password', INPUT_POST, 'string'),					
 		);
 		$login = $this->dashboard_model->get_login();
 		if(!empty($login)){

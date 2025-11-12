@@ -818,12 +818,12 @@ class DashboardController extends MainController {
 	* @return void 
 	*/
     function action_download(){
-    	// SECURITY FIX: Use SecureInput for sanitization
-    	$download = SecureInput::get_input('download', INPUT_GET, 'string');
-    	$filename = SecureInput::get_input('filename', INPUT_GET, 'filename');
+    	// SECURITY FIX: Use InputValidator for sanitization
+    	$download = InputValidator::getInput('download', INPUT_GET, 'string');
+    	$filename = InputValidator::getInput('filename', INPUT_GET, 'string');
     	
     	// SECURITY FIX: Validate filename format
-    	if (!SecureInput::validate($filename, 'filename')) {
+    	if (!InputValidator::validate($filename, 'filename')) {
     		$this->set_message('Invalid filename');
     		$this->redirect();
     		return;

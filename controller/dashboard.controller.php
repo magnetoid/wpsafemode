@@ -818,53 +818,76 @@ class DashboardController extends MainController {
 	* @return void 
 	*/
     function action_download(){
-    	 $download = filter_input(INPUT_GET,'download');
-    	 $filename = filter_input(INPUT_GET,'filename');
-		 if($download == 'database'){
-		 	$db_backups = $this->dashboard_model->get_database_backups();
-		 	foreach($db_backups as $db_backups_section){
-				foreach($db_backups_section as $backupfile){
-					$basename = basename($backupfile);
-					if($basename==$filename){
-						DashboardHelpers::download_file($filename, $backupfile);	
-						exit;
-					}
-				
-				}
-			}
-		  $this->set_message('That file doesn\'t exist');	
-		 }
-        if($download == 'sitefiles'){
-		 	$db_backups = $this->dashboard_model->get_file_backups();
-		 	foreach($db_backups as $db_backups_section){
-				foreach($db_backups_section as $backupfile){
-					$basename = basename($backupfile);
-					if($basename==$filename){
-						DashboardHelpers::download_file($filename, $backupfile);	
-						exit;
-					}
-				
-				}
-			}
-		  $this->set_message('That file doesn\'t exist');	
-		 }
-		 //download htacces backup file
-		 if($download == 'htaccess'){
-		 	$db_backups = $this->dashboard_model->get_htaccess_backups();
-			$basename = basename($db_backups);
-			if($basename == $filename){
-				DashboardHelpers::download_file($filename, $db_backups);
-				exit;
-			}
-			$this->set_message('That file does\'t exist');
-		 }
-		 
-		 if($download == 'error_log'){
-		 	   $error_file = ini_get('error_log');
-		 	   DashboardHelpers::download_file('error_log', $error_file);
-			   exit;
-		 	   
-		 }
+    	// SECURITY FIX: Use SecureInput for sanitization
+    	$download = SecureInput::get_input('download', INPUT_GET, 'string');
+    	$filename = SecureInput::get_input('filename', INPUT_GET, 'filename');
+    	
+    	// SECURITY FIX: Validate filename format
+    	if (!SecureInput::validate($filename, 'filename')) {
+    		$this->set_message('Invalid filename');
+    		$this->redirect();
+    		return;
+    	}
+    	
+    	if($download == 'database'){
+    		$base_directory = $this->settings['sfstore'] . 'db_backup/';
+    		
+    		// SECURITY FIX: Validate file path
+    		$filepath = SecureFileOperations::validate_file_path($filename, $base_directory);
+    		if ($filepath === false || !file_exists($filepath)) {
+    			$this->set_message('File not found');
+    			$this->redirect();
+    			return;
+    		}
+    		
+    		SecureFileOperations::secure_download_file($filename, $base_directory);
+    		exit;
+    	}
+    	
+    	if($download == 'sitefiles'){
+    		$base_directory = $this->settings['sfstore'] . 'file_backup/';
+    		
+    		// SECURITY FIX: Validate file path
+    		$filepath = SecureFileOperations::validate_file_path($filename, $base_directory);
+    		if ($filepath === false || !file_exists($filepath)) {
+    			$this->set_message('File not found');
+    			$this->redirect();
+    			return;
+    		}
+    		
+    		SecureFileOperations::secure_download_file($filename, $base_directory);
+    		exit;
+    	}
+    	
+    	//download htaccess backup file
+    	if($download == 'htaccess'){
+    		$base_directory = $this->settings['sfstore'] . 'htaccess_backup/';
+    		
+    		// SECURITY FIX: Validate file path
+    		$filepath = SecureFileOperations::validate_file_path($filename, $base_directory);
+    		if ($filepath === false || !file_exists($filepath)) {
+    			$this->set_message('File not found');
+    			$this->redirect();
+    			return;
+    		}
+    		
+    		SecureFileOperations::secure_download_file($filename, $base_directory);
+    		exit;
+    	}
+    	
+    	if($download == 'error_log'){
+    		$error_file = ini_get('error_log');
+    		if ($error_file && file_exists($error_file)) {
+    			// SECURITY FIX: Validate error log file path
+    			$filepath = realpath($error_file);
+    			if ($filepath && is_file($filepath)) {
+    				SecureFileOperations::secure_download_file(basename($error_file), dirname($filepath));
+    				exit;
+    			}
+    		}
+    		$this->set_message('Error log file not found');
+    		$this->redirect();
+    	}
 	}
 
     /**

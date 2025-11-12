@@ -1328,10 +1328,19 @@ class DashboardModel extends dbModel {
 	* @return void
 	*/
     public function save_plugins($option_value = '' , $serialize = false){
+        // SECURITY FIX: Validate input
+        if (!is_string($option_value)) {
+            throw new InvalidArgumentException("Option value must be a string");
+        }
         
-        $q = $this->prepare("UPDATE ".$this->db_prefix."options SET option_value = '" . $option_value . "' WHERE option_name LIKE 'active_plugins';");
+        // SECURITY FIX: Use parameter binding
+        $q = $this->prepare("UPDATE `" . $this->db_prefix . "options` SET option_value = :option_value WHERE option_name = 'active_plugins'");
+        $q->bindValue(':option_value', $option_value, PDO::PARAM_STR);
         $q->execute();
-       
+        
+        if ($q->rowCount() === 0) {
+            throw new Exception("Failed to update active plugins");
+        }
     }
 
     /**

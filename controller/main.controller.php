@@ -185,7 +185,12 @@ class MainController {
 	* @return void 
 	*/
     function header(){
-		 $this->render($this->view_url . 'header' , $this->data);
+		// Use admin header if available, otherwise fallback to old header
+		if (file_exists($this->view_url . 'header-admin.php')) {
+			$this->render($this->view_url . 'header-admin' , $this->data);
+		} else {
+			$this->render($this->view_url . 'header' , $this->data);
+		}
 	}
 	
 	/**
@@ -194,7 +199,12 @@ class MainController {
 	* @return void 
 	*/
 	function footer(){
-		  $this->render($this->view_url .'footer' , $this->data);
+		// Use admin footer if available, otherwise fallback to old footer
+		if (file_exists($this->view_url . 'footer-admin.php')) {
+			$this->render($this->view_url . 'footer-admin' , $this->data);
+		} else {
+			$this->render($this->view_url . 'footer' , $this->data);
+		}
 	}	
 	
 	/**
@@ -439,14 +449,28 @@ class MainController {
 	}
 	
 	function submit_login(){
-		$user_data = array(
-		'username' =>'',
-	//	'email' => '',		
-		'password' => '',					
-		);
-		foreach($user_data as $key=>$user_item){
-		  	$user_data[$key] = filter_input(INPUT_POST, $key);
+		// SECURITY FIX: Validate CSRF token first
+		if (!CSRFProtection::validate_post_token('login')) {
+			$this->set_message('Invalid security token. Please try again.');
+			$this->redirect('?view=login');
+			return;
 		}
+		
+		// SECURITY FIX: Check rate limiting
+		if (!RateLimiter::check_rate_limit('login', 5, 300)) {
+			$remaining = RateLimiter::get_reset_time('login', 300);
+			$this->set_message('Too many login attempts. Please try again in ' . $remaining . ' seconds.');
+			$this->redirect('?view=login');
+			return;
+		}
+		
+		RateLimiter::record_attempt('login');
+		
+		// SECURITY FIX: Use SecureInput for sanitization
+		$user_data = array(
+		'username' => SecureInput::get_input('username', INPUT_POST, 'string'),
+		'password' => SecureInput::get_input('password', INPUT_POST, 'string'),					
+		);
 		$login = $this->dashboard_model->get_login();
 		if(!empty($login)){
 			$error = false;
@@ -489,6 +513,8 @@ class MainController {
 				 		$this->set_message('Wrong email/username and/or password'); 
 				 		$this->redirect();
 				 }else{
+				 	// SECURITY FIX: Reset rate limit on successful login
+				 	RateLimiter::reset_rate_limit('login');
 				 	$this->set_session_var('login' , true);
 				 	$this->set_message('You have been successfully logged in.'); 
 				 	$this->redirect('?view=info');	

@@ -1,6 +1,6 @@
 <?php
 
-	function RobotsController extends DashboardController{
+	class RobotsController extends DashboardController{
 		
 		function __construct(){    	
 	        parent::__construct();  

@@ -796,29 +796,65 @@ class DashboardHelpers {
   * @return $filename|boolean path of file that is being stored or boolean upon success or fail 
   */
   public static function remote_download($url = '', $filename = ''){
-  	            set_time_limit(0);
-                $file = fopen($filename , 'w+');
-                $curl = curl_init($url);
-               
-                curl_setopt_array($curl, array(
-                    CURLOPT_URL            => $url,
-                    CURLOPT_BINARYTRANSFER => 1,
-                    CURLOPT_RETURNTRANSFER => 1,
-                    CURLOPT_FILE           => $file,
-                    CURLOPT_TIMEOUT        => 50,
-                    CURLOPT_SSL_VERIFYPEER => false,
-                    CURLOPT_USERAGENT      => 'Mozilla/4.0 (compatible; MSIE 5.01; Windows NT 5.0)'
-                ));
-                $response = curl_exec($curl);
-                if($response === false) {
-                    // Update as of PHP 5.3 use of Namespaces Exception() becomes \Exception()
-                    throw new \Exception('Curl error: ' . curl_error($curl));
-                    return false;
-                }
-                
-                return $filename;
-                
-               
+  	// SECURITY FIX: Validate URL
+  	if (!filter_var($url, FILTER_VALIDATE_URL)) {
+  		throw new InvalidArgumentException('Invalid URL: ' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8'));
+  	}
+  	
+  	// SECURITY FIX: Only allow HTTPS for sensitive downloads
+  	if (parse_url($url, PHP_URL_SCHEME) !== 'https') {
+  		throw new InvalidArgumentException('Only HTTPS URLs are allowed');
+  	}
+  	
+  	// SECURITY FIX: Validate filename
+  	$filename = str_replace("\0", '', $filename);
+  	if (!preg_match('/^[a-zA-Z0-9._-]+$/', basename($filename))) {
+  		throw new InvalidArgumentException('Invalid filename');
+  	}
+  	
+  	set_time_limit(0);
+  	$file = fopen($filename , 'w+');
+  	if ($file === false) {
+  		throw new RuntimeException('Could not open file for writing');
+  	}
+  	
+  	$curl = curl_init($url);
+  	
+  	curl_setopt_array($curl, array(
+  		CURLOPT_URL            => $url,
+  		CURLOPT_BINARYTRANSFER => 1,
+  		CURLOPT_RETURNTRANSFER => 1,
+  		CURLOPT_FILE           => $file,
+  		CURLOPT_TIMEOUT        => 50,
+  		CURLOPT_SSL_VERIFYPEER => true,  // SECURITY FIX: Enable SSL verification
+  		CURLOPT_SSL_VERIFYHOST => 2,     // SECURITY FIX: Verify hostname
+  		CURLOPT_USERAGENT      => 'WP-SafeMode/1.0',
+  		CURLOPT_FOLLOWLOCATION => false, // SECURITY FIX: Don't follow redirects automatically
+  		CURLOPT_MAXREDIRS      => 0
+  	));
+  	
+  	$response = curl_exec($curl);
+  	$http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+  	
+  	if($response === false) {
+  		$error = curl_error($curl);
+  		curl_close($curl);
+  		fclose($file);
+  		throw new \Exception('Curl error: ' . $error);
+  	}
+  	
+  	// SECURITY FIX: Check HTTP status code
+  	if ($http_code !== 200) {
+  		curl_close($curl);
+  		fclose($file);
+  		unlink($filename); // Clean up failed download
+  		throw new \Exception('HTTP error: ' . $http_code);
+  	}
+  	
+  	curl_close($curl);
+  	fclose($file);
+  	
+  	return $filename;
   }
   
   /**
@@ -833,31 +869,54 @@ class DashboardHelpers {
   	if(empty($url)){
 		return false;
 	}
+	
+	// SECURITY FIX: Validate URL
+	if (!filter_var($url, FILTER_VALIDATE_URL)) {
+		throw new InvalidArgumentException('Invalid URL: ' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8'));
+	}
+	
+	// SECURITY FIX: Only allow HTTPS
+	if (parse_url($url, PHP_URL_SCHEME) !== 'https') {
+		throw new InvalidArgumentException('Only HTTPS URLs are allowed');
+	}
+	
   	$post_string = http_build_query($data);
-			 
-			//create cURL connection
-			$curl_connection = curl_init($url);
-			 
-			//set options
-			curl_setopt($curl_connection, CURLOPT_CONNECTTIMEOUT, 30);
-			curl_setopt($curl_connection, CURLOPT_USERAGENT,  "Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1)");
-			curl_setopt($curl_connection, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($curl_connection, CURLOPT_SSL_VERIFYPEER, false);
-			curl_setopt($curl_connection, CURLOPT_FOLLOWLOCATION, 1);
-			 
-			//set data to be posted
-			curl_setopt($curl_connection, CURLOPT_POSTFIELDS, $post_string);
-			 
-			//perform our request
-			$result = curl_exec($curl_connection);
-			
-			//show information regarding the request
-			//print_r(curl_getinfo($curl_connection));
-			//echo curl_errno($curl_connection) . '-' . 
-			curl_error($curl_connection);
-			//close the connection
+		 
+		//create cURL connection
+		$curl_connection = curl_init($url);
+		 
+		//set options
+		curl_setopt($curl_connection, CURLOPT_CONNECTTIMEOUT, 30);
+		curl_setopt($curl_connection, CURLOPT_USERAGENT,  "WP-SafeMode/1.0");
+		curl_setopt($curl_connection, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($curl_connection, CURLOPT_SSL_VERIFYPEER, true);  // SECURITY FIX: Enable SSL verification
+		curl_setopt($curl_connection, CURLOPT_SSL_VERIFYHOST, 2);     // SECURITY FIX: Verify hostname
+		curl_setopt($curl_connection, CURLOPT_FOLLOWLOCATION, false); // SECURITY FIX: Don't follow redirects
+		curl_setopt($curl_connection, CURLOPT_MAXREDIRS, 0);
+		 
+		//set data to be posted
+		curl_setopt($curl_connection, CURLOPT_POSTFIELDS, $post_string);
+		 
+		//perform our request
+		$result = curl_exec($curl_connection);
+		
+		if ($result === false) {
+			$error = curl_error($curl_connection);
 			curl_close($curl_connection);
-  	
+			throw new Exception('Curl error: ' . $error);
+		}
+		
+		$http_code = curl_getinfo($curl_connection, CURLINFO_HTTP_CODE);
+		
+		//close the connection
+		curl_close($curl_connection);
+		
+		// SECURITY FIX: Check HTTP status code
+		if ($http_code < 200 || $http_code >= 300) {
+			throw new Exception('HTTP error: ' . $http_code);
+		}
+		
+		return $result;
   }
   
   /**
@@ -992,21 +1051,32 @@ class DashboardHelpers {
 	   }
 	
 	 public static function check_directory($filename = '' , $create = true){    
+		// SECURITY FIX: Validate path
+		if (is_string($filename)) {
+			$filename = str_replace("\0", '', $filename);
+		}
+		
 		if(!is_array($filename)){
 			if (!file_exists($filename)) {
 				if($create == true ){
-				 mkdir($filename, 0777);	
+					// SECURITY FIX: Use secure permissions (0755 instead of 0777)
+					if (!mkdir($filename, 0755, true)) {
+						throw new RuntimeException('Could not create directory: ' . htmlspecialchars($filename, ENT_QUOTES, 'UTF-8'));
+					}
 				}			   
 			   return;
 			}			
 		}else{
 			foreach($filename as $dir){
-			if (!file_exists($dir)) {
-				if($create == true ){
-			    mkdir($dir, 0777);
-			    }
-			    //exit;
-			}		
+				$dir = str_replace("\0", '', $dir);
+				if (!file_exists($dir)) {
+					if($create == true ){
+						// SECURITY FIX: Use secure permissions (0755 instead of 0777)
+						if (!mkdir($dir, 0755, true)) {
+							throw new RuntimeException('Could not create directory: ' . htmlspecialchars($dir, ENT_QUOTES, 'UTF-8'));
+						}
+					}
+				}		
 			}
 		}
      return;

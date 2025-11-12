@@ -19,7 +19,7 @@ if($data['current_page']=='login'){
 			</li>
 		<?php else:  ?>
 			<li class="<?php echo (isset($data['current_page']) && $data['current_page'] == $menu_item['slug'])?'active':''; ?>">
-				<a href="<?php echo (isset($menu_item['link']))?$menu_item['link']:'#';  ?>" data-tooltip aria-haspopup="true" class="has-tip" data-options="disable_for_touch:true" title="<?php echo $menu_item['name'];  ?>"><i class="<?php echo isset($menu_item['icon'])?$menu_item['icon']:'';  ?> icon"></i> 
+				<a href="<?php echo (isset($menu_item['link']))?$menu_item['link']:'#';  ?>" data-view="<?php echo $menu_item['slug']; ?>" data-tooltip aria-haspopup="true" class="has-tip" data-options="disable_for_touch:true" title="<?php echo $menu_item['name'];  ?>"><i class="<?php echo isset($menu_item['icon'])?$menu_item['icon']:'';  ?> icon"></i> 
 					<span><?php echo $menu_item['name'];  ?></span>
 				</a>
 			</li>	

@@ -1,0 +1,326 @@
+/**
+ * WP Safe Mode - Admin Custom Styles
+ * Custom styles for AdminLTE 3 integration
+ */
+
+:root {
+    --wpsm-primary: #007bff;
+    --wpsm-success: #28a745;
+    --wpsm-danger: #dc3545;
+    --wpsm-warning: #ffc107;
+    --wpsm-info: #17a2b8;
+}
+
+/* Custom Brand Colors */
+.brand-text {
+    font-weight: 600 !important;
+}
+
+/* Sidebar Icons */
+.nav-icon {
+    width: 1.2rem;
+    text-align: center;
+}
+
+/* Content Cards */
+.content-card {
+    box-shadow: 0 0 1px rgba(0,0,0,.125), 0 1px 3px rgba(0,0,0,.2);
+    border-radius: .25rem;
+    background: #fff;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Info Cards */
+.info-box {
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.info-box:hover {
+    transform: translateY(-2px);
+}
+
+/* Plugin/Theme Lists */
+.plugin-list, .theme-list {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.plugin-item, .theme-item {
+    padding: 0.75rem;
+    border-bottom: 1px solid #dee2e6;
+    transition: background-color 0.2s;
+}
+
+.plugin-item:hover, .theme-item:hover {
+    background-color: #f8f9fa;
+}
+
+.plugin-item:last-child, .theme-item:last-child {
+    border-bottom: none;
+}
+
+/* Tables */
+.table-modern {
+    font-size: 0.9rem;
+}
+
+.table-modern thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+/* Forms */
+.form-modern .form-group label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.form-modern .form-control {
+    border-radius: 0.25rem;
+    border: 1px solid #ced4da;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-modern .form-control:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+/* Buttons */
+.btn-modern {
+    border-radius: 0.25rem;
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-modern:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Status Badges */
+.badge-modern {
+    padding: 0.35em 0.65em;
+    font-size: 0.75em;
+    font-weight: 600;
+    border-radius: 0.25rem;
+}
+
+/* Loading States */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+/* Alert Messages */
+.alert-modern {
+    border-radius: 0.5rem;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Code Blocks */
+pre.code-block {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.875rem;
+}
+
+/* Stats Cards */
+.stats-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.stats-card.success {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+}
+
+.stats-card.warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.stats-card.info {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.stats-card .stats-value {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0.5rem 0;
+}
+
+.stats-card .stats-label {
+    font-size: 0.875rem;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Backup List */
+.backup-list {
+    list-style: none;
+    padding: 0;
+}
+
+.backup-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.backup-item:hover {
+    background: #e9ecef;
+}
+
+/* Quick Actions Grid */
+.quick-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.quick-action-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.quick-action-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    border-color: var(--wpsm-primary);
+}
+
+.quick-action-card i {
+    font-size: 2.5rem;
+    color: var(--wpsm-primary);
+    margin-bottom: 0.5rem;
+}
+
+.quick-action-card h5 {
+    margin: 0.5rem 0;
+    font-weight: 600;
+}
+
+/* Error Log */
+.error-log-container {
+    max-height: 600px;
+    overflow-y: auto;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 1rem;
+    border-radius: 0.25rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+}
+
+.error-log-line {
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #333;
+}
+
+.error-log-line.error {
+    color: #f48771;
+}
+
+.error-log-line.warning {
+    color: #dcdcaa;
+}
+
+.error-log-line.info {
+    color: #4ec9b0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .quick-actions-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats-card .stats-value {
+        font-size: 1.5rem;
+    }
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+    .content-card {
+        background: #1e1e1e;
+        color: #d4d4d4;
+    }
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+/* Custom Scrollbar */
+.plugin-list::-webkit-scrollbar,
+.theme-list::-webkit-scrollbar,
+.error-log-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.plugin-list::-webkit-scrollbar-track,
+.theme-list::-webkit-scrollbar-track,
+.error-log-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.plugin-list::-webkit-scrollbar-thumb,
+.theme-list::-webkit-scrollbar-thumb,
+.error-log-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.plugin-list::-webkit-scrollbar-thumb:hover,
+.theme-list::-webkit-scrollbar-thumb:hover,
+.error-log-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+

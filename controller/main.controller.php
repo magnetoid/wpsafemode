@@ -35,12 +35,8 @@ class MainController {
         $this->action = filter_input(INPUT_GET , 'action');
         $this->setup_dirs();
         
-        // Clear redirect flag on successful page load
-        // This ensures the flag doesn't persist if a redirect was attempted but failed
-        if (isset($_SESSION['wpsm']['redirecting']) && !headers_sent()) {
-            // Clear the flag since we successfully loaded the page
-            unset($_SESSION['wpsm']['redirecting']);
-        }
+        // Don't clear redirect flag here - let action_login() handle it
+        // Clearing it too early causes redirect loops
     }
     
     /**
@@ -129,17 +125,36 @@ class MainController {
 	* @return void 
 	*/
     function redirect( $location = ''){
-    	// Prevent redirect loops by checking if we're already redirecting
-    	if (isset($_SESSION['wpsm']['redirecting'])) {
-    		unset($_SESSION['wpsm']['redirecting']);
-    		return;
-    	}
-    	
     	if(empty($this->current_page)){
 			$this->current_page = 'info';
 		}
     	if(empty($location)){
 			$location = '?view='.$this->current_page;
+		}
+		
+		// Extract view parameter to check if we're already on that page
+		$redirect_view = null;
+		if (preg_match('/[?&]view=([^&]+)/', $location, $matches)) {
+			$redirect_view = $matches[1];
+		}
+		
+		// Prevent redirect loop: if we're already on the target page, don't redirect
+		if ($redirect_view && $this->current_page === $redirect_view) {
+			// Clear any redirect flags since we're already on the target
+			if (isset($_SESSION['wpsm']['redirecting'])) {
+				unset($_SESSION['wpsm']['redirecting']);
+			}
+			return;
+		}
+		
+		// Prevent redirect loops by checking redirect count
+		$redirect_count = isset($_SESSION['wpsm']['redirect_count']) ? intval($_SESSION['wpsm']['redirect_count']) : 0;
+		if ($redirect_count > 3) {
+			// Too many redirects - clear flag and stop
+			unset($_SESSION['wpsm']['redirecting']);
+			unset($_SESSION['wpsm']['redirect_count']);
+			error_log('Redirect loop detected - stopping redirect to: ' . $location);
+			return;
 		}
 		
 		// Build absolute URL to prevent redirect loops
@@ -173,7 +188,8 @@ class MainController {
 			}
 		}
 		
-		// Mark that we're redirecting to prevent loops
+		// Increment redirect count
+		$_SESSION['wpsm']['redirect_count'] = $redirect_count + 1;
 		$_SESSION['wpsm']['redirecting'] = true;
 		
 		// Send redirect header
@@ -337,18 +353,18 @@ class MainController {
 		$this->redirect();
 	}
 	function action_login(){
-		// Prevent redirect loops - check if we just redirected
-		if (isset($_SESSION['wpsm']['redirecting'])) {
-			unset($_SESSION['wpsm']['redirecting']);
-			return;
-		}
-		
 		$login = $this->dashboard_model->get_login();
 		if(empty($login)){
 			$this->set_message('Login is not set. Please Set your login');
 			if($this->current_page=='login'){
+				// Clear redirect flags on successful page load
+				unset($_SESSION['wpsm']['redirecting']);
+				unset($_SESSION['wpsm']['redirect_count']);
 				$this->redirect('?view=info');	
 			}
+			// Clear redirect flags since we're not redirecting
+			unset($_SESSION['wpsm']['redirecting']);
+			unset($_SESSION['wpsm']['redirect_count']);
 			return;
 		}
 		$check_login = $this->get_session_var('login');
@@ -357,11 +373,21 @@ class MainController {
 				$this->set_message('please login');
 				$this->redirect('?view=login');	
 			}
+			// Clear redirect flags since we're on login page and not redirecting
+			unset($_SESSION['wpsm']['redirecting']);
+			unset($_SESSION['wpsm']['redirect_count']);
 			return;
 		}else{
+			// User is logged in
 			if($this->current_page=='login'){
+				// Clear redirect flags before redirecting
+				unset($_SESSION['wpsm']['redirecting']);
+				unset($_SESSION['wpsm']['redirect_count']);
 				$this->redirect('?view=info');	
 			}
+			// Clear redirect flags on successful page load
+			unset($_SESSION['wpsm']['redirecting']);
+			unset($_SESSION['wpsm']['redirect_count']);
 			$this->data['login'] = true;
 		}
 	}

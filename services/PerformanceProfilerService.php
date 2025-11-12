@@ -18,18 +18,18 @@ class PerformanceProfilerService {
      * 
      * @return array
      */
-    public function get_metrics() {
+    public function getMetrics(): array {
         $metrics = array(
             'timestamp' => date('Y-m-d H:i:s'),
-            'server' => $this->get_server_metrics(),
-            'php' => $this->get_php_metrics(),
-            'database' => $this->get_database_metrics(),
-            'wordpress' => $this->get_wordpress_metrics(),
+            'server' => $this->getServerMetrics(),
+            'php' => $this->getPhpMetrics(),
+            'database' => $this->getDatabaseMetrics(),
+            'wordpress' => $this->getWordPressMetrics(),
             'recommendations' => array()
         );
         
         // Generate recommendations
-        $metrics['recommendations'] = $this->generate_recommendations($metrics);
+        $metrics['recommendations'] = $this->generateRecommendations($metrics);
         
         return $metrics;
     }
@@ -39,16 +39,16 @@ class PerformanceProfilerService {
      * 
      * @return array
      */
-    private function get_server_metrics() {
+    private function getServerMetrics(): array {
         return array(
             'memory_limit' => ini_get('memory_limit'),
-            'memory_usage' => $this->format_bytes(memory_get_usage(true)),
-            'memory_peak' => $this->format_bytes(memory_get_peak_usage(true)),
+            'memory_usage' => $this->formatBytes(memory_get_usage(true)),
+            'memory_peak' => $this->formatBytes(memory_get_peak_usage(true)),
             'max_execution_time' => ini_get('max_execution_time'),
             'upload_max_filesize' => ini_get('upload_max_filesize'),
             'post_max_size' => ini_get('post_max_size'),
-            'disk_free_space' => $this->format_bytes(disk_free_space($this->wp_dir)),
-            'disk_total_space' => $this->format_bytes(disk_total_space($this->wp_dir))
+            'disk_free_space' => $this->formatBytes(disk_free_space($this->wp_dir)),
+            'disk_total_space' => $this->formatBytes(disk_total_space($this->wp_dir))
         );
     }
     
@@ -57,7 +57,7 @@ class PerformanceProfilerService {
      * 
      * @return array
      */
-    private function get_php_metrics() {
+    private function getPhpMetrics(): array {
         return array(
             'version' => phpversion(),
             'opcache_enabled' => function_exists('opcache_get_status') && opcache_get_status() !== false,
@@ -72,7 +72,7 @@ class PerformanceProfilerService {
      * 
      * @return array
      */
-    private function get_database_metrics() {
+    private function getDatabaseMetrics(): array {
         $metrics = array(
             'connection' => false,
             'tables' => 0,
@@ -105,13 +105,13 @@ class PerformanceProfilerService {
                     if ($data_free > 0) {
                         $needs_optimization[] = array(
                             'table' => $table,
-                            'waste' => $this->format_bytes($data_free)
+                            'waste' => $this->formatBytes($data_free)
                         );
                     }
                 }
             }
             
-            $metrics['total_size'] = $this->format_bytes($total_size);
+            $metrics['total_size'] = $this->formatBytes($total_size);
             $metrics['needs_optimization'] = $needs_optimization;
             $metrics['optimized'] = $metrics['tables'] - count($needs_optimization);
             
@@ -127,7 +127,7 @@ class PerformanceProfilerService {
      * 
      * @return array
      */
-    private function get_wordpress_metrics() {
+    private function getWordPressMetrics(): array {
         $metrics = array(
             'version' => null,
             'plugins' => array('active' => 0, 'inactive' => 0, 'total' => 0),
@@ -214,11 +214,11 @@ class PerformanceProfilerService {
      * @param array $metrics
      * @return array
      */
-    private function generate_recommendations($metrics) {
+    private function generateRecommendations(array $metrics): array {
         $recommendations = array();
         
         // Memory recommendations
-        $memory_limit = $this->parse_bytes($metrics['server']['memory_limit']);
+        $memory_limit = $this->parseBytes($metrics['server']['memory_limit']);
         if ($memory_limit < 256 * 1024 * 1024) { // Less than 256MB
             $recommendations[] = array(
                 'priority' => 'high',
@@ -282,7 +282,7 @@ class PerformanceProfilerService {
      * @param int $bytes
      * @return string
      */
-    private function format_bytes($bytes) {
+    private function formatBytes(int $bytes): string {
         if ($bytes >= 1073741824) {
             return number_format($bytes / 1073741824, 2) . ' GB';
         } elseif ($bytes >= 1048576) {
@@ -300,7 +300,7 @@ class PerformanceProfilerService {
      * @param string $value
      * @return int
      */
-    private function parse_bytes($value) {
+    private function parseBytes(string $value): int {
         $value = trim($value);
         $last = strtolower($value[strlen($value) - 1]);
         $value = intval($value);

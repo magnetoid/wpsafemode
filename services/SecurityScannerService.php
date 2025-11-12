@@ -19,7 +19,7 @@ class SecurityScannerService {
      * 
      * @return array Scan results
      */
-    public function scan() {
+    public function scan(): array {
         $results = array(
             'timestamp' => date('Y-m-d H:i:s'),
             'issues' => array(),
@@ -29,28 +29,28 @@ class SecurityScannerService {
         );
         
         // Check file permissions
-        $results = array_merge_recursive($results, $this->check_file_permissions());
+        $results = array_merge_recursive($results, $this->checkFilePermissions());
         
         // Check WordPress version
-        $results = array_merge_recursive($results, $this->check_wp_version());
+        $results = array_merge_recursive($results, $this->checkWpVersion());
         
         // Check plugins
-        $results = array_merge_recursive($results, $this->check_plugins());
+        $results = array_merge_recursive($results, $this->checkPlugins());
         
         // Check database security
-        $results = array_merge_recursive($results, $this->check_database());
+        $results = array_merge_recursive($results, $this->checkDatabase());
         
         // Check wp-config.php
-        $results = array_merge_recursive($results, $this->check_wp_config());
+        $results = array_merge_recursive($results, $this->checkWpConfig());
         
         // Check .htaccess
-        $results = array_merge_recursive($results, $this->check_htaccess());
+        $results = array_merge_recursive($results, $this->checkHtaccess());
         
         // Check user accounts
-        $results = array_merge_recursive($results, $this->check_users());
+        $results = array_merge_recursive($results, $this->checkUsers());
         
         // Calculate security score
-        $results['score'] = $this->calculate_score($results);
+        $results['score'] = $this->calculateScore($results);
         
         return $results;
     }
@@ -60,7 +60,7 @@ class SecurityScannerService {
      * 
      * @return array
      */
-    private function check_file_permissions() {
+    private function checkFilePermissions(): array {
         $results = array('issues' => array(), 'warnings' => array(), 'info' => array());
         
         $critical_files = array(
@@ -106,13 +106,13 @@ class SecurityScannerService {
      * 
      * @return array
      */
-    private function check_wp_version() {
+    private function checkWpVersion(): array {
         $results = array('issues' => array(), 'warnings' => array(), 'info' => array());
         
         include_once $this->wp_dir . 'wp-includes/version.php';
         
         if (isset($wp_version)) {
-            $latest = $this->get_latest_wp_version();
+            $latest = $this->getLatestWpVersion();
             
             if (version_compare($wp_version, $latest, '<')) {
                 $results['warnings'][] = array(
@@ -138,7 +138,7 @@ class SecurityScannerService {
      * 
      * @return array
      */
-    private function check_plugins() {
+    private function checkPlugins(): array {
         $results = array('issues' => array(), 'warnings' => array(), 'info' => array());
         
         try {
@@ -175,7 +175,7 @@ class SecurityScannerService {
      * 
      * @return array
      */
-    private function check_database() {
+    private function checkDatabase(): array {
         $results = array('issues' => array(), 'warnings' => array(), 'info' => array());
         
         try {
@@ -221,7 +221,7 @@ class SecurityScannerService {
      * 
      * @return array
      */
-    private function check_wp_config() {
+    private function checkWpConfig(): array {
         $results = array('issues' => array(), 'warnings' => array(), 'info' => array());
         
         $wp_config_path = $this->wp_dir . 'wp-config.php';
@@ -276,7 +276,7 @@ class SecurityScannerService {
      * 
      * @return array
      */
-    private function check_htaccess() {
+    private function checkHtaccess(): array {
         $results = array('issues' => array(), 'warnings' => array(), 'info' => array());
         
         $htaccess_path = $this->wp_dir . '.htaccess';
@@ -311,12 +311,12 @@ class SecurityScannerService {
      * 
      * @return array
      */
-    private function check_users() {
+    private function checkUsers(): array {
         $results = array('issues' => array(), 'warnings' => array(), 'info' => array());
         
         try {
             $user_service = new UserManagementService();
-            $users = $user_service->list_users();
+            $users = $user_service->getUsers();
             
             $admin_count = 0;
             $weak_passwords = 0;
@@ -364,7 +364,7 @@ class SecurityScannerService {
      * @param array $results
      * @return int Score 0-100
      */
-    private function calculate_score($results) {
+    private function calculateScore(array $results): int {
         $score = 100;
         
         // Deduct points for issues
@@ -389,7 +389,7 @@ class SecurityScannerService {
      * 
      * @return string
      */
-    private function get_latest_wp_version() {
+    private function getLatestWpVersion(): ?string {
         // Try to get from WordPress API
         $response = @file_get_contents('https://api.wordpress.org/core/version-check/1.7/');
         if ($response) {

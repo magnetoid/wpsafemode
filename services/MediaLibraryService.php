@@ -23,7 +23,7 @@ class MediaLibraryService {
      * @param string $search Search term
      * @return array
      */
-    public function get_media_files($limit = 50, $offset = 0, $search = '') {
+    public function getMediaFiles(int $limit = 50, int $offset = 0, string $search = ''): array {
         try {
             $db_model = new DBModel();
             $db_prefix = $this->config->get('wp_db_prefix', 'wp_');
@@ -52,13 +52,13 @@ class MediaLibraryService {
             
             $files = array();
             foreach ($results as $row) {
-                $file_info = $this->get_file_info($row);
+                $file_info = $this->getFileInfo($row);
                 $files[] = $file_info;
             }
             
             return array(
                 'files' => $files,
-                'total' => $this->get_total_count($search),
+                'total' => $this->getTotalCount($search),
                 'limit' => $limit,
                 'offset' => $offset
             );
@@ -78,7 +78,7 @@ class MediaLibraryService {
      * @param array $row Database row
      * @return array
      */
-    private function get_file_info($row) {
+    private function getFileInfo(array $row): array {
         $file_path = $row['file_path'] ?? '';
         $full_path = $this->upload_dir . $file_path;
         
@@ -89,10 +89,10 @@ class MediaLibraryService {
             'mime_type' => $row['post_mime_type'],
             'date' => $row['post_date'],
             'file_path' => $file_path,
-            'url' => $this->get_file_url($file_path),
+            'url' => $this->getFileUrl($file_path),
             'size' => file_exists($full_path) ? filesize($full_path) : 0,
             'exists' => file_exists($full_path),
-            'type' => $this->get_file_type($row['post_mime_type'])
+            'type' => $this->getFileType($row['post_mime_type'])
         );
         
         // Parse metadata for images
@@ -117,7 +117,7 @@ class MediaLibraryService {
      * @param string $file_path
      * @return string
      */
-    private function get_file_url($file_path) {
+    private function getFileUrl(string $file_path): string {
         $site_url = '';
         
         // Try WordPress function first
@@ -154,7 +154,7 @@ class MediaLibraryService {
      * @param string $mime_type
      * @return string
      */
-    private function get_file_type($mime_type) {
+    private function getFileType(?string $mime_type): string {
         if (strpos($mime_type, 'image/') === 0) {
             return 'image';
         } elseif (strpos($mime_type, 'video/') === 0) {
@@ -174,7 +174,7 @@ class MediaLibraryService {
      * @param string $search
      * @return int
      */
-    private function get_total_count($search = '') {
+    private function getTotalCount(string $search = ''): int {
         try {
             $db_model = new DBModel();
             $db_prefix = $this->config->get('wp_db_prefix', 'wp_');
@@ -206,7 +206,7 @@ class MediaLibraryService {
      * @param int $file_id
      * @return array
      */
-    public function delete_file($file_id) {
+    public function deleteFile(int $file_id): array {
         try {
             $db_model = new DBModel();
             $db_prefix = $this->config->get('wp_db_prefix', 'wp_');
@@ -247,7 +247,7 @@ class MediaLibraryService {
      * 
      * @return array
      */
-    public function get_statistics() {
+    public function getStatistics(): array {
         try {
             $db_model = new DBModel();
             $db_prefix = $this->config->get('wp_db_prefix', 'wp_');

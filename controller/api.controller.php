@@ -877,7 +877,7 @@ class ApiController extends MainController {
         try {
             switch ($action) {
                 case 'metrics':
-                    $metrics = $profiler_service->get_metrics();
+                    $metrics = $profiler_service->getMetrics();
                     $this->success('Performance metrics retrieved', array('metrics' => $metrics));
                     break;
                     
@@ -903,12 +903,12 @@ class ApiController extends MainController {
                     $limit = filter_input(INPUT_GET, 'limit', FILTER_SANITIZE_NUMBER_INT) ?: 50;
                     $offset = filter_input(INPUT_GET, 'offset', FILTER_SANITIZE_NUMBER_INT) ?: 0;
                     $search = filter_input(INPUT_GET, 'search', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
-                    $result = $media_service->get_media_files($limit, $offset, $search);
+                    $result = $media_service->getMediaFiles($limit, $offset, $search);
                     $this->success('Media files retrieved', $result);
                     break;
                     
                 case 'statistics':
-                    $stats = $media_service->get_statistics();
+                    $stats = $media_service->getStatistics();
                     $this->success('Media statistics retrieved', array('statistics' => $stats));
                     break;
                     
@@ -918,7 +918,7 @@ class ApiController extends MainController {
                         $this->error('File ID is required');
                         return;
                     }
-                    $result = $media_service->delete_file($file_id);
+                    $result = $media_service->deleteFile($file_id);
                     if ($result['success']) {
                         $this->success($result['message']);
                     } else {
@@ -950,23 +950,23 @@ class ApiController extends MainController {
                     break;
                     
                 case 'optimize':
-                    $result = $optimizer_service->optimize_all_tables();
+                    $result = $optimizer_service->optimizeAllTables();
                     $this->success('Tables optimized', $result);
                     break;
                     
                 case 'clean_orphaned':
-                    $result = $optimizer_service->clean_orphaned();
+                    $result = $optimizer_service->cleanOrphaned();
                     $this->success('Orphaned data cleaned', $result);
                     break;
                     
                 case 'clean_revisions':
                     $keep = filter_input(INPUT_POST, 'keep', FILTER_SANITIZE_NUMBER_INT) ?: 3;
-                    $result = $optimizer_service->clean_revisions($keep);
+                    $result = $optimizer_service->cleanRevisions($keep);
                     $this->success('Revisions cleaned', $result);
                     break;
                     
                 case 'clean_transients':
-                    $result = $optimizer_service->clean_transients();
+                    $result = $optimizer_service->cleanTransients();
                     $this->success('Transients cleaned', $result);
                     break;
                     

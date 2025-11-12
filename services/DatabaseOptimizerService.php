@@ -20,17 +20,17 @@ class DatabaseOptimizerService {
      * 
      * @return array
      */
-    public function analyze() {
+    public function analyze(): array {
         $analysis = array(
-            'tables' => $this->analyze_tables(),
-            'orphaned_data' => $this->find_orphaned_data(),
-            'duplicate_data' => $this->find_duplicates(),
-            'unused_data' => $this->find_unused_data(),
+            'tables' => $this->analyzeTables(),
+            'orphaned_data' => $this->findOrphanedData(),
+            'duplicate_data' => $this->findDuplicates(),
+            'unused_data' => $this->findUnusedData(),
             'recommendations' => array()
         );
         
         // Generate recommendations
-        $analysis['recommendations'] = $this->generate_recommendations($analysis);
+        $analysis['recommendations'] = $this->generateRecommendations($analysis);
         
         return $analysis;
     }
@@ -40,7 +40,7 @@ class DatabaseOptimizerService {
      * 
      * @return array
      */
-    private function analyze_tables() {
+    private function analyzeTables(): array {
         $tables = array();
         $all_tables = $this->db_model->show_tables();
         
@@ -67,7 +67,7 @@ class DatabaseOptimizerService {
      * 
      * @return array
      */
-    private function find_orphaned_data() {
+    private function findOrphanedData(): array {
         $orphaned = array(
             'postmeta' => 0,
             'commentmeta' => 0,
@@ -116,7 +116,7 @@ class DatabaseOptimizerService {
      * 
      * @return array
      */
-    private function find_duplicates() {
+    private function findDuplicates(): array {
         $duplicates = array(
             'postmeta' => 0,
             'options' => 0
@@ -160,7 +160,7 @@ class DatabaseOptimizerService {
      * 
      * @return array
      */
-    private function find_unused_data() {
+    private function findUnusedData(): array {
         $unused = array(
             'revisions' => 0,
             'spam_comments' => 0,
@@ -215,7 +215,7 @@ class DatabaseOptimizerService {
      * @param array $analysis
      * @return array
      */
-    private function generate_recommendations($analysis) {
+    private function generateRecommendations(array $analysis): array {
         $recommendations = array();
         
         // Check for tables needing optimization
@@ -274,7 +274,7 @@ class DatabaseOptimizerService {
      * 
      * @return array
      */
-    public function optimize_all_tables() {
+    public function optimizeAllTables(): array {
         $results = array('optimized' => 0, 'errors' => 0);
         
         try {
@@ -302,7 +302,7 @@ class DatabaseOptimizerService {
      * 
      * @return array
      */
-    public function clean_orphaned() {
+    public function cleanOrphaned(): array {
         $results = array('cleaned' => 0, 'errors' => 0);
         
         try {
@@ -346,7 +346,7 @@ class DatabaseOptimizerService {
      * @param int $keep Number of revisions to keep per post
      * @return array
      */
-    public function clean_revisions($keep = 3) {
+    public function cleanRevisions(int $keep = 3): array {
         $results = array('cleaned' => 0, 'errors' => 0);
         
         try {
@@ -378,7 +378,7 @@ class DatabaseOptimizerService {
      * 
      * @return array
      */
-    public function clean_transients() {
+    public function cleanTransients(): array {
         $results = array('cleaned' => 0, 'errors' => 0);
         
         try {

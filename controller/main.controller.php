@@ -97,12 +97,20 @@ class MainController {
             }
         }
         if(empty($template)){
+			// Ensure view_url is set
+			if (empty($this->view_url)) {
+				$this->view_url = $this->settings['view_url'] ?? 'view/';
+			}
 			$template = $this->view_url . $this->current_page;
-			
 		}
-		if(file_exists($template.'.php')){
-			 include_once  $template.'.php';
+		
+		// Ensure template path is correct
+		$template_file = $template . '.php';
+		if(file_exists($template_file)){
+			 include_once  $template_file;
 		}else{
+			// Log missing template for debugging
+			error_log('Template not found: ' . $template_file);
 			$this->show_404();
 		}
        
@@ -114,7 +122,12 @@ class MainController {
 	* @return void 
 	*/
     function show_404(){
-		echo 'page not found'; 
+		// Only show 404 once per request
+		static $shown = false;
+		if (!$shown) {
+			$shown = true;
+			echo 'page not found';
+		}
 	}
 	
 	/**

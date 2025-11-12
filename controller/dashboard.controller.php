@@ -161,6 +161,10 @@ class DashboardController extends MainController {
          
         #--validate--#
         $pages = array();
+        $pages['info'] = array(
+        'slug'=>'info',
+        'callback'=> array($this,'view_info'),         
+        );
         $pages['login'] = array(
         'slug'=>'login',
         'callback'=> array( $this,'view_login'),         
@@ -238,7 +242,13 @@ class DashboardController extends MainController {
 				call_user_func($wild_page);	
 			     $page_found  = true;
 				}else{
-					$this->redirect('?view=info'); 					
+					// Only redirect if not already on info page to prevent loops
+					if ($this->current_page !== 'info') {
+						$this->redirect('?view=info');
+					} else {
+						// If info page also fails, show error
+						echo '<div class="alert alert-danger">Page not found: ' . htmlspecialchars($this->current_page) . '</div>';
+					}
 				}
 		
 		}

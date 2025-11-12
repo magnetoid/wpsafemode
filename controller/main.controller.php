@@ -737,12 +737,27 @@ class MainController {
 		
 	}
 	
-	function view_login(){
-	
-		$this->render($this->view_url . 'login' , $this->data);
+	/**
+	 * View login page
+	 * 
+	 * @return void
+	 */
+	function view_login(): void {
+		$this->render($this->view_url . 'login', $this->data);
 	}
 	
-	function submit_login(){
+	/**
+	 * Submit login form
+	 * 
+	 * @return void
+	 */
+	function submit_login(): void {
+		if (!isset($this->dashboard_model)) {
+			$this->set_message('Dashboard model not available');
+			$this->redirect('?view=login');
+			return;
+		}
+		
 		// SECURITY FIX: Validate CSRF token first
 		if (!CSRFProtection::validate_post_token('login')) {
 			$this->set_message('Invalid security token. Please try again.');
@@ -762,59 +777,70 @@ class MainController {
 		
 		// SECURITY FIX: Use InputValidator for sanitization
 		$user_data = array(
-		'username' => InputValidator::getInput('username', INPUT_POST, 'string'),
-		'password' => InputValidator::getInput('password', INPUT_POST, 'string'),					
+			'username' => InputValidator::getInput('username', INPUT_POST, 'string'),
+			'password' => InputValidator::getInput('password', INPUT_POST, 'string'),
 		);
+		
 		$login = $this->dashboard_model->get_login();
-		if(!empty($login)){
-			$error = false;
-			if(empty($user_data['password'])){
-				$error = true;
-				$this->set_message('Password field cannot be empty.'); 				
-			}
-			if(empty($user_data['username'])){
-				$error = true;
-				$this->set_message('Username/Email field cannot be empty.'); 		
-				//&& !filter_var($user_data['email'], FILTER_VALIDATE_EMAIL) === false
-			}
-			if($error == true ){
-				$this->redirect();
-			}else{
-				$login = $this->dashboard_model->get_login();
-				if(!empty($login) && is_array($login)){
-				 if( !filter_var($user_data['username'], FILTER_VALIDATE_EMAIL) === false){
-				 	if($login['email'] != $user_data['username']){
-					
-						$error = true;
-					}
-				 }elseif($login['username']!= $user_data['username']){
-						
-						$error = true;
-					
-				 }
-				 include_once('ext/PasswordHash.php');
-			     $t_hasher = new PasswordHash(8, FALSE);
-			     $hash = $login['password'];
-			     $login['password'] = $hash;
-				 $check_hash = $user_data['password'];
-				 $check = $t_hasher->CheckPassword($check_hash, $hash);
-				 if(!$check){
-				 
-				 	$error = true;
-				 }
-				 
-				 if($error == true){
-				 		$this->set_message('Wrong email/username and/or password'); 
-				 		$this->redirect();
-				 }else{
-				 	// SECURITY FIX: Reset rate limit on successful login
-				 	RateLimiter::reset_rate_limit('login');
-				 	$this->set_session_var('login' , true);
-				 	$this->set_message('You have been successfully logged in.'); 
-				 	$this->redirect('?view=info');	
-				 }
-				
+		if (empty($login)) {
+			$this->set_message('Login credentials not configured. Please set up login in Global Settings.');
+			$this->redirect('?view=login');
+			return;
+		}
+		
+		$error = false;
+		if (empty($user_data['password'])) {
+			$error = true;
+			$this->set_message('Password field cannot be empty.');
+		}
+		if (empty($user_data['username'])) {
+			$error = true;
+			$this->set_message('Username/Email field cannot be empty.');
+		}
+		
+		if ($error) {
+			$this->redirect();
+			return;
+		}
+		
+		$login = $this->dashboard_model->get_login();
+		if (!empty($login) && is_array($login)) {
+			// Check if username is email or regular username
+			$is_email = filter_var($user_data['username'], FILTER_VALIDATE_EMAIL) !== false;
+			
+			if ($is_email) {
+				// User entered email
+				if (!isset($login['email']) || $login['email'] !== $user_data['username']) {
+					$error = true;
 				}
+			} else {
+				// User entered username
+				if (!isset($login['username']) || $login['username'] !== $user_data['username']) {
+					$error = true;
+				}
+			}
+			
+			// Check password
+			if (!$error) {
+				include_once('ext/PasswordHash.php');
+				$t_hasher = new PasswordHash(8, FALSE);
+				$hash = $login['password'] ?? '';
+				$check_hash = $user_data['password'];
+				$check = $t_hasher->CheckPassword($check_hash, $hash);
+				if (!$check) {
+					$error = true;
+				}
+			}
+			
+			if ($error) {
+				$this->set_message('Wrong email/username and/or password');
+				$this->redirect();
+			} else {
+				// SECURITY FIX: Reset rate limit on successful login
+				RateLimiter::reset_rate_limit('login');
+				$this->set_session_var('login', true);
+				$this->set_message('You have been successfully logged in.');
+				$this->redirect('?view=info');
 			}
 		}
 	}

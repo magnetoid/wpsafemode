@@ -262,21 +262,28 @@ class ApiController extends MainController {
             $regular_path = $this->resolveTemplatePath($regular_template);
             
             // Use cached file existence checks
+            // Access parent class's template_cache using reflection since it's private
             $file_to_load = null;
             if ($admin_path) {
-                if (!isset(self::$template_cache[$admin_path])) {
-                    self::$template_cache[$admin_path] = file_exists($admin_path);
+                $cache_value = $this->getTemplateCacheValue($admin_path);
+                if ($cache_value === null) {
+                    $exists = file_exists($admin_path);
+                    $this->setTemplateCacheValue($admin_path, $exists);
+                    $cache_value = $exists;
                 }
-                if (self::$template_cache[$admin_path]) {
+                if ($cache_value) {
                     $file_to_load = $admin_path;
                 }
             }
             
             if (!$file_to_load && $regular_path) {
-                if (!isset(self::$template_cache[$regular_path])) {
-                    self::$template_cache[$regular_path] = file_exists($regular_path);
+                $cache_value = $this->getTemplateCacheValue($regular_path);
+                if ($cache_value === null) {
+                    $exists = file_exists($regular_path);
+                    $this->setTemplateCacheValue($regular_path, $exists);
+                    $cache_value = $exists;
                 }
-                if (self::$template_cache[$regular_path]) {
+                if ($cache_value) {
                     $file_to_load = $regular_path;
                 }
             }
@@ -296,6 +303,29 @@ class ApiController extends MainController {
             echo '<div class="alert alert-danger">Error loading view: ' . htmlspecialchars($e->getMessage()) . '</div>';
             throw $e;
         }
+    }
+    
+    /**
+     * Get template cache value (helper to access parent's private static property)
+     */
+    private function getTemplateCacheValue($key) {
+        $reflection = new ReflectionClass('MainController');
+        $property = $reflection->getProperty('template_cache');
+        $property->setAccessible(true);
+        $cache = $property->getValue();
+        return $cache[$key] ?? null;
+    }
+    
+    /**
+     * Set template cache value (helper to access parent's private static property)
+     */
+    private function setTemplateCacheValue($key, $value) {
+        $reflection = new ReflectionClass('MainController');
+        $property = $reflection->getProperty('template_cache');
+        $property->setAccessible(true);
+        $cache = $property->getValue();
+        $cache[$key] = $value;
+        $property->setValue(null, $cache);
     }
     
     /**

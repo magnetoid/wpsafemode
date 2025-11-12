@@ -2117,6 +2117,14 @@ class DashboardModel extends dbModel {
    	'name' => 'Global Settings',
    	'icon'=> 'icon_floppy_alt',   	
    	); 
+   	
+   	//AI Assistant
+   	$items[] = array(
+   	'link' => '?view=ai-assistant', 
+   	'slug' =>'ai-assistant',
+   	'name' => 'AI Assistant',
+   	'icon'=> 'icon_robot',   	
+   	); 
 
    	 //website migration 
     $items[] = array(

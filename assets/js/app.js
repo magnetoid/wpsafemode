@@ -248,7 +248,8 @@
             'error_log': {module: 'ErrorLogModule', view: 'error_log'},
             'autobackup': {module: 'AutobackupModule', view: 'autobackup'},
             'quick_actions': {module: 'QuickActionsModule', view: 'quick_actions'},
-            'global_settings': {module: 'GlobalSettingsModule', view: 'global_settings'}
+            'global_settings': {module: 'GlobalSettingsModule', view: 'global_settings'},
+            'ai-assistant': {module: 'AIAssistantModule', view: 'ai-assistant'}
         };
         
         this.currentModule = null;

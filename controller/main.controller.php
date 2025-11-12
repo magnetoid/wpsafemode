@@ -303,7 +303,8 @@ class MainController {
 			'email' => '',		
 		);
 		$api_key_data = array(
-			'api_key' => '',	
+			'api_key' => '',
+			'openai_api_key' => '',	
 		);
 		$login = $this->dashboard_model->get_login();
 		$global_settings = $this->dashboard_model->get_global_settings();
@@ -339,6 +340,7 @@ class MainController {
 		);
 		$global_settings_data = array(
 			'api_key' => '',
+			'openai_api_key' => '',
 			'email' => '',
 		);
 		
@@ -399,6 +401,9 @@ class MainController {
 			//closing the connection
 			fclose($connection);
 	*/		
+		}
+		if(!empty($global_settings_data['openai_api_key'])){
+			$global_settings_item['openai_api_key'] = $global_settings_data['openai_api_key'];
 		}
 		
 		if(!empty($global_settings_data['email'])){

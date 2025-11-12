@@ -134,7 +134,8 @@
                                         'error_log' => 'fas fa-exclamation-triangle',
                                         'autobackup' => 'fas fa-clock',
                                         'quick_actions' => 'fas fa-bolt',
-                                        'global_settings' => 'fas fa-sliders-h'
+                                        'global_settings' => 'fas fa-sliders-h',
+                                        'ai-assistant' => 'fas fa-robot'
                                     );
                                     $slug = isset($menu_item['slug']) ? $menu_item['slug'] : '';
                                     if (isset($iconMap[$slug])) {
@@ -167,7 +168,8 @@
                                         'error_log' => 'fas fa-exclamation-triangle',
                                         'autobackup' => 'fas fa-clock',
                                         'quick_actions' => 'fas fa-bolt',
-                                        'global_settings' => 'fas fa-sliders-h'
+                                        'global_settings' => 'fas fa-sliders-h',
+                                        'ai-assistant' => 'fas fa-robot'
                                     );
                                     $slug = isset($menu_item['slug']) ? $menu_item['slug'] : '';
                                     if (isset($iconMap[$slug])) {

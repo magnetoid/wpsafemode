@@ -46,6 +46,7 @@ ini_set('session.use_strict_mode', 1);
 include_once ('model/db.model.php');
 include_once ('model/dashboard.model.php');
 include_once ('model/help.model.php');
+include_once ('model/basicinfo.model.php');
 include_once 'controller/main.controller.php';
 include_once 'controller/dashboard.controller.php';
 

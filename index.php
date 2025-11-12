@@ -12,6 +12,14 @@ define('WPSM',true);
 
 include_once('autoload.php');
 
+// Handle AI API requests
+if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/ai/') !== false) {
+    include_once('controller/ai.controller.php');
+    $ai = new AIController();
+    $ai->handle();
+    exit;
+}
+
 // Handle API requests first (before normal page rendering)
 if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/api/') !== false) {
     include_once('controller/api.controller.php');

@@ -43,6 +43,7 @@
 <script src="assets/js/modules/autobackup.module.js"></script>
 <script src="assets/js/modules/quick-actions.module.js"></script>
 <script src="assets/js/modules/global-settings.module.js"></script>
+<script src="assets/js/modules/ai-assistant.module.js"></script>
 
 <!-- Custom Admin JS -->
 <script src="assets/js/admin-custom.js"></script>

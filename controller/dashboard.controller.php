@@ -38,7 +38,7 @@ class DashboardController extends MainController {
 		$this->data['result'] = array();
         $this->data['script_url'] = $this->get_script_url();       
         $this->data['current_page'] = $this->current_page;        
-        $this->view_url = $this->settings['view_url'];     
+        $this->view_url = rtrim($this->view_url ?? ($this->settings['view_url'] ?? 'view/'), '/\\') . '/';     
 	}
    
    /**

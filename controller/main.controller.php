@@ -17,6 +17,8 @@ class MainController {
     protected $current_page;
     protected $action;
     protected $data = array();
+    protected $base_path;
+    protected $last_missing_template;
     
     /**
      * Constructor - initialize main controller
@@ -26,6 +28,8 @@ class MainController {
     function __construct(?Config $config = null) {
         $this->config = $config ?? Config::getInstance();
         $this->settings = $this->config->all();
+        $this->base_path = rtrim($this->settings['safemode_dir'] ?? dirname(__DIR__), '/\\') . '/';
+        $this->view_url = rtrim($this->settings['view_url'] ?? 'view/', '/\\') . '/';
         $this->wp_dir = $this->settings['wp_dir'];
         $this->wp_config_path =  $this->wp_dir ."wp-config.php";
         $this->wp_config_backup_path = $this->settings['sfstore'] . 'wp-config-safemode-backup.php';
@@ -97,23 +101,41 @@ class MainController {
             }
         }
         if(empty($template)){
-			// Ensure view_url is set
-			if (empty($this->view_url)) {
-				$this->view_url = $this->settings['view_url'] ?? 'view/';
-			}
-			$template = $this->view_url . $this->current_page;
-		}
-		
-		// Ensure template path is correct
-		$template_file = $template . '.php';
-		if(file_exists($template_file)){
-			 include_once  $template_file;
-		}else{
-			// Log missing template for debugging
-			error_log('Template not found: ' . $template_file);
-			$this->show_404();
-		}
+            $template = $this->view_url . $this->current_page;
+        }
+        
+        $template_path = $this->resolveTemplatePath($template);
+
+        if($template_path && file_exists($template_path)){
+             include $template_path;
+        }else{
+            $this->last_missing_template = $template_path ?: $template;
+            // Log missing template for debugging
+            error_log('Template not found: ' . $this->last_missing_template);
+            $this->show_404();
+        }
        
+    }
+
+    protected function resolveTemplatePath(string $template): string {
+        $template = trim($template);
+        if ($template === '') {
+            return '';
+        }
+
+        if (substr($template, -4) !== '.php') {
+            $template .= '.php';
+        }
+
+        if ($this->isAbsolutePath($template)) {
+            return $template;
+        }
+
+        return $this->base_path . ltrim($template, '/\\');
+    }
+
+    protected function isAbsolutePath(string $path): bool {
+        return (bool) preg_match('~^(?:[a-zA-Z]:[\\/]|\\\\|/)~', $path);
     }
     
     /**
@@ -122,13 +144,17 @@ class MainController {
 	* @return void 
 	*/
     function show_404(){
-		// Only show 404 once per request
-		static $shown = false;
-		if (!$shown) {
-			$shown = true;
-			echo 'page not found';
-		}
-	}
+        // Only show 404 once per request
+        static $shown = false;
+        if (!$shown) {
+            $shown = true;
+            if (!empty($this->settings['debug']) && !empty($this->last_missing_template)) {
+                echo 'page not found: ' . htmlspecialchars($this->last_missing_template);
+            } else {
+                echo 'page not found';
+            }
+        }
+    }
 	
 	/**
 	* Handles redirection to specific section 
@@ -279,13 +305,13 @@ class MainController {
 	* @return void 
 	*/
     function header(){
-		// Use admin header if available, otherwise fallback to old header
-		if (file_exists($this->view_url . 'header-admin.php')) {
-			$this->render($this->view_url . 'header-admin' , $this->data);
-		} else {
-			$this->render($this->view_url . 'header' , $this->data);
-		}
-	}
+        $admin_path = $this->resolveTemplatePath($this->view_url . 'header-admin');
+        if ($admin_path && file_exists($admin_path)) {
+            $this->render($this->view_url . 'header-admin' , $this->data);
+        } else {
+            $this->render($this->view_url . 'header' , $this->data);
+        }
+    }
 	
 	/**
 	* Renders main footer template 
@@ -293,13 +319,13 @@ class MainController {
 	* @return void 
 	*/
 	function footer(){
-		// Use admin footer if available, otherwise fallback to old footer
-		if (file_exists($this->view_url . 'footer-admin.php')) {
-			$this->render($this->view_url . 'footer-admin' , $this->data);
-		} else {
-			$this->render($this->view_url . 'footer' , $this->data);
-		}
-	}	
+        $admin_path = $this->resolveTemplatePath($this->view_url . 'footer-admin');
+        if ($admin_path && file_exists($admin_path)) {
+            $this->render($this->view_url . 'footer-admin' , $this->data);
+        } else {
+            $this->render($this->view_url . 'footer' , $this->data);
+        }
+    }	
 	
 	/**
 	* Sets access permissions to file or directory

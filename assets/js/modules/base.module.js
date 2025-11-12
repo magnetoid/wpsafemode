@@ -72,6 +72,12 @@ window.BaseModule = class {
         if (content) {
             content.style.opacity = '0';
             setTimeout(() => {
+                // Ensure navigation drawer is visible (not closed)
+                const drawer = document.getElementById('navigation-drawer');
+                if (drawer && drawer.classList.contains('closed')) {
+                    drawer.classList.remove('closed');
+                }
+                
                 // Find or create a content wrapper to preserve breadcrumb and messages
                 let contentWrapper = content.querySelector('.view-content-wrapper');
                 if (!contentWrapper) {

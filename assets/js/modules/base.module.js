@@ -74,8 +74,15 @@ window.BaseModule = class {
             setTimeout(() => {
                 // Ensure navigation drawer is visible (not closed)
                 const drawer = document.getElementById('navigation-drawer');
-                if (drawer && drawer.classList.contains('closed')) {
-                    drawer.classList.remove('closed');
+                const contentArea = document.querySelector('.md3-content');
+                if (drawer) {
+                    if (drawer.classList.contains('closed')) {
+                        drawer.classList.remove('closed');
+                    }
+                    // Ensure content area doesn't have full-width class when drawer is visible
+                    if (contentArea && contentArea.classList.contains('full-width') && window.innerWidth > 960) {
+                        contentArea.classList.remove('full-width');
+                    }
                 }
                 
                 // Find or create a content wrapper to preserve breadcrumb and messages

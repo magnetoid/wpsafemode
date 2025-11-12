@@ -87,27 +87,51 @@ window.BaseModule = class {
                 
                 // Find or create a content wrapper to preserve breadcrumb and messages
                 let contentWrapper = content.querySelector('.view-content-wrapper');
+                const breadcrumb = content.querySelector('nav[style*="margin-bottom: 24px"]');
+                const messages = content.querySelector('.md3-snackbar');
+                
                 if (!contentWrapper) {
                     // Create wrapper if it doesn't exist
                     contentWrapper = document.createElement('div');
                     contentWrapper.className = 'view-content-wrapper';
-                    // Move existing content (except breadcrumb and messages) into wrapper
-                    const breadcrumb = content.querySelector('nav[style*="margin-bottom: 24px"]');
-                    const messages = content.querySelector('.md3-snackbar');
+                    
+                    // Collect all children except breadcrumb and messages
                     const children = Array.from(content.children);
+                    const toMove = [];
                     children.forEach(child => {
                         if (child !== breadcrumb && child !== messages && child !== contentWrapper) {
-                            contentWrapper.appendChild(child);
+                            toMove.push(child);
                         }
                     });
-                    if (breadcrumb) {
-                        content.insertBefore(breadcrumb, contentWrapper);
-                    }
-                    if (messages) {
-                        content.insertBefore(messages, contentWrapper);
-                    }
+                    
+                    // Move children to wrapper
+                    toMove.forEach(child => {
+                        contentWrapper.appendChild(child);
+                    });
+                    
+                    // Append wrapper to content
                     content.appendChild(contentWrapper);
+                    
+                    // Reorder: breadcrumb first, then messages, then wrapper
+                    // Only if they exist and are not already in the right position
+                    if (breadcrumb && breadcrumb.parentNode === content) {
+                        // Remove and re-insert at the beginning
+                        content.removeChild(breadcrumb);
+                        content.insertBefore(breadcrumb, content.firstChild);
+                    }
+                    if (messages && messages.parentNode === content) {
+                        // Insert after breadcrumb (or at beginning if no breadcrumb)
+                        const insertAfter = breadcrumb || null;
+                        if (insertAfter && insertAfter.nextSibling) {
+                            content.insertBefore(messages, insertAfter.nextSibling);
+                        } else if (insertAfter) {
+                            content.appendChild(messages);
+                        } else {
+                            content.insertBefore(messages, content.firstChild);
+                        }
+                    }
                 }
+                
                 // Update only the content wrapper, preserving breadcrumb and messages
                 contentWrapper.innerHTML = html;
                 

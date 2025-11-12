@@ -757,18 +757,18 @@ class ApiController extends MainController {
                     $limit = filter_input(INPUT_GET, 'limit', FILTER_SANITIZE_NUMBER_INT) ?: 100;
                     $filter_action = filter_input(INPUT_GET, 'filter_action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
                     $filter_user = filter_input(INPUT_GET, 'filter_user', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-                    $logs = $activity_service->get_logs($limit, $filter_action, $filter_user);
+                    $logs = $activity_service->getLogs($limit, $filter_action, $filter_user);
                     $this->success('Activity logs retrieved', array('logs' => $logs));
                     break;
                     
                 case 'statistics':
-                    $stats = $activity_service->get_statistics();
+                    $stats = $activity_service->getStatistics();
                     $this->success('Statistics retrieved', array('statistics' => $stats));
                     break;
                     
                 case 'clear':
                     $days = filter_input(INPUT_POST, 'days', FILTER_SANITIZE_NUMBER_INT) ?: 30;
-                    $result = $activity_service->clear_old_logs($days);
+                    $result = $activity_service->clearOldLogs($days);
                     if ($result) {
                         $this->success('Old logs cleared');
                     } else {
@@ -795,7 +795,7 @@ class ApiController extends MainController {
         try {
             switch ($action) {
                 case 'info':
-                    $info = $email_service->get_email_info();
+                    $info = $email_service->getEmailInfo();
                     $this->success('Email info retrieved', array('info' => $info));
                     break;
                     
@@ -809,7 +809,7 @@ class ApiController extends MainController {
                         return;
                     }
                     
-                    $result = $email_service->test_email($to, $subject, $message);
+                    $result = $email_service->testEmail($to, $subject, $message);
                     if ($result['success']) {
                         $this->success($result['message']);
                     } else {
@@ -827,7 +827,7 @@ class ApiController extends MainController {
                         return;
                     }
                     
-                    $result = $email_service->test_php_mail($to, $subject, $message);
+                    $result = $email_service->testPhpMail($to, $subject, $message);
                     if ($result['success']) {
                         $this->success($result['message']);
                     } else {

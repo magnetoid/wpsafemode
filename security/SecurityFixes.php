@@ -282,98 +282,47 @@ class SecureFileOperations {
 
 /**
  * SECURITY FIX 4: Input Validation and Sanitization
+ * 
+ * Legacy compatibility wrapper for InputValidator
+ * @deprecated Use InputValidator class instead
  */
 class SecureInput {
     
     /**
      * Sanitize string input
+     * Forwards to InputValidator::sanitize()
      * 
      * @param mixed $input Input to sanitize
      * @param string $type Type of sanitization (string, int, email, url, etc.)
      * @return mixed Sanitized input
      */
     public static function sanitize($input, $type = 'string') {
-        if ($input === null) {
-            return null;
-        }
-        
-        switch ($type) {
-            case 'string':
-                // PHP 8.0+ compatible: FILTER_SANITIZE_STRING is deprecated, use FILTER_SANITIZE_FULL_SPECIAL_CHARS
-                if (PHP_VERSION_ID >= 80100) {
-                    return filter_var($input, FILTER_SANITIZE_FULL_SPECIAL_CHARS, FILTER_FLAG_NO_ENCODE_QUOTES);
-                } else {
-                    return filter_var($input, FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES);
-                }
-            
-            case 'int':
-                return filter_var($input, FILTER_SANITIZE_NUMBER_INT);
-            
-            case 'email':
-                return filter_var($input, FILTER_SANITIZE_EMAIL);
-            
-            case 'url':
-                return filter_var($input, FILTER_SANITIZE_URL);
-            
-            case 'filename':
-                // Only allow alphanumeric, dash, underscore, dot
-                return preg_replace('/[^a-zA-Z0-9._-]/', '', $input);
-            
-            case 'table_name':
-                // Only allow alphanumeric, underscore
-                return preg_replace('/[^a-zA-Z0-9_]/', '', $input);
-            
-            default:
-                return htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
-        }
+        return InputValidator::sanitize($input, $type);
     }
     
     /**
      * Validate input against pattern
+     * Forwards to InputValidator::validate()
      * 
      * @param mixed $input Input to validate
      * @param string $pattern Validation pattern
      * @return bool
      */
     public static function validate($input, $pattern) {
-        switch ($pattern) {
-            case 'email':
-                return filter_var($input, FILTER_VALIDATE_EMAIL) !== false;
-            
-            case 'url':
-                return filter_var($input, FILTER_VALIDATE_URL) !== false;
-            
-            case 'ip':
-                return filter_var($input, FILTER_VALIDATE_IP) !== false;
-            
-            case 'int':
-                return filter_var($input, FILTER_VALIDATE_INT) !== false;
-            
-            case 'filename':
-                return preg_match('/^[a-zA-Z0-9._-]+$/', $input) === 1;
-            
-            case 'table_name':
-                return preg_match('/^[a-zA-Z0-9_]+$/', $input) === 1;
-            
-            default:
-                return true;
-        }
+        return InputValidator::validate($input, $pattern);
     }
     
     /**
      * Get and sanitize input from GET/POST
+     * Forwards to InputValidator::getInput()
      * 
      * @param string $name Input name
-     * @param string $type Input type (INPUT_GET, INPUT_POST)
+     * @param int $type Input type (INPUT_GET, INPUT_POST)
      * @param string $sanitize_type Sanitization type
      * @return mixed
      */
     public static function get_input($name, $type = INPUT_POST, $sanitize_type = 'string') {
-        $input = filter_input($type, $name);
-        if ($input === null) {
-            return null;
-        }
-        return self::sanitize($input, $sanitize_type);
+        return InputValidator::getInput($name, $type, $sanitize_type);
     }
 }
 

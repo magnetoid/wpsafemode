@@ -35,12 +35,12 @@ class ActivityLogService {
                 'timestamp' => date('Y-m-d H:i:s'),
                 'action' => $action,
                 'description' => $description,
-                'user' => $user ?? $this->get_current_user(),
-                'ip' => $this->get_client_ip(),
+                'user' => $user ?? $this->getCurrentUser(),
+                'ip' => $this->getClientIp(),
                 'data' => $data
             );
             
-            $logs = $this->read_logs();
+            $logs = $this->readLogs();
             $logs[] = $activity;
             
             // Keep only last 1000 entries
@@ -48,7 +48,7 @@ class ActivityLogService {
                 $logs = array_slice($logs, -1000);
             }
             
-            return $this->write_logs($logs);
+            return $this->writeLogs($logs);
         } catch (Throwable $e) {
             error_log('Activity Log Error: ' . $e->getMessage());
             return false;
@@ -63,8 +63,8 @@ class ActivityLogService {
      * @param string $user Filter by user
      * @return array
      */
-    public function get_logs($limit = 100, $action = null, $user = null) {
-        $logs = $this->read_logs();
+    public function getLogs(int $limit = 100, ?string $action = null, ?string $user = null): array {
+        $logs = $this->readLogs();
         
         // Filter logs
         if ($action !== null) {
@@ -94,16 +94,16 @@ class ActivityLogService {
      * @param int $days Keep logs newer than this many days
      * @return bool
      */
-    public function clear_old_logs($days = 30) {
+    public function clearOldLogs(int $days = 30): bool {
         try {
-            $logs = $this->read_logs();
+            $logs = $this->readLogs();
             $cutoff = time() - ($days * 24 * 60 * 60);
             
             $logs = array_filter($logs, function($log) use ($cutoff) {
                 return strtotime($log['timestamp']) > $cutoff;
             });
             
-            return $this->write_logs(array_values($logs));
+            return $this->writeLogs(array_values($logs));
         } catch (Throwable $e) {
             error_log('Activity Log Clear Error: ' . $e->getMessage());
             return false;
@@ -115,8 +115,8 @@ class ActivityLogService {
      * 
      * @return array
      */
-    public function get_statistics() {
-        $logs = $this->read_logs();
+    public function getStatistics(): array {
+        $logs = $this->readLogs();
         
         $stats = array(
             'total_activities' => count($logs),
@@ -161,14 +161,14 @@ class ActivityLogService {
      * 
      * @return array
      */
-    private function read_logs() {
+    private function readLogs(): array {
         if (!file_exists($this->log_file)) {
             return array();
         }
         
         // Check file size
         if (filesize($this->log_file) > $this->max_log_size) {
-            $this->clear_old_logs(7); // Keep only last 7 days if file too large
+            $this->clearOldLogs(7); // Keep only last 7 days if file too large
         }
         
         $content = file_get_contents($this->log_file);
@@ -183,7 +183,7 @@ class ActivityLogService {
      * @param array $logs
      * @return bool
      */
-    private function write_logs($logs) {
+    private function writeLogs(array $logs): bool {
         $content = json_encode($logs, JSON_PRETTY_PRINT);
         return file_put_contents($this->log_file, $content) !== false;
     }
@@ -193,7 +193,7 @@ class ActivityLogService {
      * 
      * @return string
      */
-    private function get_current_user() {
+    private function getCurrentUser(): string {
         if (isset($_SESSION['wpsm']['login'])) {
             return $_SESSION['wpsm']['login'];
         }
@@ -205,7 +205,7 @@ class ActivityLogService {
      * 
      * @return string
      */
-    private function get_client_ip() {
+    private function getClientIp(): string {
         $ip_keys = array('HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR');
         foreach ($ip_keys as $key) {
             if (array_key_exists($key, $_SERVER) === true) {

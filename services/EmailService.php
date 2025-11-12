@@ -19,7 +19,7 @@ class EmailService {
      * @param string $message Email message
      * @return array Result with success status and message
      */
-    public function test_email($to, $subject = null, $message = null) {
+    public function testEmail(string $to, ?string $subject = null, ?string $message = null): array {
         if ($subject === null) {
             $subject = 'WP Safe Mode - Email Test';
         }
@@ -54,7 +54,7 @@ class EmailService {
                 }
             } else {
                 // Fallback to PHP mail()
-                return $this->test_php_mail($to, $subject, $message);
+                return $this->testPhpMail($to, $subject, $message);
             }
         } catch (Throwable $e) {
             return array(
@@ -69,7 +69,7 @@ class EmailService {
      * 
      * @return array
      */
-    public function get_email_info() {
+    public function getEmailInfo(): array {
         $info = array(
             'php_mail' => function_exists('mail'),
             'wp_mail' => function_exists('wp_mail'),
@@ -141,7 +141,7 @@ class EmailService {
      * @param string $message Message
      * @return array
      */
-    public function test_php_mail($to, $subject, $message) {
+    public function testPhpMail(string $to, string $subject, string $message): array {
         $headers = "From: WP Safe Mode <noreply@" . $_SERVER['HTTP_HOST'] . ">\r\n";
         $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
         $headers .= "X-Mailer: WP Safe Mode\r\n";

@@ -17,25 +17,32 @@ class InputValidator {
             return null;
         }
         
-        // Use SecureInput if available, otherwise fallback
-        if (class_exists('SecureInput')) {
-            return SecureInput::sanitize($input, $type);
-        }
-        
-        // Fallback sanitization
         switch ($type) {
             case 'string':
+                // PHP 8.0+ compatible
                 if (PHP_VERSION_ID >= 80100) {
                     return filter_var($input, FILTER_SANITIZE_FULL_SPECIAL_CHARS, FILTER_FLAG_NO_ENCODE_QUOTES);
                 } else {
                     return filter_var($input, FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES);
                 }
+            
             case 'int':
                 return filter_var($input, FILTER_SANITIZE_NUMBER_INT);
+            
             case 'email':
                 return filter_var($input, FILTER_SANITIZE_EMAIL);
+            
             case 'url':
                 return filter_var($input, FILTER_SANITIZE_URL);
+            
+            case 'filename':
+                // Only allow alphanumeric, dash, underscore, dot
+                return preg_replace('/[^a-zA-Z0-9._-]/', '', $input);
+            
+            case 'table_name':
+                // Only allow alphanumeric, underscore
+                return preg_replace('/[^a-zA-Z0-9_]/', '', $input);
+            
             default:
                 return htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
         }
@@ -50,10 +57,6 @@ class InputValidator {
      * @return mixed
      */
     public static function getInput(string $name, int $type = INPUT_POST, string $sanitize_type = 'string') {
-        if (class_exists('SecureInput')) {
-            return SecureInput::get_input($name, $type, $sanitize_type);
-        }
-        
         $input = filter_input($type, $name);
         if ($input === null) {
             return null;
@@ -110,24 +113,29 @@ class InputValidator {
      * @return bool
      */
     public static function validate($input, string $pattern): bool {
-        if (class_exists('SecureInput') && method_exists('SecureInput', 'validate')) {
-            return SecureInput::validate($input, $pattern);
+        if ($input === null || $input === '') {
+            return false;
         }
         
-        // Fallback validation
         switch ($pattern) {
             case 'email':
                 return self::validateEmail($input);
+            
             case 'url':
                 return self::validateUrl($input);
+            
             case 'filename':
                 return self::validateFilename($input);
+            
             case 'table_name':
                 return self::validateTableName($input);
+            
             case 'int':
                 return filter_var($input, FILTER_VALIDATE_INT) !== false;
+            
             case 'ip':
                 return filter_var($input, FILTER_VALIDATE_IP) !== false;
+            
             default:
                 return true;
         }

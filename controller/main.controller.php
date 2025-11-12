@@ -26,16 +26,17 @@ class MainController {
      * 
      * @param Config|null $config Configuration instance
      */
-    function __construct(?Config $config = null) {
+    function __construct($config = null) {
         $this->config = $config ?? Config::getInstance();
         $this->settings = $this->config->all();
         $this->base_path = rtrim($this->settings['safemode_dir'] ?? dirname(__DIR__), '/\\') . '/';
         $this->view_url = rtrim($this->settings['view_url'] ?? 'view/', '/\\') . '/';
-        $this->wp_dir = $this->settings['wp_dir'];
-        $this->wp_config_path =  $this->wp_dir ."wp-config.php";
-        $this->wp_config_backup_path = $this->settings['sfstore'] . 'wp-config-safemode-backup.php';
+        $this->wp_dir = $this->settings['wp_dir'] ?? '';
+        $this->wp_config_path = $this->wp_dir . "wp-config.php";
+        $sfstore = $this->settings['sfstore'] ?? '';
+        $this->wp_config_backup_path = $sfstore . 'wp-config-safemode-backup.php';
         $this->htaccess_path = $this->wp_dir . '.htaccess';
-        $this->htaccess_backup_path = $this->settings['sfstore'] . '.htaccess.safemode.backup';
+        $this->htaccess_backup_path = $sfstore . '.htaccess.safemode.backup';
         $this->set_current_page();      
         $this->action = filter_input(INPUT_GET , 'action');
         $this->setup_dirs();
@@ -59,19 +60,20 @@ class MainController {
 	* @return array list of directories 
 	*/
     function get_storage_dirs(){
-	return	array(
-                'main_storage'=>$this->settings['sfstore'],
-                'temp'=>$this->settings['sfstore'].'/temp',
-                'db_main'=>$this->settings['sfstore'].'/db_backup',
-                'db_csv'=>$this->settings['sfstore'].'/db_backup/csv',
-                'db_full'=>$this->settings['sfstore'].'/db_backup/database',
-                'db_tables'=>$this->settings['sfstore'].'/db_backup/tables',
-                'htaccess'=>$this->settings['sfstore'].'/htaccess_backup',
-                'wpconfig'=>$this->settings['sfstore'].'/wp_config_backup',
-                'files_main'=>$this->settings['sfstore'].'/file_backup',
-                'files_full'=>$this->settings['sfstore'].'/file_backup/full',
-                'files_partial'=>$this->settings['sfstore'].'/file_backup/partial',       
-            );  
+		$sfstore = $this->settings['sfstore'] ?? '';
+		return array(
+			'main_storage' => $sfstore,
+			'temp' => $sfstore . '/temp',
+			'db_main' => $sfstore . '/db_backup',
+			'db_csv' => $sfstore . '/db_backup/csv',
+			'db_full' => $sfstore . '/db_backup/database',
+			'db_tables' => $sfstore . '/db_backup/tables',
+			'htaccess' => $sfstore . '/htaccess_backup',
+			'wpconfig' => $sfstore . '/wp_config_backup',
+			'files_main' => $sfstore . '/file_backup',
+			'files_full' => $sfstore . '/file_backup/full',
+			'files_partial' => $sfstore . '/file_backup/partial',
+		);  
 	}
 	
 	/**

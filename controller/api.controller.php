@@ -225,8 +225,8 @@ class ApiController extends MainController {
         // Handle different form types
         switch ($form_type) {
             case 'login':
-                $dashboard->submit_login();
-                break;
+                $this->handle_login();
+                return; // Return early to prevent default handling
             case 'plugins':
                 $dashboard->submit_plugins();
                 break;
@@ -276,6 +276,93 @@ class ApiController extends MainController {
         }
         
         $this->success($message, null, $redirect);
+    }
+    
+    /**
+     * Handle login submission (without redirects)
+     */
+    private function handle_login() {
+        // SECURITY FIX: Validate CSRF token first
+        if (!CSRFProtection::validate_post_token('login')) {
+            $this->error('Invalid security token. Please try again.', 403);
+            return;
+        }
+        
+        // SECURITY FIX: Check rate limiting
+        if (!RateLimiter::check_rate_limit('login', 5, 300)) {
+            $remaining = RateLimiter::get_reset_time('login', 300);
+            $this->error('Too many login attempts. Please try again in ' . $remaining . ' seconds.', 429);
+            return;
+        }
+        
+        RateLimiter::record_attempt('login');
+        
+        // SECURITY FIX: Use SecureInput for sanitization
+        $user_data = array(
+            'username' => SecureInput::get_input('username', INPUT_POST, 'string'),
+            'password' => SecureInput::get_input('password', INPUT_POST, 'string'),
+        );
+        
+        $dashboard_model = new DashboardModel();
+        $login = $dashboard_model->get_login();
+        
+        if (empty($login)) {
+            $this->error('Login is not configured. Please set your login credentials in Global Settings.', 400);
+            return;
+        }
+        
+        $error = false;
+        $error_message = '';
+        
+        if (empty($user_data['password'])) {
+            $error = true;
+            $error_message = 'Password field cannot be empty.';
+        }
+        if (empty($user_data['username'])) {
+            $error = true;
+            $error_message = 'Username/Email field cannot be empty.';
+        }
+        
+        if ($error) {
+            $this->error($error_message, 400);
+            return;
+        }
+        
+        if (!empty($login) && is_array($login)) {
+            // Check username/email
+            if (!filter_var($user_data['username'], FILTER_VALIDATE_EMAIL) === false) {
+                if ($login['email'] != $user_data['username']) {
+                    $error = true;
+                }
+            } elseif ($login['username'] != $user_data['username']) {
+                $error = true;
+            }
+            
+            // Check password
+            if (!$error) {
+                include_once('ext/PasswordHash.php');
+                $t_hasher = new PasswordHash(8, FALSE);
+                $hash = $login['password'];
+                $check_hash = $user_data['password'];
+                $check = $t_hasher->CheckPassword($check_hash, $hash);
+                if (!$check) {
+                    $error = true;
+                }
+            }
+            
+            if ($error) {
+                $this->error('Wrong email/username and/or password', 401);
+                return;
+            } else {
+                // SECURITY FIX: Reset rate limit on successful login
+                RateLimiter::reset_rate_limit('login');
+                $this->set_session_var('login', true);
+                $this->success('You have been successfully logged in.', null, array('view' => 'info'));
+                return;
+            }
+        }
+        
+        $this->error('Login failed', 500);
     }
     
     /**

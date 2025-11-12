@@ -111,14 +111,27 @@ window.LoginModule = class extends BaseModule {
             
             if (response.success) {
                 WPSafeMode.Utils.showMessage(response.message || 'Login successful', 'success');
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1000);
+                // Handle redirect if provided
+                if (response.redirect) {
+                    setTimeout(() => {
+                        if (response.redirect.view) {
+                            WPSafeMode.Router.navigate(response.redirect.view);
+                        } else {
+                            window.location.reload();
+                        }
+                    }, 1000);
+                } else {
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                }
             } else {
                 WPSafeMode.Utils.showMessage(response.message || 'Login failed', 'alert');
             }
         } catch (error) {
-            WPSafeMode.Utils.showMessage('Error: ' + error.message, 'alert');
+            console.error('Login error:', error);
+            const errorMessage = error.message || (error.response && error.response.message) || 'Login failed. Please try again.';
+            WPSafeMode.Utils.showMessage('Error: ' + errorMessage, 'alert');
         } finally {
             submitButton.disabled = false;
             submitButton.textContent = originalText;

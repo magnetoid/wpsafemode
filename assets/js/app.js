@@ -188,16 +188,32 @@
             try {
                 WPSafeMode.Utils.showLoading(true);
                 const response = await fetch(this.baseUrl + endpoint, config);
-                const data = await response.json();
+                
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type') || '';
+                
+                if (!contentType.includes('application/json')) {
+                    const text = await response.text();
+                    console.error('Non-JSON response:', text.substring(0, 500));
+                    throw new Error('Server returned invalid response. Expected JSON but got: ' + (contentType || 'unknown'));
+                }
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (jsonError) {
+                    console.error('JSON parse error:', jsonError);
+                    throw new Error('Invalid JSON response from server. Check console for details.');
+                }
                 
                 if (!response.ok) {
-                    throw new Error(data.message || 'Request failed');
+                    throw new Error(data.message || data.error || 'Request failed');
                 }
                 
                 return data;
             } catch (error) {
                 console.error('API Error:', error);
-                WPSafeMode.Utils.showMessage('Error: ' + error.message, 'alert');
+                // Don't show message here, let the caller handle it
                 throw error;
             } finally {
                 WPSafeMode.Utils.showLoading(false);

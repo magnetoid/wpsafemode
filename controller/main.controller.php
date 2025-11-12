@@ -29,8 +29,8 @@ class MainController {
     function __construct($config = null) {
         $this->config = $config ?? Config::getInstance();
         $this->settings = $this->config->all();
-        $this->base_path = rtrim($this->settings['safemode_dir'] ?? dirname(__DIR__), '/\\') . '/';
-        $this->view_url = rtrim($this->settings['view_url'] ?? 'view/', '/\\') . '/';
+        $this->base_path = rtrim($this->settings[Constants::SETTING_SAFEMODE_DIR] ?? dirname(__DIR__), '/\\') . '/';
+        $this->view_url = rtrim($this->settings[Constants::SETTING_VIEW_URL] ?? Constants::DEFAULT_VIEW_URL, '/\\') . '/';
         $this->wp_dir = $this->settings['wp_dir'] ?? '';
         $this->wp_config_path = $this->wp_dir . "wp-config.php";
         $sfstore = $this->settings['sfstore'] ?? '';
@@ -84,7 +84,7 @@ class MainController {
     function set_current_page(): void {
 		$this->current_page = filter_input(INPUT_GET, 'view', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 		if (empty($this->current_page)) {
-			$this->current_page = 'info';
+			$this->current_page = Constants::DEFAULT_PAGE;
 		}
 	}
     
@@ -195,7 +195,7 @@ class MainController {
 	 */
     function redirect(string $location = ''): void {
     	if(empty($this->current_page)){
-			$this->current_page = 'info';
+			$this->current_page = Constants::DEFAULT_PAGE;
 		}
     	if(empty($location)){
 			$location = '?view='.$this->current_page;
@@ -210,8 +210,8 @@ class MainController {
 		// Prevent redirect loop: if we're already on the target page, don't redirect
 		if ($redirect_view && $this->current_page === $redirect_view) {
 			// Clear any redirect flags since we're already on the target
-			if (isset($_SESSION['wpsm']['redirecting'])) {
-				unset($_SESSION['wpsm']['redirecting']);
+			if (isset($_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECTING_KEY])) {
+				unset($_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECTING_KEY]);
 			}
 			return;
 		}
@@ -220,8 +220,8 @@ class MainController {
 		$redirect_count = isset($_SESSION['wpsm']['redirect_count']) ? intval($_SESSION['wpsm']['redirect_count']) : 0;
 		if ($redirect_count > 3) {
 			// Too many redirects - clear flag and stop
-			unset($_SESSION['wpsm']['redirecting']);
-			unset($_SESSION['wpsm']['redirect_count']);
+			unset($_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECTING_KEY]);
+			unset($_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECT_COUNT_KEY]);
 			error_log('Redirect loop detected - stopping redirect to: ' . $location);
 			return;
 		}
@@ -451,15 +451,15 @@ class MainController {
 			return;
 		}
 		
-		if (!isset($_SESSION['wpsm'])) {
-			$_SESSION['wpsm'] = array();
+		if (!isset($_SESSION[Constants::SESSION_NAMESPACE])) {
+			$_SESSION[Constants::SESSION_NAMESPACE] = array();
 		}
 		
 		if (is_array($val)) {
 			$val = json_encode($val);
 		}
 		
-		$_SESSION['wpsm'][$var] = $val;
+		$_SESSION[Constants::SESSION_NAMESPACE][$var] = $val;
 	}
 	
 	/**
@@ -469,11 +469,11 @@ class MainController {
 	 * @return void
 	 */
 	protected function remove_session_var(string $var): void {
-		if (empty($var) || !isset($_SESSION['wpsm'][$var])) {
+		if (empty($var) || !isset($_SESSION[Constants::SESSION_NAMESPACE][$var])) {
 			return;
 		}
 		
-		unset($_SESSION['wpsm'][$var]);
+		unset($_SESSION[Constants::SESSION_NAMESPACE][$var]);
 	}
 	
 	/**
@@ -482,8 +482,8 @@ class MainController {
 	 * @return void
 	 */
 	private function clearRedirectFlags(): void {
-		unset($_SESSION['wpsm']['redirecting']);
-		unset($_SESSION['wpsm']['redirect_count']);
+		unset($_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECTING_KEY]);
+		unset($_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECT_COUNT_KEY]);
 	}
 	
 	/**
@@ -501,7 +501,7 @@ class MainController {
 	 * @return void
 	 */
 	function action_logout(): void {
-		$this->remove_session_var('login');
+		$this->remove_session_var(Constants::SESSION_LOGIN_KEY);
 		$this->set_message('You have been successfully logged out.');
 		$this->redirect();
 	}

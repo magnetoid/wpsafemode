@@ -26,9 +26,7 @@ class AIController extends MainController {
         $method = $_SERVER['REQUEST_METHOD'];
         
         // Clear any output buffers
-        while (ob_get_level()) {
-            ob_end_clean();
-        }
+        OutputBuffer::cleanAll();
         
         header('Content-Type: application/json', true);
         

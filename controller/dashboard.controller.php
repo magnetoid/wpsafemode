@@ -43,33 +43,33 @@ class DashboardController extends MainController {
 	 */
    function actions(): void {
        $actions = array(
-           'login' => array('autoload' => true),
-           'logout' => array('action' => 'logout'),
-           'maintenance' => array('autoload' => true),
-           'backup' => array('autoload' => true),
-           'optimize_tables' => array('action' => 'optimize_tables'),
-           'core_scan' => array('action' => 'core_scan'),
-           'delete_revisions' => array('action' => 'delete_revisions'),
-           'delete_spam_comments' => array('action' => 'delete_spam_comments'),
-           'delete_unapproved_comments' => array('action' => 'delete_unapproved_comments'),
-           'check_maintenance' => array('autoload' => true),
-           'autobackup' => array('autoload' => true),
-           'download' => array('autoload' => true),
-           'message' => array('autoload' => true),
+           'login' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
+           'logout' => array(Constants::ACTION_TYPE_ACTION => 'logout'),
+           'maintenance' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
+           'backup' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
+           'optimize_tables' => array(Constants::ACTION_TYPE_ACTION => 'optimize_tables'),
+           'core_scan' => array(Constants::ACTION_TYPE_ACTION => 'core_scan'),
+           'delete_revisions' => array(Constants::ACTION_TYPE_ACTION => 'delete_revisions'),
+           'delete_spam_comments' => array(Constants::ACTION_TYPE_ACTION => 'delete_spam_comments'),
+           'delete_unapproved_comments' => array(Constants::ACTION_TYPE_ACTION => 'delete_unapproved_comments'),
+           'check_maintenance' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
+           'autobackup' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
+           'download' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
+           'message' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
        );
        
        foreach ($actions as $key => $action) {
            $skip = false;
-           $callback = array($this, 'action_' . $key);
+           $callback = array($this, Constants::ACTION_PREFIX . $key);
            
-           if (isset($action['action']) && (empty($this->action) || $this->action != $action['action'])) {
+           if (isset($action[Constants::ACTION_TYPE_ACTION]) && (empty($this->action) || $this->action != $action[Constants::ACTION_TYPE_ACTION])) {
                $skip = true;
            }
            
            if ($skip == false && is_callable($callback)) {
-               if ($key != 'message' && $key != 'logout' && $key != 'login' && isset($this->settings['demo']) && $this->settings['demo'] == true) {
-                   if (!isset($action['autoload']) && $key != 'maintenance') {
-                       $this->set_message('quick actions disabled in demo mode');
+               if ($key != 'message' && $key != 'logout' && $key != 'login' && isset($this->settings[Constants::DEMO_MODE_KEY]) && $this->settings[Constants::DEMO_MODE_KEY] == true) {
+                   if (!isset($action[Constants::ACTION_TYPE_AUTOLOAD]) && $key != 'maintenance') {
+                       $this->set_message(Constants::DEMO_MODE_MESSAGE);
                    }
                } else {
                    call_user_func($callback);

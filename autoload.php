@@ -29,12 +29,14 @@ define("HTPASSWDFILE", ".htpasswd");
 
 
 // Load core classes first
+include_once('core/Constants.php');
 include_once('core/Config.php');
 include_once('core/Database.php');
 include_once('core/Response.php');
 include_once('core/InputValidator.php');
 include_once('core/Logger.php');
 include_once('core/Cache.php');
+include_once('core/OutputBuffer.php');
 
 // Load services
 include_once('services/SystemHealthService.php');

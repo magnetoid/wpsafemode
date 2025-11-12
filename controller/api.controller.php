@@ -211,12 +211,12 @@ class ApiController extends MainController {
     private function getDashboardInstance(): DashboardController {
         try {
             // Suppress output from DashboardController constructor
-            ob_start();
-            $dashboard = new DashboardController();
-            ob_end_clean();
+            $dashboard = null;
+            OutputBuffer::suppress(function() use (&$dashboard) {
+                $dashboard = new DashboardController();
+            });
             return $dashboard;
         } catch (Throwable $e) {
-            ob_end_clean();
             error_log('Error creating DashboardController: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             throw $e;
         }
@@ -259,9 +259,9 @@ class ApiController extends MainController {
             $view_method = 'view_' . str_replace('-', '_', $view);
             if (method_exists($dashboard, $view_method) && is_callable(array($dashboard, $view_method))) {
                 // Suppress output from view method (it might call render)
-                ob_start();
-                call_user_func(array($dashboard, $view_method));
-                ob_end_clean();
+                OutputBuffer::suppress(function() use ($dashboard, $view_method) {
+                    call_user_func(array($dashboard, $view_method));
+                });
             }
             
             $dashboard->get_message();
@@ -448,14 +448,14 @@ class ApiController extends MainController {
     private function handle_login() {
         // SECURITY FIX: Validate CSRF token first
         if (!CSRFProtection::validate_post_token('login')) {
-            $this->error('Invalid security token. Please try again.', 403);
+            $this->error('Invalid security token. Please try again.', Constants::HTTP_FORBIDDEN);
             return;
         }
         
         // SECURITY FIX: Check rate limiting
-        if (!RateLimiter::check_rate_limit('login', 5, 300)) {
-            $remaining = RateLimiter::get_reset_time('login', 300);
-            $this->error('Too many login attempts. Please try again in ' . $remaining . ' seconds.', 429);
+        if (!RateLimiter::check_rate_limit('login', Constants::RATE_LIMIT_LOGIN_ATTEMPTS, Constants::RATE_LIMIT_LOGIN_WINDOW)) {
+            $remaining = RateLimiter::get_reset_time('login', Constants::RATE_LIMIT_LOGIN_WINDOW);
+            $this->error('Too many login attempts. Please try again in ' . $remaining . ' seconds.', Constants::HTTP_TOO_MANY_REQUESTS);
             return;
         }
         

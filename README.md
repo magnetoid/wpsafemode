@@ -225,7 +225,17 @@ wpsafemode/
 ├── view/                          # View templates
 │   ├── *-admin.php               # AdminLTE views
 │   └── *.php                     # Legacy fallback views
+├── core/
+│   ├── Config.php                 # Configuration management
+│   ├── Database.php               # Database connection
+│   ├── Response.php               # API response handler
+│   ├── InputValidator.php         # Input validation (single source of truth)
+│   ├── Logger.php                 # Logging system
+│   └── Cache.php                  # Caching system
 ├── security/                      # Security classes
+│   ├── SecurityFixes.php          # Security utilities
+│   ├── CSRFProtection.php         # CSRF token management
+│   └── RateLimiter.php            # Rate limiting
 ├── services/
 │   ├── AIService.php              # AI service
 │   ├── ActivityLogService.php     # Activity logging
@@ -243,7 +253,7 @@ wpsafemode/
 
 ## 🎯 Technology Stack
 
-- **Backend:** PHP 7.4+ with PDO (PHP 8.0+ recommended)
+- **Backend:** PHP 7.4+ with PDO (PHP 8.0+ recommended, fully PHP 8.1+ compatible)
 - **Frontend:** JavaScript (ES6+), AdminLTE 3, Bootstrap 4, Material Design 3
 - **Framework:** Custom MVC architecture with service layer
 - **Database:** MySQL 5.7+ / MariaDB 10.2+ with PDO
@@ -252,19 +262,22 @@ wpsafemode/
 - **Icons:** Font Awesome 6, Material Icons
 - **Architecture:** Service-oriented design with dependency injection support
 - **Caching:** In-memory caching system for performance optimization
+- **Code Standards:** PSR-compliant naming conventions with strict type hints
 
 ## 🔐 Security
 
 WP Safe Mode includes comprehensive security features:
 
-- ✅ SQL Injection prevention (PDO parameter binding)
-- ✅ CSRF token protection
-- ✅ Rate limiting for login attempts
-- ✅ Input sanitization and validation
-- ✅ XSS prevention
-- ✅ Secure file operations
-- ✅ Path traversal protection
-- ✅ Secure session management
+- ✅ **SQL Injection Prevention** - PDO parameter binding throughout
+- ✅ **CSRF Token Protection** - All forms protected with CSRF tokens
+- ✅ **Rate Limiting** - Brute force protection for login attempts (5 attempts/5 minutes)
+- ✅ **Input Validation** - Centralized `InputValidator` class with strict type checking
+- ✅ **XSS Prevention** - Output escaping and input sanitization
+- ✅ **Secure File Operations** - Path validation and secure file handling
+- ✅ **Path Traversal Protection** - Realpath validation for all file operations
+- ✅ **Secure Session Management** - HTTP-only and secure cookie settings
+- ✅ **PHP 8.0+ Compatibility** - Modern error handling with `Throwable`
+- ✅ **No Circular Dependencies** - Clean architecture prevents security gaps
 
 ## 📱 Mobile Support
 
@@ -276,18 +289,69 @@ WP Safe Mode includes comprehensive security features:
 
 ## 🚀 Performance
 
-- Single Page Application (SPA) architecture
-- AJAX-powered content loading
-- No page reloads
-- Efficient caching
-- Optimized asset loading
-- Database query optimization
-- Lazy loading support
-- Service-based architecture for better code organization
+- **Single Page Application (SPA)** - No page reloads, smooth navigation
+- **AJAX-Powered Loading** - Dynamic content loading without full page refresh
+- **Efficient Caching** - In-memory caching system for repeated operations
+- **Optimized Asset Loading** - Minimized HTTP requests
+- **Database Optimization** - Query optimization and prepared statements
+- **Lazy Loading** - Load resources only when needed
+- **Service Architecture** - Modular design for better code organization and maintainability
+- **Clean Code** - Reduced codebase size through refactoring (43 lines removed in v1.0.1)
+- **Type Safety** - Strict type hints reduce runtime overhead
+- **No Code Duplication** - Single source of truth pattern eliminates redundancy
 
 ## 📝 Change Log
 
-### v1.0 (Current) - Major Feature Release
+### v1.0.1 (Current) - Code Quality & Refactoring
+**Released:** November 2025
+
+#### 🔧 Bug Fixes
+- **Fixed undefined class references** - Resolved fatal errors caused by `SecureInput` class references
+- **Fixed circular dependencies** - Eliminated circular references between `InputValidator` and `SecureInput`
+- **Fixed syntax errors** - Resolved missing closing braces in `UserManagementService`
+- **Fixed method compatibility** - Updated all deprecated method calls to use new naming conventions
+
+#### ♻️ Major Refactoring
+- **Input Validation Architecture**
+  - Consolidated all input validation into `InputValidator` as single source of truth
+  - Converted `SecureInput` to legacy compatibility wrapper
+  - Added `filename` and `table_name` sanitization types
+  - Removed code duplication (43 lines of code removed)
+  - Enhanced validation with null/empty checks
+
+- **Method Naming Standardization (PSR Compliance)**
+  - Converted all service methods from `snake_case` to `camelCase`
+  - Added strict type hints to all method signatures
+  - Added return type declarations for better type safety
+  - Improved PHPDoc comments throughout
+
+- **Service Method Updates:**
+  ```
+  ActivityLogService:
+    get_logs() → getLogs()
+    clear_old_logs() → clearOldLogs()
+    get_statistics() → getStatistics()
+  
+  EmailService:
+    test_email() → testEmail()
+    get_email_info() → getEmailInfo()
+    test_php_mail() → testPhpMail()
+  ```
+
+#### 🏗️ Architecture Improvements
+- **Clean Dependencies** - No circular class dependencies
+- **Type Safety** - Strict type hints on all refactored methods
+- **Backwards Compatibility** - 100% maintained through wrapper classes
+- **Code Quality** - Consistent coding standards across all services
+- **Maintainability** - Easier to maintain with single source of truth pattern
+
+#### 🎯 PHP 8.0+ Compatibility
+- Updated all deprecated `FILTER_SANITIZE_STRING` usage
+- Improved exception handling with `Throwable` instead of `Exception`
+- Version-aware filtering for PHP 8.1+ (`FILTER_SANITIZE_FULL_SPECIAL_CHARS`)
+- Enhanced error logging with file and line information
+
+### v1.0 - Major Feature Release
 - ✨ **AI-Powered Features** - Complete AI Assistant with OpenAI GPT-4 integration
 - 🎨 **AdminLTE 3 Redesign** - Modern, professional admin interface
 - 🔄 **JavaScript Refactoring** - Complete SPA architecture with 21+ modules
@@ -342,10 +406,12 @@ Please check `license.txt` or visit [http://wpsafemode.com/licenses/](http://wps
 
 ## ⚠️ Important Notes
 
-- This tool is still in beta/experimental phase
+- This tool is production-ready but always test in development first
 - **Always test in a development environment first**
 - **Always backup your site before making changes**
 - **Change default login credentials immediately after installation**
+- **PHP 8.0+ Recommended** - Full compatibility with PHP 8.1+
+- **Code Quality** - Follows PSR standards with strict type hints
 - Please do not remove branding or links
 - For support, visit [http://wpsafemode.com/](http://wpsafemode.com/)
 

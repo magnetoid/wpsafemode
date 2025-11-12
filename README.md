@@ -1,123 +1,246 @@
-WP Safe Mode v1 beta
------------------------
-WP Safe Mode Beta is self hosted administration and development tool that helps user to fix, hack and manage WordPress, out of the 
-WordPress itself.
-Beta version is currently free to download and use for testing and work with your WordPress site. 
- 
-It helps with migration, backup, fixing, plugin activations, themes, debugging, htaccess modifications and much, much more..
-The WP safe mode tool is an essential for WordPress end users and developers.
+# WP Safe Mode v1.0
 
-Managed by: imbamarketing.com and cloud-industry.com
+A powerful, self-hosted administration and development tool for WordPress that helps you fix, manage, and optimize your WordPress site outside of WordPress itself.
 
+## 🚀 Overview
 
-Features
------------------------
- - Edit options  in wp_config - configuration file 
- - Themes Switch - switch existing themes out of the WordPress using this tool 
- - Download and install Twenty Fifteen theme from wordpress.org repository
- - Backup database - fully and archive optionally 
- - Backup database tables - selected tables will be exported in sql and/or csv format and can be archived optionally 
- - Backup full WordPress installation directory 
- - Download of backup files 
- - Edit of main .htaccess in WordPress directory
- - Edit of robots.txt in WordPress directory
- - PHP error_log read - formatted overview of PHP error_log file + search through error_log file
- - Search database - experimental
- - Quick actions - set of quick action buttons 
- - Optimize database tables 
- - Maintenance mode 
- - Delete Unapproved Comments
- - Delete spam comments 
- - Delete post revisions 
- - Change of home and siteurl option values 
- - Scan WordPress core files
- - Autobackup - settings for automatic backup of your WordPress files and database 
+WP Safe Mode is an essential tool for WordPress end users and developers. It provides a comprehensive set of features for managing WordPress installations, troubleshooting issues, performing backups, and optimizing performance - all without needing to access the WordPress admin panel.
 
+**Managed by:** [imbamarketing.com](http://imbamarketing.com) and [cloud-industry.com](http://cloud-industry.com)
 
+## ✨ Key Features
 
-Requirements
------------------------
-Apache web server
-PHP  5.3.x or newer
-MySQL 5.3.x or newer 
+### Core Management
+- **WordPress Configuration** - Edit wp-config.php constants and variables
+- **Plugin Management** - Activate/deactivate plugins without accessing WordPress
+- **Theme Management** - Switch themes and download default themes
+- **Database Management** - Full and partial database backups (SQL/CSV formats)
+- **File Backups** - Complete WordPress installation backups with ZIP archiving
+- **Error Log Viewer** - View and search PHP error logs with formatted display
 
-Permissions to write to folder on server 
-Functional WordPress website on server 
-MySQL user with all privileges 
+### Advanced Features
+- **.htaccess Editor** - Edit and generate .htaccess files with common configurations
+- **robots.txt Manager** - Create and edit robots.txt files
+- **Quick Actions** - One-click actions for common tasks:
+  - Optimize database tables
+  - Enable/disable maintenance mode
+  - Delete spam/unapproved comments
+  - Delete post revisions
+  - Change site URL and home URL
+  - Scan WordPress core files
+- **Auto Backup** - Configure automatic backups for files and database
+- **Search & Replace** - Database search and replace functionality
 
-Installation
------------------------
-1 - Unpack archive copy the folder in a root directory on your web server where your WordPress is installed, e.g. http://www.yourdomain.com/wordpress-safe-mode
-2 - Copy and rename settings sample file settings.sample.php into settings.php and 
-3 - Set WordPress site directory for $settings['wp_dir'] if it is not in same directory and $settings['sfstore'] for where your backup files will be stored. Rest of data in settings.php don't edit
-4 - Make sure the directory for backup files is writtable and wp_config.php can be edited. 
-5 - Access directly to e.g. http://www.yourdomain.com/wordpress-safe-mode/  . Optionally, you can rename your WP Safe Mode main directory
+### 🔒 Security Features
+- **CSRF Protection** - All forms protected with CSRF tokens
+- **Rate Limiting** - Brute force protection for login attempts
+- **Input Validation** - Comprehensive input sanitization and validation
+- **SQL Injection Prevention** - PDO parameter binding throughout
+- **Secure File Operations** - Path validation and secure file handling
+- **Secure Sessions** - HTTP-only and secure cookie settings
 
-Change Log
------------------------
+### 🤖 AI-Powered Features (NEW!)
+- **AI Chat Assistant** - Interactive troubleshooting with OpenAI GPT-4
+- **Error Log Analysis** - AI-powered analysis of PHP errors with solutions
+- **Plugin Conflict Detection** - Automatic detection of plugin conflicts
+- **Security Analysis** - Comprehensive security audit and recommendations
+- **Performance Optimization** - AI-suggested performance improvements
+- **Error Explanation** - Simple explanations of complex errors
 
-v0.06 beta 
-added login feature - setup login credentials and use login to access tool 
-added global settings feature 
-automatically create settings.php if doesn't exists
-all backups stored now in wp safe mode storage 
-minor fixes
+### 🎨 Modern UI/UX
+- **AdminLTE 3 Design** - Modern, responsive admin interface
+- **Single Page Application** - No page reloads, smooth navigation
+- **Mobile Responsive** - Fully optimized for mobile devices
+- **Real-time Updates** - AJAX-powered dynamic content loading
+- **Loading States** - Visual feedback during operations
+- **Bootstrap 4** - Modern UI components and styling
 
-v0.05 beta
-new sections and features added -  quick actions, .htaccess generator, robots.txt editor, php error_log read, maintenance mode, optimize tables, delete all spam/unapproved comments, search database, autobackup, delete post revisions, change of siteurl and home option values, scan WordPress core files
-new design 
-major code fixes 
+## 📋 Requirements
 
+- **Web Server:** Apache (recommended) or Nginx
+- **PHP:** 7.4 or newer (PHP 8.x recommended)
+- **MySQL:** 5.7 or newer (or MariaDB 10.2+)
+- **Permissions:** Write access to WordPress directory and backup storage
+- **WordPress:** Functional WordPress installation
+- **Database:** MySQL user with all privileges
 
-v0.04  beta
+### Optional for AI Features
+- **OpenAI API Key** - For AI Assistant features (get from [platform.openai.com](https://platform.openai.com/api-keys))
 
-mobile friendly layout 
-minor fixes
+## 🛠️ Installation
 
-v0.03  beta
+1. **Download/Clone** the repository to your web server
+   ```bash
+   git clone https://github.com/magnetoid/wpsafemode.git
+   ```
 
-removed intercom signup, added links for support forum and contact
-added inactive links for coming soon features
+2. **Place in WordPress Directory**
+   - Copy the `wpsafemode` folder to your WordPress root directory
+   - Example: `http://www.yourdomain.com/wpsafemode/`
 
-v0.02  beta
+3. **Configure Settings**
+   - Copy `settings.sample.php` to `settings.php`
+   - Edit `settings.php` and configure:
+     - `$settings['wp_dir']` - Path to WordPress directory (default: `../`)
+     - `$settings['sfstore']` - Backup storage directory (default: `sfstore/`)
 
-Added intercom signup for support and update notifications 
-Few visual UI tweaks 
+4. **Set Permissions**
+   - Ensure backup directory is writable
+   - Ensure wp-config.php is readable/writable
 
+5. **Access the Tool**
+   - Navigate to: `http://www.yourdomain.com/wpsafemode/`
+   - Default login: `demo` / `demo`
+   - **Important:** Change default credentials in Global Settings immediately!
 
+## 🔧 Configuration
 
+### Basic Configuration
+Edit `settings.php`:
+```php
+$settings['wp_dir'] = '../';  // WordPress directory path
+$settings['sfstore'] = 'sfstore/';  // Backup storage directory
+```
 
-Authors and Contributors
------------------------
+### AI Features Setup
+1. Get an OpenAI API key from [platform.openai.com](https://platform.openai.com/api-keys)
+2. Go to **Global Settings** in WP Safe Mode
+3. Enter your OpenAI API key
+4. Save settings
 
-CloudIndustry - http://cloud-industry.com 
-Nikola Kirincic, Marko Tiosavljevic, Daliborka Ciric, Luka Cvetinovic, Nikola Stojanovic
+## 📁 Project Structure
 
+```
+wpsafemode/
+├── assets/
+│   ├── css/
+│   │   └── admin-custom.css      # Custom AdminLTE styles
+│   └── js/
+│       ├── app.js                 # Main application
+│       ├── admin-custom.js        # Admin customizations
+│       └── modules/               # Feature modules (16 modules)
+├── controller/
+│   ├── main.controller.php        # Base controller
+│   ├── dashboard.controller.php   # Main dashboard
+│   ├── api.controller.php        # API endpoints
+│   └── ai.controller.php          # AI features
+├── model/                         # Data models
+├── view/                          # View templates
+│   ├── *-admin.php               # AdminLTE views
+│   └── *.php                     # Legacy fallback views
+├── security/                      # Security classes
+├── services/
+│   └── AIService.php              # AI service
+└── settings.php                   # Configuration
+```
 
-License
------------------------
+## 🎯 Technology Stack
 
-Please check license.txt or visit http://wpsafemode.com/licenses/ 
+- **Backend:** PHP 7.4+ with PDO
+- **Frontend:** JavaScript (ES6+), AdminLTE 3, Bootstrap 4
+- **Framework:** Custom MVC architecture
+- **Security:** CSRF protection, rate limiting, input validation
+- **AI:** OpenAI GPT-4 API integration
+- **Icons:** Font Awesome 6
 
+## 🔐 Security
 
-Trademark note: 
+WP Safe Mode includes comprehensive security features:
 
-WP Safe Mode, and wpsafemode are trademarks of Cloud Industry LLC, &copy Cloud Industry LLC, all rights reserved 
+- ✅ SQL Injection prevention (PDO parameter binding)
+- ✅ CSRF token protection
+- ✅ Rate limiting for login attempts
+- ✅ Input sanitization and validation
+- ✅ XSS prevention
+- ✅ Secure file operations
+- ✅ Path traversal protection
+- ✅ Secure session management
 
-Note
------------------------
-This tool is still in experimental phase. It is recommended to test first in development environment or to backup files first. 
+## 📱 Mobile Support
 
-Please do not move branding or links
+- Fully responsive design
+- Mobile-optimized sidebar
+- Touch-friendly interface
+- Optimized loading screens
+- Mobile-specific CSS optimizations
 
-Please visit http://wpsafemode.com/ to signup and leave a feedback so we can improve our tool and give you even with more features and fixed bugs. 
+## 🚀 Performance
 
-Best Regards, 
+- Single Page Application (SPA) architecture
+- AJAX-powered content loading
+- No page reloads
+- Efficient caching
+- Optimized asset loading
 
-Cloud Industry Team 
+## 📝 Change Log
 
+### v1.0 (Current)
+- ✨ **AI-Powered Features** - Complete AI Assistant with OpenAI GPT-4 integration
+- 🎨 **AdminLTE 3 Redesign** - Modern, professional admin interface
+- 🔄 **JavaScript Refactoring** - Complete SPA architecture with 16 modules
+- 🔒 **Security Enhancements** - Comprehensive security fixes and improvements
+- 📱 **Mobile Optimization** - Full mobile responsive design
+- 🧹 **Code Cleanup** - Removed 50+ unused files, modernized codebase
+- ⚡ **Performance Improvements** - Faster loading, better UX
 
+### v0.06 beta
+- Added login feature with secure authentication
+- Added global settings feature
+- Automatically create settings.php if doesn't exist
+- All backups stored in wp safe mode storage
+- Minor fixes
 
+### v0.05 beta
+- Quick actions, .htaccess generator, robots.txt editor
+- PHP error_log read functionality
+- Maintenance mode
+- Optimize tables, delete spam comments
+- Search database, autobackup features
+- New design
+- Major code fixes
 
+## 🤝 Contributing
 
+Contributions are welcome! Please feel free to submit a Pull Request.
 
+## 📄 License
+
+Please check `license.txt` or visit [http://wpsafemode.com/licenses/](http://wpsafemode.com/licenses/)
+
+## 👥 Authors and Contributors
+
+**CloudIndustry** - [http://cloud-industry.com](http://cloud-industry.com)
+
+**Contributors:**
+- Nikola Kirincic
+- Marko Tiosavljevic
+- Daliborka Ciric
+- Luka Cvetinovic
+- Nikola Stojanovic
+
+## ⚠️ Important Notes
+
+- This tool is still in beta/experimental phase
+- **Always test in a development environment first**
+- **Always backup your site before making changes**
+- **Change default login credentials immediately after installation**
+- Please do not remove branding or links
+- For support, visit [http://wpsafemode.com/](http://wpsafemode.com/)
+
+## 🆘 Support
+
+- **Website:** [http://wpsafemode.com/](http://wpsafemode.com/)
+- **Issues:** Use GitHub Issues for bug reports
+- **Feedback:** Visit the website to leave feedback
+
+## 🎉 Acknowledgments
+
+Special thanks to all contributors and the WordPress community for their support and feedback.
+
+---
+
+**Trademark Note:** WP Safe Mode and wpsafemode are trademarks of Cloud Industry LLC, © Cloud Industry LLC, all rights reserved.
+
+**Best Regards,**
+
+**Cloud Industry Team**

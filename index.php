@@ -48,3 +48,8 @@ if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/api/') !
     $api->handle();
     exit;
 }
+
+// Handle regular page requests - instantiate DashboardController
+// This will render the full page with header, content, and footer
+include_once('controller/dashboard.controller.php');
+$dashboard = new DashboardController();

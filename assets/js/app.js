@@ -335,6 +335,11 @@
         
         this.loadModule = async function(moduleName, view, action = null) {
             try {
+                // Always use API fallback for now to debug menu issues
+                console.log('Loading view via API:', view);
+                await this.loadViewViaAPI(view, action);
+                return;
+
                 // Load module dynamically - moduleName is already the full class name
                 const ModuleClass = window[moduleName];
                 if (ModuleClass) {

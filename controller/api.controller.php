@@ -223,7 +223,21 @@ class ApiController extends MainController {
                 $dashboard->action = $action;
             }
             
+            // Set current page so view-specific data can be initialized
+            $dashboard->current_page = $view;
+            
+            // Initialize data - this may call view-specific methods
             $dashboard->init_data();
+            
+            // If view has a specific method, call it to ensure data is loaded
+            $view_method = 'view_' . str_replace('-', '_', $view);
+            if (method_exists($dashboard, $view_method) && is_callable(array($dashboard, $view_method))) {
+                // Suppress output from view method (it might call render)
+                ob_start();
+                call_user_func(array($dashboard, $view_method));
+                ob_end_clean();
+            }
+            
             $dashboard->get_message();
             
             // Normalize view_url once

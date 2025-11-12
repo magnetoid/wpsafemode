@@ -432,20 +432,28 @@ class MainController {
 	}
 	function action_login(){
 		$login = $this->dashboard_model->get_login();
+		$check_login = $this->get_session_var('login');
+		
+		// If login credentials are not configured, allow access without login
 		if(empty($login)){
-			$this->set_message('Login is not set. Please Set your login');
+			// Only show message on login page, not on every page
 			if($this->current_page=='login'){
+				$this->set_message('Login is not set. Please Set your login in Global Settings');
 				// Clear redirect flags on successful page load
 				unset($_SESSION['wpsm']['redirecting']);
 				unset($_SESSION['wpsm']['redirect_count']);
-				$this->redirect('?view=info');	
+				// Don't redirect, allow user to see the message
+				return;
 			}
-			// Clear redirect flags since we're not redirecting
+			// If login not configured, allow access (no login required)
+			$this->data['login'] = false;
+			// Clear redirect flags
 			unset($_SESSION['wpsm']['redirecting']);
 			unset($_SESSION['wpsm']['redirect_count']);
 			return;
 		}
-		$check_login = $this->get_session_var('login');
+		
+		// Login credentials exist, check session
 		if(empty($check_login) || $check_login!=true){
 			if($this->current_page!='login'){
 				$this->set_message('please login');

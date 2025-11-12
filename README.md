@@ -1,4 +1,4 @@
-WP Safe Mode v0.06 beta
+WP Safe Mode v1 beta
 -----------------------
 WP Safe Mode Beta is self hosted administration and development tool that helps user to fix, hack and manage WordPress, out of the 
 WordPress itself.
@@ -115,6 +115,7 @@ Please visit http://wpsafemode.com/ to signup and leave a feedback so we can imp
 Best Regards, 
 
 Cloud Industry Team 
+
 
 
 

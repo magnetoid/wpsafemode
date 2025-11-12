@@ -30,12 +30,63 @@ WP Safe Mode is an essential tool for WordPress end users and developers. It pro
   - Scan WordPress core files
 - **Auto Backup** - Configure automatic backups for files and database
 - **Search & Replace** - Database search and replace functionality
-- **Activity Log** - Track all user actions and system events with filtering and statistics
-- **Email Testing** - Test WordPress and PHP email functionality, check SMTP configuration
-- **Security Scanner** - Comprehensive security scan with vulnerability detection and security score
-- **Performance Profiler** - Real-time performance metrics, analysis, and optimization recommendations
-- **Media Library Manager** - Browse, search, and manage WordPress media files
-- **Database Optimizer** - Advanced database optimization with orphaned data cleanup and analysis
+
+### 📊 New Management Features (v1.0)
+- **Activity Log** - Complete audit trail system:
+  - Track all user actions and system events
+  - Filter logs by action type and user
+  - View activity statistics
+  - Auto-cleanup of old logs
+  - IP address tracking
+  - JSON-based log storage (last 1000 entries)
+
+- **Email Testing** - Comprehensive email diagnostics:
+  - Test WordPress `wp_mail()` function
+  - Test PHP `mail()` function
+  - Check SMTP configuration
+  - Detect email plugins (WP Mail SMTP, etc.)
+  - View email configuration details
+  - Fallback support when WordPress not loaded
+
+- **Security Scanner** - Automated security auditing:
+  - File permission checks (wp-config.php, .htaccess)
+  - WordPress version comparison with latest
+  - Plugin security analysis
+  - Database security validation (table prefix)
+  - wp-config.php security settings check
+  - .htaccess security rules validation
+  - User account security analysis
+  - Security score calculation (0-100)
+  - Detailed recommendations for fixes
+
+- **Performance Profiler** - Real-time performance analysis:
+  - Server metrics (memory, disk, execution time)
+  - PHP metrics (version, OPcache status, extensions)
+  - Database metrics (table count, sizes, optimization status)
+  - WordPress metrics (version, plugins, themes, posts, comments)
+  - Automatic performance recommendations
+  - Resource usage tracking
+  - Optimization suggestions
+
+- **Media Library Manager** - WordPress media management:
+  - Browse media files with pagination
+  - Search and filter media files
+  - View file details (size, type, dimensions)
+  - Delete media files
+  - Media statistics and analytics
+  - Group by file type (image, video, audio, PDF)
+  - File existence verification
+
+- **Database Optimizer** - Advanced database maintenance:
+  - Analyze all database tables
+  - Find orphaned data (postmeta, commentmeta, term relationships)
+  - Detect duplicate data
+  - Find unused data (revisions, spam comments, trashed posts, expired transients)
+  - One-click table optimization
+  - Clean orphaned data
+  - Clean post revisions (configurable keep count)
+  - Clean expired transients
+  - Generate optimization recommendations
 
 ### 🔒 Security Features
 - **CSRF Protection** - All forms protected with CSRF tokens
@@ -114,6 +165,46 @@ $settings['sfstore'] = 'sfstore/';  // Backup storage directory
 3. Enter your OpenAI API key
 4. Save settings
 
+## 📡 API Endpoints
+
+WP Safe Mode provides a comprehensive REST API for all features:
+
+### Activity Log API
+- `GET /api/activity-log?action=list&limit=100` - Get activity logs
+- `GET /api/activity-log?action=statistics` - Get activity statistics
+- `POST /api/activity-log?action=clear&days=30` - Clear old logs
+
+### Email Testing API
+- `GET /api/email?action=info` - Get email configuration
+- `POST /api/email?action=test` - Test WordPress email (requires: to, subject, message)
+- `POST /api/email?action=test_php` - Test PHP mail() function
+
+### Security Scanner API
+- `GET /api/security-scanner?action=scan` - Run comprehensive security scan
+
+### Performance Profiler API
+- `GET /api/performance?action=metrics` - Get performance metrics
+
+### Media Library API
+- `GET /api/media?action=list&limit=50&offset=0&search=term` - List media files
+- `GET /api/media?action=statistics` - Get media statistics
+- `POST /api/media?action=delete` - Delete media file (requires: file_id)
+
+### Database Optimizer API
+- `GET /api/database-optimizer?action=analyze` - Analyze database
+- `POST /api/database-optimizer?action=optimize` - Optimize all tables
+- `POST /api/database-optimizer?action=clean_orphaned` - Clean orphaned data
+- `POST /api/database-optimizer?action=clean_revisions&keep=3` - Clean revisions
+- `POST /api/database-optimizer?action=clean_transients` - Clean expired transients
+
+### Other APIs
+- `GET /api/system-health` - Get system health metrics
+- `GET /api/file-manager?action=list&path=...` - File manager operations
+- `GET /api/users?action=list` - User management operations
+- `GET /api/cron?action=list` - Cron job management
+
+All API endpoints return JSON responses with `success`, `message`, and `data` fields.
+
 ## 📁 Project Structure
 
 ```
@@ -152,12 +243,15 @@ wpsafemode/
 
 ## 🎯 Technology Stack
 
-- **Backend:** PHP 7.4+ with PDO
-- **Frontend:** JavaScript (ES6+), AdminLTE 3, Bootstrap 4
-- **Framework:** Custom MVC architecture
-- **Security:** CSRF protection, rate limiting, input validation
+- **Backend:** PHP 7.4+ with PDO (PHP 8.0+ recommended)
+- **Frontend:** JavaScript (ES6+), AdminLTE 3, Bootstrap 4, Material Design 3
+- **Framework:** Custom MVC architecture with service layer
+- **Database:** MySQL 5.7+ / MariaDB 10.2+ with PDO
+- **Security:** CSRF protection, rate limiting, input validation, SQL injection prevention
 - **AI:** OpenAI GPT-4 API integration
-- **Icons:** Font Awesome 6
+- **Icons:** Font Awesome 6, Material Icons
+- **Architecture:** Service-oriented design with dependency injection support
+- **Caching:** In-memory caching system for performance optimization
 
 ## 🔐 Security
 
@@ -187,23 +281,29 @@ WP Safe Mode includes comprehensive security features:
 - No page reloads
 - Efficient caching
 - Optimized asset loading
+- Database query optimization
+- Lazy loading support
+- Service-based architecture for better code organization
 
 ## 📝 Change Log
 
-### v1.0 (Current)
+### v1.0 (Current) - Major Feature Release
 - ✨ **AI-Powered Features** - Complete AI Assistant with OpenAI GPT-4 integration
 - 🎨 **AdminLTE 3 Redesign** - Modern, professional admin interface
-- 🔄 **JavaScript Refactoring** - Complete SPA architecture with 16 modules
+- 🔄 **JavaScript Refactoring** - Complete SPA architecture with 21+ modules
 - 🔒 **Security Enhancements** - Comprehensive security fixes and improvements
 - 📱 **Mobile Optimization** - Full mobile responsive design
 - 🧹 **Code Cleanup** - Removed 50+ unused files, modernized codebase
 - ⚡ **Performance Improvements** - Faster loading, better UX
-- 📊 **Activity Log** - Complete audit trail system for tracking all user actions
-- 📧 **Email Testing** - Test email functionality and SMTP configuration
-- 🔍 **Security Scanner** - Automated security vulnerability scanning with scoring
-- 📈 **Performance Profiler** - Real-time performance metrics and recommendations
-- 🖼️ **Media Library Manager** - Complete WordPress media file management
-- 🗄️ **Database Optimizer** - Advanced database optimization and cleanup tools
+- 🏗️ **Service Architecture** - Modular service-based architecture for better maintainability
+- 📊 **Activity Log** - Complete audit trail system for tracking all user actions with filtering and statistics
+- 📧 **Email Testing** - Test WordPress and PHP email functionality with SMTP configuration detection
+- 🔍 **Security Scanner** - Automated security vulnerability scanning with 0-100 security score
+- 📈 **Performance Profiler** - Real-time performance metrics, analysis, and optimization recommendations
+- 🖼️ **Media Library Manager** - Complete WordPress media file management with search and statistics
+- 🗄️ **Database Optimizer** - Advanced database optimization with orphaned data cleanup and analysis
+- 🔧 **Core Classes** - New core classes: Config, Database, Response, InputValidator, Logger, Cache
+- 🛡️ **Enhanced Security** - PHP 8.0+ compatibility, improved error handling, comprehensive input validation
 
 ### v0.06 beta
 - Added login feature with secure authentication

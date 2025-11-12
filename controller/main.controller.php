@@ -31,12 +31,12 @@ class MainController {
         $this->settings = $this->config->all();
         $this->base_path = rtrim($this->settings[Constants::SETTING_SAFEMODE_DIR] ?? dirname(__DIR__), '/\\') . '/';
         $this->view_url = rtrim($this->settings[Constants::SETTING_VIEW_URL] ?? Constants::DEFAULT_VIEW_URL, '/\\') . '/';
-        $this->wp_dir = $this->settings['wp_dir'] ?? '';
-        $this->wp_config_path = $this->wp_dir . "wp-config.php";
-        $sfstore = $this->settings['sfstore'] ?? '';
-        $this->wp_config_backup_path = $sfstore . 'wp-config-safemode-backup.php';
-        $this->htaccess_path = $this->wp_dir . '.htaccess';
-        $this->htaccess_backup_path = $sfstore . '.htaccess.safemode.backup';
+        $this->wp_dir = $this->settings[Constants::SETTING_WP_DIR] ?? '';
+        $this->wp_config_path = $this->wp_dir . Constants::WP_CONFIG_FILE;
+        $sfstore = $this->settings[Constants::SETTING_SFSTORE] ?? '';
+        $this->wp_config_backup_path = $sfstore . Constants::WP_CONFIG_BACKUP_SUFFIX;
+        $this->htaccess_path = $this->wp_dir . Constants::HTACCESS_FILE;
+        $this->htaccess_backup_path = $sfstore . Constants::HTACCESS_BACKUP_SUFFIX;
         $this->set_current_page();      
         $this->action = filter_input(INPUT_GET , 'action');
         $this->setup_dirs();
@@ -60,7 +60,7 @@ class MainController {
 	* @return array list of directories 
 	*/
     function get_storage_dirs(){
-		$sfstore = $this->settings['sfstore'] ?? '';
+		$sfstore = $this->settings[Constants::SETTING_SFSTORE] ?? '';
 		return array(
 			'main_storage' => $sfstore,
 			'temp' => $sfstore . '/temp',
@@ -129,7 +129,7 @@ class MainController {
         } else {
             $this->last_missing_template = $template_path ?: $template;
             // Only log in debug mode
-            if ($this->settings['debug'] ?? false) {
+            if ($this->settings[Constants::SETTING_DEBUG] ?? false) {
                 error_log('Template not found: ' . $this->last_missing_template);
             }
             $this->show_404();
@@ -217,8 +217,8 @@ class MainController {
 		}
 		
 		// Prevent redirect loops by checking redirect count
-		$redirect_count = isset($_SESSION['wpsm']['redirect_count']) ? intval($_SESSION['wpsm']['redirect_count']) : 0;
-		if ($redirect_count > 3) {
+		$redirect_count = isset($_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECT_COUNT_KEY]) ? intval($_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECT_COUNT_KEY]) : 0;
+		if ($redirect_count > Constants::REDIRECT_MAX_COUNT) {
 			// Too many redirects - clear flag and stop
 			unset($_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECTING_KEY]);
 			unset($_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECT_COUNT_KEY]);
@@ -258,8 +258,8 @@ class MainController {
 		}
 		
 		// Increment redirect count
-		$_SESSION['wpsm']['redirect_count'] = $redirect_count + 1;
-		$_SESSION['wpsm']['redirecting'] = true;
+		$_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECT_COUNT_KEY] = $redirect_count + 1;
+		$_SESSION[Constants::SESSION_NAMESPACE][Constants::SESSION_REDIRECTING_KEY] = true;
 		
 		// Send redirect header
 		header("Location: " . $redirect_url, true, 302);
@@ -418,20 +418,20 @@ class MainController {
 	 * @return mixed Session value or null
 	 */
 	protected function get_session_var(string $var = '') {
-		if (!isset($_SESSION['wpsm'])) {
-			$_SESSION['wpsm'] = array();
-			return $var === '' ? $_SESSION['wpsm'] : null;
+		if (!isset($_SESSION[Constants::SESSION_NAMESPACE])) {
+			$_SESSION[Constants::SESSION_NAMESPACE] = array();
+			return $var === '' ? $_SESSION[Constants::SESSION_NAMESPACE] : null;
 		}
 		
 		if (empty($var)) {
-			return $_SESSION['wpsm'];
+			return $_SESSION[Constants::SESSION_NAMESPACE];
 		}
 		
-		if (!isset($_SESSION['wpsm'][$var])) {
+		if (!isset($_SESSION[Constants::SESSION_NAMESPACE][$var])) {
 			return null;
 		}
 		
-		$value = $_SESSION['wpsm'][$var];
+		$value = $_SESSION[Constants::SESSION_NAMESPACE][$var];
 		if (DashboardHelpers::is_json($value)) {
 			return json_decode($value, true);
 		}
@@ -514,7 +514,7 @@ class MainController {
 		// Check if dashboard_model is available (only in DashboardController)
 		if (!isset($this->dashboard_model)) {
 			// If no dashboard_model, just check session
-			$check_login = $this->get_session_var('login');
+			$check_login = $this->get_session_var(Constants::SESSION_LOGIN_KEY);
 			if (empty($check_login) || $check_login !== true) {
 				if ($this->current_page !== 'login') {
 					$this->set_message('please login');
@@ -528,7 +528,7 @@ class MainController {
 		}
 		
 		$login = $this->dashboard_model->get_login();
-		$check_login = $this->get_session_var('login');
+		$check_login = $this->get_session_var(Constants::SESSION_LOGIN_KEY);
 		
 		// If login credentials are not configured, allow access without login
 		if (empty($login)) {
@@ -732,7 +732,7 @@ class MainController {
 			$this->dashboard_model->set_login($login);
 			
 			$this->set_message('User login data set');
-			$this->set_session_var('login' , true);
+			$this->set_session_var(Constants::SESSION_LOGIN_KEY, true);
 
 		}
 		
@@ -768,8 +768,8 @@ class MainController {
 		}
 		
 		// SECURITY FIX: Check rate limiting
-		if (!RateLimiter::check_rate_limit('login', 5, 300)) {
-			$remaining = RateLimiter::get_reset_time('login', 300);
+		if (!RateLimiter::check_rate_limit('login', Constants::RATE_LIMIT_LOGIN_ATTEMPTS, Constants::RATE_LIMIT_LOGIN_WINDOW)) {
+			$remaining = RateLimiter::get_reset_time('login', Constants::RATE_LIMIT_LOGIN_WINDOW);
 			$this->set_message('Too many login attempts. Please try again in ' . $remaining . ' seconds.');
 			$this->redirect('?view=login');
 			return;
@@ -840,7 +840,7 @@ class MainController {
 			} else {
 				// SECURITY FIX: Reset rate limit on successful login
 				RateLimiter::reset_rate_limit('login');
-				$this->set_session_var('login', true);
+				$this->set_session_var(Constants::SESSION_LOGIN_KEY, true);
 				$this->set_message('You have been successfully logged in.');
 				$this->redirect('?view=info');
 			}

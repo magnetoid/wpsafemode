@@ -20,9 +20,7 @@ class ApiController extends MainController {
         }
         
         // Clear any output that might have been sent
-        if (ob_get_level()) {
-            ob_clean();
-        }
+        OutputBuffer::clean();
         
         // Set JSON header FIRST, before any parent constructor
         header('Content-Type: application/json', true);
@@ -108,7 +106,7 @@ class ApiController extends MainController {
         } catch (Throwable $e) {
             // PHP 8.0+ compatible error handling
             error_log('API Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-            $this->error('Internal server error', 500);
+            $this->error('Internal server error', Constants::HTTP_INTERNAL_ERROR);
         }
     }
     
@@ -182,21 +180,20 @@ class ApiController extends MainController {
             $this->current_page = $view;
             
             // Get view HTML
-            ob_start();
             try {
-                $this->load_view($view, $action);
-                $html = ob_get_clean();
+                $html = OutputBuffer::capture(function() use ($view, $action) {
+                    $this->load_view($view, $action);
+                });
             } catch (Throwable $e) {
-                ob_end_clean();
                 error_log('Error loading view: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-                $this->error('Error loading view: ' . $e->getMessage(), 500);
+                $this->error('Error loading view: ' . $e->getMessage(), Constants::HTTP_INTERNAL_ERROR);
                 return;
             }
             
             $this->success('View loaded', array('html' => $html, 'view' => $view));
         } catch (Throwable $e) {
             error_log('Error in handle_view: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-            $this->error('Internal server error', 500);
+            $this->error('Internal server error', Constants::HTTP_INTERNAL_ERROR);
         }
     }
     
@@ -477,21 +474,19 @@ class ApiController extends MainController {
         }
         
         // Use output buffering to catch any HTML output from DashboardModel
-        ob_start();
         try {
-            $dashboard_model = new DashboardModel();
-            $login = $dashboard_model->get_login();
+            OutputBuffer::suppress(function() use (&$login) {
+                $dashboard_model = new DashboardModel();
+                $login = $dashboard_model->get_login();
+            });
         } catch (Throwable $e) {
-            ob_end_clean();
             error_log('Login Database Error: ' . $e->getMessage());
-            $this->error('Database error occurred. Please try again.', 500);
+            $this->error('Database error occurred. Please try again.', Constants::HTTP_INTERNAL_ERROR);
             return;
         }
-        // Discard any output from DashboardModel
-        ob_end_clean();
         
         if (empty($login)) {
-            $this->error('Login is not configured. Please set your login credentials in Global Settings.', 400);
+            $this->error('Login is not configured. Please set your login credentials in Global Settings.', Constants::HTTP_BAD_REQUEST);
             return;
         }
         
@@ -563,7 +558,7 @@ class ApiController extends MainController {
             }
         }
         
-        $this->error('Login failed', 500);
+        $this->error('Login failed', Constants::HTTP_INTERNAL_ERROR);
     }
     
     /**

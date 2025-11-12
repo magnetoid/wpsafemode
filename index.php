@@ -11,7 +11,9 @@
 define('WPSM',true);
 
 // Start output buffering early for API routes to prevent any output before headers
-$is_api_request = (isset($_SERVER['REQUEST_URI']) && (strpos($_SERVER['REQUEST_URI'], '/api/') !== false || strpos($_SERVER['REQUEST_URI'], '/ai/') !== false));
+// Check for API routes (handles both root and subdirectory installations)
+$request_uri = $_SERVER['REQUEST_URI'] ?? '';
+$is_api_request = (strpos($request_uri, '/api/') !== false || strpos($request_uri, '/ai/') !== false);
 
 if ($is_api_request) {
     // Suppress error output for API requests
@@ -24,7 +26,7 @@ if ($is_api_request) {
 include_once('autoload.php');
 
 // Handle AI API requests
-if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/ai/') !== false) {
+if (strpos($request_uri, '/ai/') !== false) {
     // Define API context
     define('WPSM_API', true);
     // Clear any buffered output
@@ -36,7 +38,7 @@ if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/ai/') !=
 }
 
 // Handle API requests first (before normal page rendering)
-if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/api/') !== false) {
+if (strpos($request_uri, '/api/') !== false) {
     // Define API context (will be redefined in ApiController, but set early for includes)
     if (!defined('WPSM_API')) {
         define('WPSM_API', true);

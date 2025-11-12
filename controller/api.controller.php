@@ -119,11 +119,13 @@ class ApiController extends MainController {
         // PHP 8.0+ compatible: FILTER_SANITIZE_STRING is deprecated, use FILTER_SANITIZE_FULL_SPECIAL_CHARS
         $endpoint = filter_input(INPUT_GET, 'endpoint', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
         if (empty($endpoint)) {
-            // Try to extract from URL
+            // Try to extract from URL (handles both /api/endpoint and /wpsm/api/endpoint)
             $uri = $_SERVER['REQUEST_URI'] ?? '';
+            // Match /api/endpoint or /wpsm/api/endpoint pattern
             if (preg_match('#/api/([^/?]+)#', $uri, $matches)) {
                 $endpoint = $matches[1];
             } else {
+                // Default to 'view' if no endpoint found
                 $endpoint = 'view';
             }
         }

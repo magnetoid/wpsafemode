@@ -163,14 +163,28 @@
             const url = WPSafeMode.config.baseUrl + '?view=' + view + (query ? '&' + query : '');
             window.history.pushState({view: view, params: params}, '', url);
         };
+        
+        this.escapeHtml = function(text) {
+            if (text === null || text === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        };
     }
 
     /**
      * API Client
      */
     function API() {
-        // Get base URL without query string
-        const basePath = window.location.pathname.replace(/\/[^\/]*$/, '') || '';
+        // Get base URL - extract the wpsafemode directory path
+        // e.g., /wpsm/ or / from window.location.pathname
+        let basePath = window.location.pathname;
+        // Remove trailing filename if present
+        basePath = basePath.replace(/\/[^\/]*$/, '');
+        // Ensure it ends with /
+        if (!basePath.endsWith('/')) {
+            basePath += '/';
+        }
         this.baseUrl = basePath;
         
         this.request = async function(endpoint, options = {}) {

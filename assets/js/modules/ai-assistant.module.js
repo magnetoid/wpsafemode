@@ -3,7 +3,8 @@
  * Provides AI-powered chat and diagnostic capabilities
  */
 
-class AIAssistantModule extends BaseModule {
+if (typeof window.AIAssistantModule === 'undefined') {
+    window.AIAssistantModule = class extends BaseModule {
     
     constructor() {
         super();
@@ -336,10 +337,11 @@ class AIAssistantModule extends BaseModule {
     cleanup() {
         // Cleanup if needed
     }
+    };
 }
 
 // Register module
-if (typeof WPSafeMode !== 'undefined' && WPSafeMode.Router) {
-    WPSafeMode.Router.registerModule('ai-assistant', AIAssistantModule);
+if (typeof WPSafeMode !== 'undefined' && WPSafeMode.Router && typeof window.AIAssistantModule !== 'undefined') {
+    WPSafeMode.Router.registerModule('ai-assistant', window.AIAssistantModule);
 }
 

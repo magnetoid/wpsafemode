@@ -2,7 +2,8 @@
  * Cron Module
  * Manage WordPress cron jobs
  */
-class CronModule extends BaseModule {
+if (typeof window.CronModule === 'undefined') {
+    window.CronModule = class extends BaseModule {
     
     async load(view, action) {
         await this.render();
@@ -19,6 +20,7 @@ class CronModule extends BaseModule {
     initHandlers() {
         // Handlers are in the view's inline scripts
     }
+    };
 }
 
 

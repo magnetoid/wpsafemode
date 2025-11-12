@@ -2,7 +2,8 @@
  * Database Query Module
  * Execute custom SQL queries
  */
-class DatabaseQueryModule extends BaseModule {
+if (typeof window.DatabaseQueryModule === 'undefined') {
+    window.DatabaseQueryModule = class extends BaseModule {
     
     async load(view, action) {
         await this.render();
@@ -19,6 +20,7 @@ class DatabaseQueryModule extends BaseModule {
     initHandlers() {
         // Handlers are in the view's inline scripts
     }
+    };
 }
 
 

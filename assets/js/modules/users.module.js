@@ -2,7 +2,8 @@
  * Users Module
  * Manage WordPress users
  */
-class UsersModule extends BaseModule {
+if (typeof window.UsersModule === 'undefined') {
+    window.UsersModule = class extends BaseModule {
     
     async load(view, action) {
         await this.render();
@@ -19,6 +20,7 @@ class UsersModule extends BaseModule {
     initHandlers() {
         // Handlers are in the view's inline scripts
     }
+    };
 }
 
 

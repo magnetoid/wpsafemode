@@ -2,7 +2,8 @@
  * File Manager Module
  * Browse and manage WordPress files
  */
-class FileManagerModule extends BaseModule {
+if (typeof window.FileManagerModule === 'undefined') {
+    window.FileManagerModule = class extends BaseModule {
     
     async load(view, action) {
         const params = new URLSearchParams(window.location.search);
@@ -22,6 +23,7 @@ class FileManagerModule extends BaseModule {
     initHandlers() {
         // Handlers are in the view's inline scripts
     }
+    };
 }
 
 

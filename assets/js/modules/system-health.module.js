@@ -2,7 +2,8 @@
  * System Health Module
  * Real-time system health monitoring
  */
-class SystemHealthModule extends BaseModule {
+if (typeof window.SystemHealthModule === 'undefined') {
+    window.SystemHealthModule = class extends BaseModule {
     
     async load(view, action) {
         await this.render();
@@ -31,6 +32,7 @@ class SystemHealthModule extends BaseModule {
             clearInterval(this.refreshInterval);
         }
     }
+    };
 }
 
 

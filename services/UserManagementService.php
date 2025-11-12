@@ -265,8 +265,7 @@ class UserManagementService {
             return false;
         }
     }
-}
-
+    
     /**
      * Hash password using WordPress method
      * 

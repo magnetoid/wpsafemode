@@ -302,4 +302,4 @@ class UserManagementService {
     private function sanitizeTitle(string $title): string {
         return strtolower(preg_replace('/[^a-z0-9-]+/', '-', $title));
     }
-
+}

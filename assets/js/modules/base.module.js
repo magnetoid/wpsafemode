@@ -72,7 +72,32 @@ window.BaseModule = class {
         if (content) {
             content.style.opacity = '0';
             setTimeout(() => {
-                content.innerHTML = html;
+                // Find or create a content wrapper to preserve breadcrumb and messages
+                let contentWrapper = content.querySelector('.view-content-wrapper');
+                if (!contentWrapper) {
+                    // Create wrapper if it doesn't exist
+                    contentWrapper = document.createElement('div');
+                    contentWrapper.className = 'view-content-wrapper';
+                    // Move existing content (except breadcrumb and messages) into wrapper
+                    const breadcrumb = content.querySelector('nav[style*="margin-bottom: 24px"]');
+                    const messages = content.querySelector('.md3-snackbar');
+                    const children = Array.from(content.children);
+                    children.forEach(child => {
+                        if (child !== breadcrumb && child !== messages && child !== contentWrapper) {
+                            contentWrapper.appendChild(child);
+                        }
+                    });
+                    if (breadcrumb) {
+                        content.insertBefore(breadcrumb, contentWrapper);
+                    }
+                    if (messages) {
+                        content.insertBefore(messages, contentWrapper);
+                    }
+                    content.appendChild(contentWrapper);
+                }
+                // Update only the content wrapper, preserving breadcrumb and messages
+                contentWrapper.innerHTML = html;
+                
                 // Reinitialize AdminLTE components if available
                 if (window.AdminLTE && window.AdminLTE.init) {
                     // AdminLTE auto-initializes, but we can trigger updates

@@ -25,6 +25,8 @@ include_once('autoload.php');
 
 // Handle AI API requests
 if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/ai/') !== false) {
+    // Define API context
+    define('WPSM_API', true);
     // Clear any buffered output
     if (ob_get_level()) ob_clean();
     include_once('controller/ai.controller.php');
@@ -35,6 +37,10 @@ if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/ai/') !=
 
 // Handle API requests first (before normal page rendering)
 if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/api/') !== false) {
+    // Define API context (will be redefined in ApiController, but set early for includes)
+    if (!defined('WPSM_API')) {
+        define('WPSM_API', true);
+    }
     // Clear any buffered output
     if (ob_get_level()) ob_clean();
     include_once('controller/api.controller.php');

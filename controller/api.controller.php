@@ -13,6 +13,9 @@ class ApiController extends MainController {
     );
     
     function __construct() {
+        // Define API context to prevent HTML output in models
+        define('WPSM_API', true);
+        
         // Clear any output that might have been sent
         if (ob_get_level()) {
             ob_clean();
@@ -323,8 +326,18 @@ class ApiController extends MainController {
             'password' => SecureInput::get_input('password', INPUT_POST, 'string'),
         );
         
-        $dashboard_model = new DashboardModel();
-        $login = $dashboard_model->get_login();
+        // Use output buffering to catch any HTML output from DashboardModel
+        ob_start();
+        try {
+            $dashboard_model = new DashboardModel();
+            $login = $dashboard_model->get_login();
+        } catch (Exception $e) {
+            ob_end_clean();
+            $this->error('Database error: ' . $e->getMessage(), 500);
+            return;
+        }
+        // Discard any output from DashboardModel
+        ob_end_clean();
         
         if (empty($login)) {
             $this->error('Login is not configured. Please set your login credentials in Global Settings.', 400);

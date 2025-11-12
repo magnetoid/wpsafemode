@@ -19,10 +19,15 @@ include_once('settings.php');
          global $settings;
             
 
-         if(!defined('DB_NAME')){
-             echo 'no database parameters set!';
-             exit;
-         }
+        if(!defined('DB_NAME')){
+            error_log('WP Safe Mode: Database parameters not set');
+            // Don't output in API context - let it fail gracefully
+            if (!defined('WPSM_API')) {
+                echo 'no database parameters set!';
+                exit;
+            }
+            throw new Exception('Database parameters not set');
+        }
          $this->wp_options = array();
     
          $this->safemode_url = $settings['safemode_url'];
@@ -38,9 +43,12 @@ include_once('settings.php');
         }catch(PDOException $ex) {
             // SECURITY FIX: Log error instead of displaying to user
             error_log('Database connection error: ' . $ex->getMessage());
-            // Don't expose database errors to users
-            echo '<p style="color:red">Database connection error. Please contact administrator.</p>';
-            return false;
+            // Don't output in API context
+            if (!defined('WPSM_API')) {
+                echo '<p style="color:red">Database connection error. Please contact administrator.</p>';
+            }
+            // Throw exception so API can handle it properly
+            throw $ex;
         }
 
      }

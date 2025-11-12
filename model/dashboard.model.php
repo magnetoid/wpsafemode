@@ -1676,7 +1676,11 @@ class DashboardModel extends dbModel {
             try{
 
             }catch(PDOException $ex) {
-                echo '<p style="color:red">Error: </p>'. $ex->getMessage();
+                error_log('WP Safe Mode Database Error: ' . $ex->getMessage());
+                // Don't output in API context
+                if (!defined('WPSM_API')) {
+                    echo '<p style="color:red">Error: </p>'. $ex->getMessage();
+                }
                 return false;
             }
             
@@ -2318,7 +2322,11 @@ class DashboardModel extends dbModel {
       $q->bindParam(':option_name', $option_name);
       $q->execute();        
        }catch(PDOException $ex) {
-	             echo '<p style="color:red">Error: </p>'. $ex->getMessage();
+	             error_log('WP Safe Mode Database Error: ' . $ex->getMessage());
+	             // Don't output in API context
+	             if (!defined('WPSM_API')) {
+	                 echo '<p style="color:red">Error: </p>'. $ex->getMessage();
+	             }
 	             return false;
 	         }
    }

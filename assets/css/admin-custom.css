@@ -261,7 +261,7 @@ pre.code-block {
     color: #4ec9b0;
 }
 
-/* Responsive */
+/* Responsive Design Fixes */
 @media (max-width: 768px) {
     .quick-actions-grid {
         grid-template-columns: 1fr;
@@ -269,6 +269,115 @@ pre.code-block {
     
     .stats-card .stats-value {
         font-size: 1.5rem;
+    }
+    
+    /* Mobile Sidebar Fixes */
+    .main-sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out;
+    }
+    
+    .sidebar-open .main-sidebar {
+        transform: translateX(0);
+    }
+    
+    /* Mobile Content Padding */
+    .content-wrapper {
+        padding-left: 0 !important;
+    }
+    
+    /* Mobile Cards */
+    .card {
+        margin-bottom: 1rem;
+        border-radius: 0.5rem;
+    }
+    
+    /* Mobile Tables */
+    .table-responsive {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Mobile Forms */
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    /* Mobile Buttons */
+    .btn {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    
+    .btn-group .btn {
+        width: auto;
+    }
+    
+    /* Mobile Navbar */
+    .navbar-nav {
+        flex-direction: row;
+    }
+    
+    /* Prevent text overflow */
+    .card-title {
+        font-size: 1.1rem;
+        word-wrap: break-word;
+    }
+    
+    /* Mobile Chat */
+    .chat-message-user,
+    .chat-message-assistant {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+}
+
+/* Tablet Responsive */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .quick-actions-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .content-wrapper {
+        padding-left: 250px;
+    }
+}
+
+/* Fix Sidebar Overlay on Mobile */
+@media (max-width: 768px) {
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1037;
+        display: none;
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+    }
+    
+    body.sidebar-open .sidebar-overlay {
+        display: block;
+        opacity: 1;
+    }
+    
+    /* Ensure sidebar works properly on mobile */
+    .main-sidebar {
+        z-index: 1038;
+    }
+    
+    /* Fix content when sidebar is open on mobile */
+    body.sidebar-open .content-wrapper {
+        margin-left: 0;
+    }
+    
+    /* Ensure sidebar doesn't push content on mobile */
+    .layout-fixed .wrapper .content-wrapper {
+        margin-left: 0 !important;
     }
 }
 
@@ -321,6 +430,244 @@ pre.code-block {
 .theme-list::-webkit-scrollbar-thumb:hover,
 .error-log-container::-webkit-scrollbar-thumb:hover {
     background: #555;
+}
+
+/* General Design Fixes */
+
+/* Fix overflow issues */
+.wrapper {
+    overflow-x: hidden;
+    position: relative;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+/* Fix content area */
+.content {
+    padding: 1rem;
+}
+
+@media (max-width: 768px) {
+    .content {
+        padding: 0.75rem;
+    }
+}
+
+/* Fix card spacing */
+.card + .card {
+    margin-top: 1rem;
+}
+
+/* Fix table responsiveness */
+.table {
+    width: 100%;
+    margin-bottom: 1rem;
+}
+
+.table-responsive {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Fix form inputs on mobile */
+@media (max-width: 768px) {
+    .form-control,
+    .form-select {
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+}
+
+/* Fix button groups */
+.btn-group {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.btn-group .btn {
+    flex: 1 1 auto;
+}
+
+@media (max-width: 768px) {
+    .btn-group {
+        flex-direction: column;
+    }
+    
+    .btn-group .btn {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Fix modal on mobile */
+@media (max-width: 768px) {
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+    
+    .modal-content {
+        border-radius: 0.5rem;
+    }
+}
+
+/* Fix navbar on mobile */
+@media (max-width: 768px) {
+    .navbar-nav .nav-link {
+        padding: 0.5rem 1rem;
+    }
+    
+    .navbar-brand {
+        font-size: 1.1rem;
+    }
+}
+
+/* Fix sidebar brand on mobile */
+@media (max-width: 768px) {
+    .brand-link {
+        padding: 0.75rem 1rem;
+    }
+    
+    .brand-text {
+        font-size: 1.1rem;
+    }
+}
+
+/* Fix content header on mobile */
+@media (max-width: 768px) {
+    .content-header {
+        padding: 0.75rem 1rem;
+    }
+    
+    .content-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .breadcrumb {
+        font-size: 0.875rem;
+    }
+}
+
+/* Fix alerts on mobile */
+@media (max-width: 768px) {
+    .alert {
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* Fix badges on mobile */
+.badge {
+    font-size: 0.75em;
+    padding: 0.35em 0.65em;
+    white-space: nowrap;
+}
+
+/* Fix tooltips on mobile */
+@media (max-width: 768px) {
+    .tooltip {
+        font-size: 0.875rem;
+    }
+}
+
+/* Fix dropdowns on mobile */
+@media (max-width: 768px) {
+    .dropdown-menu {
+        max-width: calc(100vw - 2rem);
+        left: 1rem !important;
+        right: 1rem !important;
+        transform: none !important;
+    }
+}
+
+/* Fix login page on mobile */
+@media (max-width: 768px) {
+    .login-box {
+        width: 100%;
+        max-width: 100%;
+        margin: 1rem auto;
+        padding: 0 1rem;
+    }
+    
+    .login-card-body {
+        padding: 1.5rem 1rem;
+    }
+}
+
+/* Fix AI chat on mobile */
+@media (max-width: 768px) {
+    .direct-chat-messages {
+        height: 300px !important;
+        padding: 1rem;
+    }
+    
+    .chat-message {
+        margin-bottom: 1rem;
+        padding: 0.75rem;
+    }
+    
+    .chat-message-content {
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+}
+
+/* Fix code blocks on mobile */
+@media (max-width: 768px) {
+    pre.code-block,
+    code {
+        font-size: 0.8rem;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+    }
+}
+
+/* Fix pagination on mobile */
+@media (max-width: 768px) {
+    .pagination {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .pagination .page-link {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+    }
+}
+
+/* Performance: Reduce animations on mobile */
+@media (max-width: 768px) {
+    * {
+        animation-duration: 0.2s !important;
+        transition-duration: 0.2s !important;
+    }
+}
+
+/* Accessibility: Focus states */
+.btn:focus,
+.form-control:focus,
+.nav-link:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+    .sidebar,
+    .navbar,
+    .app-loader,
+    .btn,
+    .pagination {
+        display: none !important;
+    }
+    
+    .content-wrapper {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
 }
 
 

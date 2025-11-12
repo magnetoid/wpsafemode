@@ -97,9 +97,68 @@
             $(document).ready(function() {
                 // Initialize any widgets
                 $('[data-widget="pushmenu"]').PushMenu();
+                
+                // Mobile sidebar handling
+                initMobileSidebar();
             });
         }
     });
+    
+    // Mobile sidebar functionality
+    function initMobileSidebar() {
+        // Create sidebar overlay for mobile
+        if (!document.getElementById('sidebar-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.id = 'sidebar-overlay';
+            overlay.className = 'sidebar-overlay';
+            overlay.addEventListener('click', function() {
+                closeMobileSidebar();
+            });
+            document.body.appendChild(overlay);
+        }
+        
+        // Handle sidebar toggle on mobile
+        $(document).on('click', '[data-widget="pushmenu"]', function(e) {
+            if (window.innerWidth <= 768) {
+                e.preventDefault();
+                toggleMobileSidebar();
+            }
+        });
+        
+        // Close sidebar when clicking outside on mobile
+        $(document).on('click', '.main-sidebar .nav-link', function() {
+            if (window.innerWidth <= 768) {
+                setTimeout(closeMobileSidebar, 300);
+            }
+        });
+        
+        // Handle window resize
+        let resizeTimer;
+        $(window).on('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function() {
+                if (window.innerWidth > 768) {
+                    closeMobileSidebar();
+                }
+            }, 250);
+        });
+    }
+    
+    function toggleMobileSidebar() {
+        document.body.classList.toggle('sidebar-open');
+        const sidebar = document.querySelector('.main-sidebar');
+        if (sidebar) {
+            sidebar.classList.toggle('sidebar-open');
+        }
+    }
+    
+    function closeMobileSidebar() {
+        document.body.classList.remove('sidebar-open');
+        const sidebar = document.querySelector('.main-sidebar');
+        if (sidebar) {
+            sidebar.classList.remove('sidebar-open');
+        }
+    }
 
     // Enhance forms with AdminLTE styling
     function enhanceForms() {

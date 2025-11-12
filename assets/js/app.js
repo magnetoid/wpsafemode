@@ -136,10 +136,23 @@
                     loaderEl.className = 'app-loader';
                     loaderEl.innerHTML = '<div class="spinner"></div><p>Loading...</p>';
                     document.body.appendChild(loaderEl);
+                    // Prevent body scroll on mobile
+                    document.body.classList.add('loading-active');
+                } else {
+                    // Show if hidden
+                    loader.style.display = 'flex';
                 }
             } else {
                 if (loader) {
-                    loader.remove();
+                    loader.style.display = 'none';
+                    // Allow body scroll again
+                    document.body.classList.remove('loading-active');
+                    // Remove after animation
+                    setTimeout(() => {
+                        if (loader && loader.parentNode) {
+                            loader.remove();
+                        }
+                    }, 300);
                 }
             }
         };

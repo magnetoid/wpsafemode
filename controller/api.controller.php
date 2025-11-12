@@ -148,8 +148,12 @@ class ApiController extends MainController {
      * Load view content
      */
     private function load_view($view, $action = null) {
+        // Use output buffering to prevent DashboardController from outputting HTML
+        ob_start();
         // Initialize dashboard controller to get data
         $dashboard = new DashboardController();
+        // Discard any HTML output from constructor
+        ob_end_clean();
         
         // Set action if provided
         if ($action) {
@@ -191,7 +195,11 @@ class ApiController extends MainController {
             return;
         }
         
+        // Use output buffering to prevent DashboardController from outputting HTML
+        ob_start();
         $dashboard = new DashboardController();
+        // Discard any HTML output from constructor
+        ob_end_clean();
         $dashboard->action = $action;
         
         // Execute action
@@ -220,13 +228,20 @@ class ApiController extends MainController {
             return;
         }
         
+        // Handle login separately (doesn't need DashboardController)
+        if ($form_type === 'login') {
+            $this->handle_login();
+            return; // Return early to prevent default handling
+        }
+        
+        // Use output buffering to prevent DashboardController from outputting HTML
+        ob_start();
         $dashboard = new DashboardController();
+        // Discard any HTML output from constructor
+        ob_end_clean();
         
         // Handle different form types
         switch ($form_type) {
-            case 'login':
-                $this->handle_login();
-                return; // Return early to prevent default handling
             case 'plugins':
                 $dashboard->submit_plugins();
                 break;
@@ -414,7 +429,12 @@ class ApiController extends MainController {
             return;
         }
         
+        // Use output buffering to prevent DashboardController from outputting HTML
+        ob_start();
         $dashboard = new DashboardController();
+        // Discard any HTML output from constructor
+        ob_end_clean();
+        
         $data = null;
         
         switch ($data_type) {

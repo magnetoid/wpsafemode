@@ -23,37 +23,108 @@
     <link rel="icon" type="image/ico" href="favicon.ico">
     
     <style>
+        /* Loading Screen - Fixed for Mobile */
         .app-loader {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.7);
+            right: 0;
+            bottom: 0;
+            width: 100vw;
+            height: 100vh;
+            max-width: 100%;
+            max-height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(2px);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 9999;
+            z-index: 99999;
+            color: white;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        .app-loader p {
+            margin-top: 1rem;
+            font-size: 1rem;
+            font-weight: 500;
             color: white;
         }
+        
         .spinner {
-            border: 4px solid #f3f3f3;
+            border: 4px solid rgba(255, 255, 255, 0.3);
             border-top: 4px solid #007bff;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 50px;
+            height: 50px;
             animation: spin 1s linear infinite;
+            flex-shrink: 0;
         }
+        
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        /* Content Transitions */
         #main-content {
-            transition: opacity 0.2s ease-in-out;
+            transition: opacity 0.3s ease-in-out;
+            min-height: 200px;
         }
+        
+        /* Content Wrapper Fixes */
         .content-wrapper {
             min-height: calc(100vh - 57px);
+            position: relative;
+        }
+        
+        /* Mobile Responsive Fixes */
+        @media (max-width: 768px) {
+            .app-loader {
+                z-index: 999999;
+            }
+            
+            .spinner {
+                width: 40px;
+                height: 40px;
+                border-width: 3px;
+            }
+            
+            .app-loader p {
+                font-size: 0.9rem;
+            }
+            
+            .content-wrapper {
+                min-height: calc(100vh - 50px);
+            }
+            
+            /* Prevent horizontal scroll on mobile */
+            body {
+                overflow-x: hidden;
+            }
+            
+            .wrapper {
+                overflow-x: hidden;
+            }
+        }
+        
+        /* Fix for iOS Safari viewport issues */
+        @supports (-webkit-touch-callout: none) {
+            .app-loader {
+                position: -webkit-sticky;
+                position: sticky;
+            }
+        }
+        
+        /* Prevent body scroll when loader is active */
+        body.loading-active {
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
         }
     </style>
 </head>

@@ -335,24 +335,23 @@
         
         this.loadModule = async function(moduleName, view, action = null) {
             try {
-                // Always use API fallback for now to debug menu issues
-                console.log('Loading view via API:', view);
-                await this.loadViewViaAPI(view, action);
-                return;
-
-                // Load module dynamically - moduleName is already the full class name
+                // Try to load module first, fallback to API if not available
                 const ModuleClass = window[moduleName];
                 if (ModuleClass) {
                     this.currentModule = new ModuleClass();
                     await this.currentModule.load(view, action);
                 } else {
                     // Fallback: load via API
-                    console.warn('Module not found:', moduleName, '- loading via API');
                     await this.loadViewViaAPI(view, action);
                 }
             } catch (error) {
                 console.error('Error loading module:', error);
-                WPSafeMode.Utils.showMessage('Error loading page: ' + error.message, 'alert');
+                // Fallback to API on error
+                try {
+                    await this.loadViewViaAPI(view, action);
+                } catch (apiError) {
+                    WPSafeMode.Utils.showMessage('Error loading page: ' + error.message, 'alert');
+                }
             }
         };
         

@@ -19,6 +19,7 @@ class MainController {
     protected $data = array();
     protected $base_path;
     protected $last_missing_template;
+    private static $template_cache = array(); // Cache for template file existence
     
     /**
      * Constructor - initialize main controller
@@ -106,12 +107,20 @@ class MainController {
         
         $template_path = $this->resolveTemplatePath($template);
 
-        if($template_path && file_exists($template_path)){
+        // Cache file existence checks (files rarely change during request)
+        $cache_key = $template_path;
+        if (!isset(self::$template_cache[$cache_key])) {
+            self::$template_cache[$cache_key] = $template_path && file_exists($template_path);
+        }
+        
+        if(self::$template_cache[$cache_key]){
              include $template_path;
         }else{
             $this->last_missing_template = $template_path ?: $template;
-            // Log missing template for debugging
-            error_log('Template not found: ' . $this->last_missing_template);
+            // Only log in debug mode
+            if ($this->settings['debug'] ?? false) {
+                error_log('Template not found: ' . $this->last_missing_template);
+            }
             $this->show_404();
         }
        
@@ -305,11 +314,26 @@ class MainController {
 	* @return void 
 	*/
     function header(){
-        $admin_path = $this->resolveTemplatePath($this->view_url . 'header-admin');
-        if ($admin_path && file_exists($admin_path)) {
-            $this->render($this->view_url . 'header-admin' , $this->data);
+        // Check for admin header first
+        $admin_template = $this->view_url . 'header-admin';
+        $admin_path = $this->resolveTemplatePath($admin_template);
+        
+        // Cache file existence
+        if (!isset(self::$template_cache[$admin_path])) {
+            self::$template_cache[$admin_path] = $admin_path && file_exists($admin_path);
+        }
+        
+        if(self::$template_cache[$admin_path]){
+            include $admin_path;
         } else {
-            $this->render($this->view_url . 'header' , $this->data);
+            // Fallback to regular header
+            $regular_path = $this->resolveTemplatePath($this->view_url . 'header');
+            if (!isset(self::$template_cache[$regular_path])) {
+                self::$template_cache[$regular_path] = $regular_path && file_exists($regular_path);
+            }
+            if(self::$template_cache[$regular_path]){
+                include $regular_path;
+            }
         }
     }
 	
@@ -319,11 +343,26 @@ class MainController {
 	* @return void 
 	*/
 	function footer(){
-        $admin_path = $this->resolveTemplatePath($this->view_url . 'footer-admin');
-        if ($admin_path && file_exists($admin_path)) {
-            $this->render($this->view_url . 'footer-admin' , $this->data);
+        // Check for admin footer first
+        $admin_template = $this->view_url . 'footer-admin';
+        $admin_path = $this->resolveTemplatePath($admin_template);
+        
+        // Cache file existence
+        if (!isset(self::$template_cache[$admin_path])) {
+            self::$template_cache[$admin_path] = $admin_path && file_exists($admin_path);
+        }
+        
+        if(self::$template_cache[$admin_path]){
+            include $admin_path;
         } else {
-            $this->render($this->view_url . 'footer' , $this->data);
+            // Fallback to regular footer
+            $regular_path = $this->resolveTemplatePath($this->view_url . 'footer');
+            if (!isset(self::$template_cache[$regular_path])) {
+                self::$template_cache[$regular_path] = $regular_path && file_exists($regular_path);
+            }
+            if(self::$template_cache[$regular_path]){
+                include $regular_path;
+            }
         }
     }	
 	

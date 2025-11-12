@@ -182,68 +182,66 @@ class ApiController extends MainController {
     }
     
     /**
-     * Load view content
+     * Get dashboard controller instance (optimized)
+     * Note: DashboardController constructor has side effects, so we can't cache it
+     * but we can optimize the instantiation
      */
-    private function load_view($view, $action = null) {
-        
+    private function getDashboardInstance() {
+        // Suppress output from DashboardController constructor
         ob_start();
-        // Initialize dashboard controller to get data
         $dashboard = new DashboardController();
-        // Discard any HTML output from constructor
         ob_end_clean();
+        return $dashboard;
+    }
+    
+    private function load_view($view, $action = null) {
+        $dashboard = $this->getDashboardInstance();
         
-        // Set action if provided
         if ($action) {
             $dashboard->action = $action;
         }
         
-        // Get view data
         $dashboard->init_data();
         $dashboard->get_message();
         
-        // Ensure view_url is normalized
+        // Normalize view_url once
         $view_url = rtrim($this->settings['view_url'] ?? 'view/', '/\\') . '/';
-
-        // Try admin view first, fallback to regular view
+        
+        // Try admin view first, then regular view
         $admin_template = $view_url . $view . '-admin.php';
         $regular_template = $view_url . $view . '.php';
-
-        // Try the old approach first for debugging
-        $admin_view_file_old = dirname(__DIR__) . '/' . $admin_template;
-        $view_file_old = dirname(__DIR__) . '/' . $regular_template;
-
+        
+        $admin_path = $this->resolveTemplatePath($admin_template);
+        $regular_path = $this->resolveTemplatePath($regular_template);
+        
+        // Use cached file existence checks
         $file_to_load = null;
-        if (file_exists($admin_view_file_old)) {
-            $file_to_load = $admin_view_file_old;
-        } elseif (file_exists($view_file_old)) {
-            $file_to_load = $view_file_old;
-        } else {
-            // Fallback to resolveTemplatePath
-            $admin_view_file = $this->resolveTemplatePath($admin_template);
-            $view_file = $this->resolveTemplatePath($regular_template);
-
-            if ($admin_view_file && file_exists($admin_view_file)) {
-                $file_to_load = $admin_view_file;
-            } elseif ($view_file && file_exists($view_file)) {
-                $file_to_load = $view_file;
+        if ($admin_path) {
+            if (!isset(self::$template_cache[$admin_path])) {
+                self::$template_cache[$admin_path] = file_exists($admin_path);
+            }
+            if (self::$template_cache[$admin_path]) {
+                $file_to_load = $admin_path;
             }
         }
-
-        // Debug logging
-        if ($this->settings['debug'] ?? false) {
-            error_log("API View Debug - View: $view");
-            error_log("API View Debug - Admin template: $admin_template");
-            error_log("API View Debug - Old admin path: $admin_view_file_old (exists: " . (file_exists($admin_view_file_old) ? 'yes' : 'no') . ")");
-            error_log("API View Debug - Old regular path: $view_file_old (exists: " . (file_exists($view_file_old) ? 'yes' : 'no') . ")");
-            error_log("API View Debug - Base path: " . ($this->base_path ?? 'not set'));
-            error_log("API View Debug - Final file to load: " . ($file_to_load ?? 'none'));
+        
+        if (!$file_to_load && $regular_path) {
+            if (!isset(self::$template_cache[$regular_path])) {
+                self::$template_cache[$regular_path] = file_exists($regular_path);
+            }
+            if (self::$template_cache[$regular_path]) {
+                $file_to_load = $regular_path;
+            }
         }
         
         if ($file_to_load) {
-            // Set data for view
             $data = $dashboard->data;
             include $file_to_load;
         } else {
+            // Only log in debug mode
+            if ($this->settings['debug'] ?? false) {
+                error_log("View not found: $view (checked: $admin_path, $regular_path)");
+            }
             echo '<div class="alert alert-danger">View not found: ' . htmlspecialchars($view) . '</div>';
         }
     }
@@ -260,11 +258,7 @@ class ApiController extends MainController {
             return;
         }
         
-        // Use output buffering to prevent DashboardController from outputting HTML
-        ob_start();
-        $dashboard = new DashboardController();
-        // Discard any HTML output from constructor
-        ob_end_clean();
+        $dashboard = $this->getDashboardInstance();
         $dashboard->action = $action;
         
         // Execute action
@@ -296,11 +290,7 @@ class ApiController extends MainController {
             return; // Return early to prevent default handling
         }
         
-        // Use output buffering to prevent DashboardController from outputting HTML
-        ob_start();
-        $dashboard = new DashboardController();
-        // Discard any HTML output from constructor
-        ob_end_clean();
+        $dashboard = $this->getDashboardInstance();
         
         // Handle different form types
         switch ($form_type) {
@@ -492,11 +482,7 @@ class ApiController extends MainController {
             return;
         }
         
-        // Use output buffering to prevent DashboardController from outputting HTML
-        ob_start();
-        $dashboard = new DashboardController();
-        // Discard any HTML output from constructor
-        ob_end_clean();
+        $dashboard = $this->getDashboardInstance();
         
         $data = null;
         

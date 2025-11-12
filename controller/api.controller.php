@@ -169,19 +169,31 @@ class ApiController extends MainController {
      * Handle view requests
      */
     private function handle_view() {
-        // PHP 8.0+ compatible
-        $view = filter_input(INPUT_GET, 'view', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'info';
-        $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-        
-        // Set current page
-        $this->current_page = $view;
-        
-        // Get view HTML
-        ob_start();
-        $this->load_view($view, $action);
-        $html = ob_get_clean();
-        
-        $this->success('View loaded', array('html' => $html, 'view' => $view));
+        try {
+            // PHP 8.0+ compatible
+            $view = filter_input(INPUT_GET, 'view', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'info';
+            $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+            
+            // Set current page
+            $this->current_page = $view;
+            
+            // Get view HTML
+            ob_start();
+            try {
+                $this->load_view($view, $action);
+                $html = ob_get_clean();
+            } catch (Throwable $e) {
+                ob_end_clean();
+                error_log('Error loading view: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+                $this->error('Error loading view: ' . $e->getMessage(), 500);
+                return;
+            }
+            
+            $this->success('View loaded', array('html' => $html, 'view' => $view));
+        } catch (Throwable $e) {
+            error_log('Error in handle_view: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            $this->error('Internal server error', 500);
+        }
     }
     
     /**
@@ -190,62 +202,74 @@ class ApiController extends MainController {
      * but we can optimize the instantiation
      */
     private function getDashboardInstance() {
-        // Suppress output from DashboardController constructor
-        ob_start();
-        $dashboard = new DashboardController();
-        ob_end_clean();
-        return $dashboard;
+        try {
+            // Suppress output from DashboardController constructor
+            ob_start();
+            $dashboard = new DashboardController();
+            ob_end_clean();
+            return $dashboard;
+        } catch (Throwable $e) {
+            ob_end_clean();
+            error_log('Error creating DashboardController: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            throw $e;
+        }
     }
     
     private function load_view($view, $action = null) {
-        $dashboard = $this->getDashboardInstance();
-        
-        if ($action) {
-            $dashboard->action = $action;
-        }
-        
-        $dashboard->init_data();
-        $dashboard->get_message();
-        
-        // Normalize view_url once
-        $view_url = rtrim($this->settings['view_url'] ?? 'view/', '/\\') . '/';
-        
-        // Try admin view first, then regular view
-        $admin_template = $view_url . $view . '-admin.php';
-        $regular_template = $view_url . $view . '.php';
-        
-        $admin_path = $this->resolveTemplatePath($admin_template);
-        $regular_path = $this->resolveTemplatePath($regular_template);
-        
-        // Use cached file existence checks
-        $file_to_load = null;
-        if ($admin_path) {
-            if (!isset(self::$template_cache[$admin_path])) {
-                self::$template_cache[$admin_path] = file_exists($admin_path);
+        try {
+            $dashboard = $this->getDashboardInstance();
+            
+            if ($action) {
+                $dashboard->action = $action;
             }
-            if (self::$template_cache[$admin_path]) {
-                $file_to_load = $admin_path;
+            
+            $dashboard->init_data();
+            $dashboard->get_message();
+            
+            // Normalize view_url once
+            $view_url = rtrim($this->settings['view_url'] ?? 'view/', '/\\') . '/';
+            
+            // Try admin view first, then regular view
+            $admin_template = $view_url . $view . '-admin.php';
+            $regular_template = $view_url . $view . '.php';
+            
+            $admin_path = $this->resolveTemplatePath($admin_template);
+            $regular_path = $this->resolveTemplatePath($regular_template);
+            
+            // Use cached file existence checks
+            $file_to_load = null;
+            if ($admin_path) {
+                if (!isset(self::$template_cache[$admin_path])) {
+                    self::$template_cache[$admin_path] = file_exists($admin_path);
+                }
+                if (self::$template_cache[$admin_path]) {
+                    $file_to_load = $admin_path;
+                }
             }
-        }
-        
-        if (!$file_to_load && $regular_path) {
-            if (!isset(self::$template_cache[$regular_path])) {
-                self::$template_cache[$regular_path] = file_exists($regular_path);
+            
+            if (!$file_to_load && $regular_path) {
+                if (!isset(self::$template_cache[$regular_path])) {
+                    self::$template_cache[$regular_path] = file_exists($regular_path);
+                }
+                if (self::$template_cache[$regular_path]) {
+                    $file_to_load = $regular_path;
+                }
             }
-            if (self::$template_cache[$regular_path]) {
-                $file_to_load = $regular_path;
+            
+            if ($file_to_load) {
+                $data = $dashboard->data;
+                include $file_to_load;
+            } else {
+                // Only log in debug mode
+                if ($this->settings['debug'] ?? false) {
+                    error_log("View not found: $view (checked: $admin_path, $regular_path)");
+                }
+                echo '<div class="alert alert-danger">View not found: ' . htmlspecialchars($view) . '</div>';
             }
-        }
-        
-        if ($file_to_load) {
-            $data = $dashboard->data;
-            include $file_to_load;
-        } else {
-            // Only log in debug mode
-            if ($this->settings['debug'] ?? false) {
-                error_log("View not found: $view (checked: $admin_path, $regular_path)");
-            }
-            echo '<div class="alert alert-danger">View not found: ' . htmlspecialchars($view) . '</div>';
+        } catch (Throwable $e) {
+            error_log('Error in load_view: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            echo '<div class="alert alert-danger">Error loading view: ' . htmlspecialchars($e->getMessage()) . '</div>';
+            throw $e;
         }
     }
     

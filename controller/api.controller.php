@@ -223,8 +223,16 @@ class ApiController extends MainController {
                 $dashboard->action = $action;
             }
             
-            // Set current page so view-specific data can be initialized
-            $dashboard->current_page = $view;
+            // Set current page using the setter method
+            // Use reflection to access protected set_current_page method, or set via constructor parameter
+            // Since current_page is set in constructor via set_current_page(), we need to set it differently
+            // The init_data() method will use current_page from the constructor, so we need to set it before init_data()
+            
+            // Use reflection to set protected property
+            $reflection = new ReflectionClass($dashboard);
+            $property = $reflection->getProperty('current_page');
+            $property->setAccessible(true);
+            $property->setValue($dashboard, $view);
             
             // Initialize data - this may call view-specific methods
             $dashboard->init_data();

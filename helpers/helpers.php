@@ -1073,28 +1073,59 @@ class DashboardHelpers {
 		}
 		
 		if(!is_array($filename)){
-			if (!file_exists($filename)) {
-				if($create == true ){
-					// SECURITY FIX: Use secure permissions (0755 instead of 0777)
-					if (!mkdir($filename, 0755, true)) {
-						throw new RuntimeException('Could not create directory: ' . htmlspecialchars($filename, ENT_QUOTES, 'UTF-8'));
-					}
-				}			   
-			   return;
-			}			
+			// Check if already exists
+			if (file_exists($filename)) {
+				return true;
+			}
+			
+			// Only try to create if requested
+			if($create == true ){
+				// Check parent directory permissions
+				$parent_dir = dirname($filename);
+				if (!is_dir($parent_dir) && !mkdir($parent_dir, 0755, true)) {
+					$error = error_get_last();
+					$error_msg = $error ? $error['message'] : 'Unknown error';
+					error_log('Failed to create parent directory: ' . $parent_dir . ' - ' . $error_msg);
+					return false;
+				}
+				
+				// SECURITY FIX: Use secure permissions (0755 instead of 0777)
+				// Suppress warnings and check result
+				if (!@mkdir($filename, 0755, true)) {
+					$error = error_get_last();
+					error_log('Failed to create directory: ' . $filename . ' - Error: ' . ($error ? $error['message'] : 'Unknown'));
+					return false;
+				}
+			}
+			return true;
 		}else{
 			foreach($filename as $dir){
 				$dir = str_replace("\0", '', $dir);
-				if (!file_exists($dir)) {
-					if($create == true ){
-						// SECURITY FIX: Use secure permissions (0755 instead of 0777)
-						if (!mkdir($dir, 0755, true)) {
-							throw new RuntimeException('Could not create directory: ' . htmlspecialchars($dir, ENT_QUOTES, 'UTF-8'));
-						}
+				
+				// Check if already exists
+				if (file_exists($dir)) {
+					continue;
+				}
+				
+				if($create == true ){
+					// Check parent directory permissions
+					$parent_dir = dirname($dir);
+					if (!is_dir($parent_dir) && !@mkdir($parent_dir, 0755, true)) {
+						$error = error_get_last();
+						$error_msg = $error ? $error['message'] : 'Unknown error';
+						error_log('Failed to create parent directory: ' . $parent_dir . ' - ' . $error_msg);
+						continue;
 					}
-				}		
+					
+					// SECURITY FIX: Use secure permissions (0755 instead of 0777)
+					if (!@mkdir($dir, 0755, true)) {
+						$error = error_get_last();
+						error_log('Failed to create directory: ' . $dir . ' - Error: ' . ($error ? $error['message'] : 'Unknown'));
+						continue;
+					}
+				}
 			}
 		}
-     return;
+		return true;
 	}
 }

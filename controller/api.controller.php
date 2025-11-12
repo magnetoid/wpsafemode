@@ -312,8 +312,9 @@ class ApiController extends MainController {
         $reflection = new ReflectionClass('MainController');
         $property = $reflection->getProperty('template_cache');
         $property->setAccessible(true);
-        $cache = $property->getValue();
-        return $cache[$key] ?? null;
+        // For static properties, pass null as the object
+        $cache = $property->getValue(null);
+        return isset($cache[$key]) ? $cache[$key] : null;
     }
     
     /**
@@ -323,7 +324,8 @@ class ApiController extends MainController {
         $reflection = new ReflectionClass('MainController');
         $property = $reflection->getProperty('template_cache');
         $property->setAccessible(true);
-        $cache = $property->getValue();
+        // For static properties, pass null as the object
+        $cache = $property->getValue(null);
         $cache[$key] = $value;
         $property->setValue(null, $cache);
     }

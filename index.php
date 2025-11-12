@@ -13,7 +13,10 @@ define('WPSM',true);
 // Start output buffering early for API routes to prevent any output before headers
 // Check for API routes (handles both root and subdirectory installations)
 $request_uri = $_SERVER['REQUEST_URI'] ?? '';
-$is_api_request = (strpos($request_uri, '/api/') !== false || strpos($request_uri, '/ai/') !== false);
+// Check for endpoint parameter (for index.php?endpoint=view format)
+$has_endpoint_param = isset($_GET['endpoint']) || filter_input(INPUT_GET, 'endpoint', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+// Check for /api/ or /ai/ in URL
+$is_api_request = (strpos($request_uri, '/api/') !== false || strpos($request_uri, '/ai/') !== false || $has_endpoint_param);
 
 if ($is_api_request) {
     // Suppress error output for API requests
@@ -38,7 +41,8 @@ if (strpos($request_uri, '/ai/') !== false) {
 }
 
 // Handle API requests first (before normal page rendering)
-if (strpos($request_uri, '/api/') !== false) {
+// Check for /api/ in URL OR endpoint parameter
+if (strpos($request_uri, '/api/') !== false || $has_endpoint_param) {
     // Define API context (will be redefined in ApiController, but set early for includes)
     if (!defined('WPSM_API')) {
         define('WPSM_API', true);

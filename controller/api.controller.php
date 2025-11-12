@@ -13,10 +13,15 @@ class ApiController extends MainController {
     );
     
     function __construct() {
-        parent::__construct();
+        // Clear any output that might have been sent
+        if (ob_get_level()) {
+            ob_clean();
+        }
         
-        // Set JSON header
-        header('Content-Type: application/json');
+        // Set JSON header FIRST, before any parent constructor
+        header('Content-Type: application/json', true);
+        
+        parent::__construct();
         
         // Handle CORS if needed
         if (isset($_SERVER['HTTP_ORIGIN'])) {
@@ -490,6 +495,14 @@ class ApiController extends MainController {
      * Send success response
      */
     private function success($message, $data = null, $redirect = null) {
+        // Clear any output buffers
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+        
+        // Ensure JSON header is set
+        header('Content-Type: application/json', true);
+        
         $this->response = array(
             'success' => true,
             'message' => $message,
@@ -508,7 +521,15 @@ class ApiController extends MainController {
      * Send error response
      */
     private function error($message, $code = 400) {
+        // Clear any output buffers
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+        
+        // Ensure JSON header is set
+        header('Content-Type: application/json', true);
         http_response_code($code);
+        
         $this->response = array(
             'success' => false,
             'message' => $message,
@@ -518,11 +539,5 @@ class ApiController extends MainController {
         echo json_encode($this->response);
         exit;
     }
-}
-
-// Handle API requests
-if (isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], '/api/') !== false) {
-    $api = new ApiController();
-    $api->handle();
 }
 

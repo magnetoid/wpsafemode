@@ -75,15 +75,15 @@ class MainController {
 	}
 	
 	/**
-	* Sets current page according to view from query string 
-	* 
-	* @return void 
-	*/
-    function set_current_page(){
-		  $this->current_page = filter_input(INPUT_GET,'view');
-		  if(empty($this->current_page)){
-		  	$this->current_page = 'info';
-		  }
+	 * Set current page from GET parameter
+	 * 
+	 * @return void
+	 */
+    function set_current_page(): void {
+		$this->current_page = filter_input(INPUT_GET, 'view', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+		if (empty($this->current_page)) {
+			$this->current_page = 'info';
+		}
 	}
     
     /**
@@ -126,13 +126,19 @@ class MainController {
        
     }
 
+	/**
+	 * Resolve template path from template name
+	 * 
+	 * @param string $template Template name
+	 * @return string Full path to template file
+	 */
     protected function resolveTemplatePath(string $template): string {
         $template = trim($template);
         if ($template === '') {
             return '';
         }
 
-        if (substr($template, -4) !== '.php') {
+        if (!str_ends_with($template, '.php')) {
             $template .= '.php';
         }
 
@@ -143,6 +149,12 @@ class MainController {
         return $this->base_path . ltrim($template, '/\\');
     }
 
+	/**
+	 * Check if path is absolute
+	 * 
+	 * @param string $path Path to check
+	 * @return bool True if absolute path
+	 */
     protected function isAbsolutePath(string $path): bool {
         return (bool) preg_match('~^(?:[a-zA-Z]:[\\/]|\\\\|/)~', $path);
     }
@@ -172,7 +184,13 @@ class MainController {
 	* 
 	* @return void 
 	*/
-    function redirect( $location = ''){
+	/**
+	 * Redirect to a new location with loop prevention
+	 * 
+	 * @param string $location URL or query string to redirect to
+	 * @return void
+	 */
+    function redirect(string $location = ''): void {
     	if(empty($this->current_page)){
 			$this->current_page = 'info';
 		}
@@ -309,11 +327,11 @@ class MainController {
 	}
 	
 	/**
-	* Renders main header template
-	* 
-	* @return void 
-	*/
-    function header(){
+	 * Render header template (admin or regular)
+	 * 
+	 * @return void
+	 */
+    function header(): void {
         // Check for admin header first
         $admin_template = $this->view_url . 'header-admin';
         $admin_path = $this->resolveTemplatePath($admin_template);
@@ -323,7 +341,7 @@ class MainController {
             self::$template_cache[$admin_path] = $admin_path && file_exists($admin_path);
         }
         
-        if(self::$template_cache[$admin_path]){
+        if (self::$template_cache[$admin_path]) {
             include $admin_path;
         } else {
             // Fallback to regular header
@@ -331,7 +349,7 @@ class MainController {
             if (!isset(self::$template_cache[$regular_path])) {
                 self::$template_cache[$regular_path] = $regular_path && file_exists($regular_path);
             }
-            if(self::$template_cache[$regular_path]){
+            if (self::$template_cache[$regular_path]) {
                 include $regular_path;
             }
         }
@@ -342,7 +360,12 @@ class MainController {
 	* 
 	* @return void 
 	*/
-	function footer(){
+	/**
+	 * Render footer template (admin or regular)
+	 * 
+	 * @return void
+	 */
+	function footer(): void {
         // Check for admin footer first
         $admin_template = $this->view_url . 'footer-admin';
         $admin_path = $this->resolveTemplatePath($admin_template);
@@ -352,7 +375,7 @@ class MainController {
             self::$template_cache[$admin_path] = $admin_path && file_exists($admin_path);
         }
         
-        if(self::$template_cache[$admin_path]){
+        if (self::$template_cache[$admin_path]) {
             include $admin_path;
         } else {
             // Fallback to regular footer
@@ -360,7 +383,7 @@ class MainController {
             if (!isset(self::$template_cache[$regular_path])) {
                 self::$template_cache[$regular_path] = $regular_path && file_exists($regular_path);
             }
-            if(self::$template_cache[$regular_path]){
+            if (self::$template_cache[$regular_path]) {
                 include $regular_path;
             }
         }
@@ -385,97 +408,130 @@ class MainController {
 	}
 	
 	
-	function get_session_var( $var = ''){
-		if(!isset($_SESSION['wpsm'])){
+	/**
+	 * Get session variable
+	 * 
+	 * @param string $var Variable name (empty for all)
+	 * @return mixed Session value or null
+	 */
+	protected function get_session_var(string $var = ''): mixed {
+		if (!isset($_SESSION['wpsm'])) {
 			$_SESSION['wpsm'] = array();
-			return;
+			return $var === '' ? $_SESSION['wpsm'] : null;
 		}
-		if(empty($var)){
-		return  $_SESSION['wpsm'];	
-		}
-		if(!isset($_SESSION['wpsm'][$var])){
-		return;	
-		}
-		if(DashboardHelpers::is_json($_SESSION['wpsm'][$var])){
-		 return json_decode($_SESSION['wpsm'][$var]);
-		}
-		return $_SESSION['wpsm'][$var];
 		
+		if (empty($var)) {
+			return $_SESSION['wpsm'];
+		}
+		
+		if (!isset($_SESSION['wpsm'][$var])) {
+			return null;
+		}
+		
+		$value = $_SESSION['wpsm'][$var];
+		if (DashboardHelpers::is_json($value)) {
+			return json_decode($value, true);
+		}
+		
+		return $value;
 	}
 
-	function set_session_var( $var = '' , $val = ''){
-		if(empty($var)){
+	/**
+	 * Set session variable
+	 * 
+	 * @param string $var Variable name
+	 * @param mixed $val Value to set
+	 * @return void
+	 */
+	protected function set_session_var(string $var, mixed $val): void {
+		if (empty($var)) {
 			return;
 		}
-		if(is_array($val)){
-		  $val = json_encode($val);	
+		
+		if (!isset($_SESSION['wpsm'])) {
+			$_SESSION['wpsm'] = array();
 		}
+		
+		if (is_array($val)) {
+			$val = json_encode($val);
+		}
+		
 		$_SESSION['wpsm'][$var] = $val;
 	}
 	
-	function remove_session_var( $var = '' ){
-		if(empty($var) || !isset($_SESSION['wpsm'][$var])){
-		return;	
+	/**
+	 * Remove session variable
+	 * 
+	 * @param string $var Variable name
+	 * @return void
+	 */
+	protected function remove_session_var(string $var): void {
+		if (empty($var) || !isset($_SESSION['wpsm'][$var])) {
+			return;
 		}
 		
-		unset($_SESSION['wpsm']);
-		return;
+		unset($_SESSION['wpsm'][$var]);
 	}
 	
-	function check_login(){
-		
+	/**
+	 * Check login status (placeholder for future implementation)
+	 * 
+	 * @return void
+	 */
+	protected function check_login(): void {
+		// Placeholder for future login checking logic
 	}
-	function action_logout(){
-		$this->remove_session_var( 'login' );
+	
+	/**
+	 * Handle logout action
+	 * 
+	 * @return void
+	 */
+	function action_logout(): void {
+		$this->remove_session_var('login');
 		$this->set_message('You have been successfully logged out.');
 		$this->redirect();
 	}
-	function action_login(){
+	/**
+	 * Handle login action - checks login status and redirects if needed
+	 * 
+	 * @return void
+	 */
+	function action_login(): void {
 		$login = $this->dashboard_model->get_login();
 		$check_login = $this->get_session_var('login');
 		
 		// If login credentials are not configured, allow access without login
-		if(empty($login)){
+		if (empty($login)) {
 			// Only show message on login page, not on every page
-			if($this->current_page=='login'){
+			if ($this->current_page === 'login') {
 				$this->set_message('Login is not set. Please Set your login in Global Settings');
-				// Clear redirect flags on successful page load
-				unset($_SESSION['wpsm']['redirecting']);
-				unset($_SESSION['wpsm']['redirect_count']);
-				// Don't redirect, allow user to see the message
+				$this->clearRedirectFlags();
 				return;
 			}
 			// If login not configured, allow access (no login required)
 			$this->data['login'] = false;
-			// Clear redirect flags
-			unset($_SESSION['wpsm']['redirecting']);
-			unset($_SESSION['wpsm']['redirect_count']);
+			$this->clearRedirectFlags();
 			return;
 		}
 		
 		// Login credentials exist, check session
-		if(empty($check_login) || $check_login!=true){
-			if($this->current_page!='login'){
+		if (empty($check_login) || $check_login !== true) {
+			if ($this->current_page !== 'login') {
 				$this->set_message('please login');
-				$this->redirect('?view=login');	
+				$this->redirect('?view=login');
 			}
-			// Clear redirect flags since we're on login page and not redirecting
-			unset($_SESSION['wpsm']['redirecting']);
-			unset($_SESSION['wpsm']['redirect_count']);
+			$this->clearRedirectFlags();
 			return;
-		}else{
-			// User is logged in
-			if($this->current_page=='login'){
-				// Clear redirect flags before redirecting
-				unset($_SESSION['wpsm']['redirecting']);
-				unset($_SESSION['wpsm']['redirect_count']);
-				$this->redirect('?view=info');	
-			}
-			// Clear redirect flags on successful page load
-			unset($_SESSION['wpsm']['redirecting']);
-			unset($_SESSION['wpsm']['redirect_count']);
-			$this->data['login'] = true;
 		}
+		
+		// User is logged in
+		if ($this->current_page === 'login') {
+			$this->clearRedirectFlags();
+			$this->redirect('?view=info');
+		}
+		$this->clearRedirectFlags();
+		$this->data['login'] = true;
 	}
 	
 	function view_global_settings(){

@@ -15,126 +15,113 @@ class DashboardController extends MainController {
 	* 
 	* @return
 	*/
-    function __construct(){
-    	
-        parent::__construct();   
-      
-       
-        $this->dashboard_model = new DashboardModel;        
-       
-        $this->init_data();    
-        $this->actions();      
+    /**
+     * Constructor - initialize dashboard controller
+     * 
+     * @return void
+     */
+    function __construct(): void {
+        parent::__construct();
+        $this->dashboard_model = new DashboardModel;
+        $this->init_data();
+        $this->actions();
         $this->submit();
         $this->view();
-      
-
     }
     /**
-	* Sets initial data in $data variable 
-	* 
-	* @return void 
-	*/
-    function init_data(){
+     * Sets initial data in $data variable
+     * 
+     * @return void
+     */
+    function init_data(): void {
 		$this->data['result'] = array();
-        $this->data['script_url'] = $this->get_script_url();       
-        $this->data['current_page'] = $this->current_page;        
-        $this->view_url = rtrim($this->view_url ?? ($this->settings['view_url'] ?? 'view/'), '/\\') . '/';     
+        $this->data['script_url'] = $this->get_script_url();
+        $this->data['current_page'] = $this->current_page;
+        $this->view_url = rtrim($this->view_url ?? ($this->settings['view_url'] ?? 'view/'), '/\\') . '/';
 	}
    
-   /**
-   * Triggers action methods if condition is fulfilled. Action method can be triggered if action exists 
-   * in query string, or if autoload is set to true 
-   * 
-   * @return void 
-   */
-   function actions(){ 	
+	/**
+	 * Triggers action methods if condition is fulfilled
+	 * Action method can be triggered if action exists in query string, or if autoload is set to true
+	 * 
+	 * @return void
+	 */
+   function actions(): void {
        $actions = array(
-       'login' => array('autoload' => true),
-       'logout' => array('action'=>'logout'), 
-       'maintenance' => array('autoload' => true),
-       'backup' => array('autoload' => true), 
-       'optimize_tables'  => array('action'=>'optimize_tables'), 
-       'core_scan'  => array('action'=>'core_scan'), 
-       'delete_revisions' => array('action'=>'delete_revisions'), 
-       'delete_spam_comments' => array('action'=>'delete_spam_comments'), 
-       'delete_unapproved_comments' => array('action'=>'delete_unapproved_comments'), 
-       'check_maintenance' => array('autoload' => true), 
-       'autobackup' => array('autoload'=> true), 
-       'download' => array('autoload' => true), 
-       'message' => array('autoload' => true),      
-       );     	   
-     
+           'login' => array('autoload' => true),
+           'logout' => array('action' => 'logout'),
+           'maintenance' => array('autoload' => true),
+           'backup' => array('autoload' => true),
+           'optimize_tables' => array('action' => 'optimize_tables'),
+           'core_scan' => array('action' => 'core_scan'),
+           'delete_revisions' => array('action' => 'delete_revisions'),
+           'delete_spam_comments' => array('action' => 'delete_spam_comments'),
+           'delete_unapproved_comments' => array('action' => 'delete_unapproved_comments'),
+           'check_maintenance' => array('autoload' => true),
+           'autobackup' => array('autoload' => true),
+           'download' => array('autoload' => true),
+           'message' => array('autoload' => true),
+       );
        
-       foreach($actions as $key => $action){  	
-       $skip = false;
-       $callback = 	array($this, 'action_' . $key);
-       if(isset($action['action']) && (empty($this->action) || $this->action != $action['action'])){
-	   	$skip = true;
-	   }
-		   if($skip == false){
-					if(is_callable($callback)){	
-					if($key!='message' && $key!='logout' && $key!='login' && isset($this->settings['demo']) && $this->settings['demo'] == true){
-					if(!isset($action['autoload']) && $key!='maintenance')
-							$this->set_message('quick actions disabled in demo mode');			
-					}else{
-					call_user_func($callback);		
-					}							
-								
-					}	   	
-		   }
-		
-		}		
-		return;  
-      
-
-
-   	   
+       foreach ($actions as $key => $action) {
+           $skip = false;
+           $callback = array($this, 'action_' . $key);
+           
+           if (isset($action['action']) && (empty($this->action) || $this->action != $action['action'])) {
+               $skip = true;
+           }
+           
+           if ($skip == false && is_callable($callback)) {
+               if ($key != 'message' && $key != 'logout' && $key != 'login' && isset($this->settings['demo']) && $this->settings['demo'] == true) {
+                   if (!isset($action['autoload']) && $key != 'maintenance') {
+                       $this->set_message('quick actions disabled in demo mode');
+                   }
+               } else {
+                   call_user_func($callback);
+               }
+           }
+       }
    }
     
 
     /**
-	* Calls get_message() method. 
-	* 
-	* @return void 
-	*/
-    function action_message(){
+     * Calls get_message() method
+     * 
+     * @return void
+     */
+    function action_message(): void {
 		$this->get_message();
 	}
 
     /**
-	* 
-	* handles the submit upon post requests 
-	* 
-	* @return
-	*/
-    function submit(){
-
-
+     * Handles the submit upon post requests
+     * 
+     * @return void
+     */
+    function submit(): void {
         $submits = array(
-        'submit_plugins'=> array('callback'=> array($this , 'submit_plugins')),
-        'submit_themes'=> array('callback' =>  array($this , 'submit_themes')),
-        'submit_backup_database'=>array('callback' => array($this ,  'submit_backup_database')),
-        'submit_backup_files'=>array('callback'=> array($this , 'submit_backup_files')),
-        'submit_search_replace'=>array('callback'=> array($this , 'submit_search_replace')),
-        'saveconfig'=>array('callback'=> array($this , 'submit_wpconfig')),
-        'saveconfig_advanced'=>array( 'callback'=> array($this , 'submit_wpconfig_advanced')),
-        'save_htaccess'=>array('callback'=> array($this , 'submit_htaccess')),
-        'save_revert'=>array('callback'=> array($this , 'submit_htaccess_to_revert')),
-        'submit_autobackup'=>array('callback'=> array($this , 'submit_autobackup')),
-        'save_htaccess_backup'=>array('callback'=> array($this , 'save_htaccess_backup')),        
-        'submit_site_url'=>array('callback'=> array($this , 'submit_site_url')),        
-        'save_robots'=>array('callback'=> array($this , 'submit_robots')),
-        'create_robots_file' =>array('callback'=>array($this, 'create_robots_file')),
-        'submit_global_settings' =>array('callback'=>array($this, 'submit_global_settings')),
-        'submit_login' =>array('callback'=>array($this, 'submit_login')),
+            'submit_plugins' => array('callback' => array($this, 'submit_plugins')),
+            'submit_themes' => array('callback' => array($this, 'submit_themes')),
+            'submit_backup_database' => array('callback' => array($this, 'submit_backup_database')),
+            'submit_backup_files' => array('callback' => array($this, 'submit_backup_files')),
+            'submit_search_replace' => array('callback' => array($this, 'submit_search_replace')),
+            'saveconfig' => array('callback' => array($this, 'submit_wpconfig')),
+            'saveconfig_advanced' => array('callback' => array($this, 'submit_wpconfig_advanced')),
+            'save_htaccess' => array('callback' => array($this, 'submit_htaccess')),
+            'save_revert' => array('callback' => array($this, 'submit_htaccess_to_revert')),
+            'submit_autobackup' => array('callback' => array($this, 'submit_autobackup')),
+            'save_htaccess_backup' => array('callback' => array($this, 'save_htaccess_backup')),
+            'submit_site_url' => array('callback' => array($this, 'submit_site_url')),
+            'save_robots' => array('callback' => array($this, 'submit_robots')),
+            'create_robots_file' => array('callback' => array($this, 'create_robots_file')),
+            'submit_global_settings' => array('callback' => array($this, 'submit_global_settings')),
+            'submit_login' => array('callback' => array($this, 'submit_login')),
         );
         
-        
-            
-        foreach($submits as $submit_key=>$submit){
-          	$submit_input = filter_input(INPUT_POST,$submit_key);
-			if(!empty($submit_input)){
-				if(is_callable($submit['callback'])){
+        foreach ($submits as $submit_key => $submit) {
+            $submit_input = filter_input(INPUT_POST, $submit_key, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+            if (!empty($submit_input)) {
+                if (is_callable($submit['callback'])) {
 				if($submit_key!='submit_login' && isset($this->settings['demo']) && $this->settings['demo'] == true){
 					$this->set_message('Saving settings and submission is disabled in demo mode');
 				}

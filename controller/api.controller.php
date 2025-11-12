@@ -114,8 +114,10 @@ class ApiController extends MainController {
     
     /**
      * Get endpoint from request
+     * 
+     * @return string Endpoint name
      */
-    private function get_endpoint() {
+    private function get_endpoint(): string {
         // PHP 8.0+ compatible: FILTER_SANITIZE_STRING is deprecated, use FILTER_SANITIZE_FULL_SPECIAL_CHARS
         // First check GET parameter (for index.php?endpoint=view format)
         $endpoint = filter_input(INPUT_GET, 'endpoint', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
@@ -135,8 +137,10 @@ class ApiController extends MainController {
     
     /**
      * Validate CSRF token
+     * 
+     * @return bool True if valid
      */
-    private function validate_csrf() {
+    private function validate_csrf(): bool {
         $token = null;
         
         // Check header first
@@ -200,8 +204,11 @@ class ApiController extends MainController {
      * Get dashboard controller instance (optimized)
      * Note: DashboardController constructor has side effects, so we can't cache it
      * but we can optimize the instantiation
+     * 
+     * @return DashboardController Dashboard instance
+     * @throws Throwable If instantiation fails
      */
-    private function getDashboardInstance() {
+    private function getDashboardInstance(): DashboardController {
         try {
             // Suppress output from DashboardController constructor
             ob_start();
@@ -215,7 +222,15 @@ class ApiController extends MainController {
         }
     }
     
-    private function load_view($view, $action = null) {
+    /**
+     * Load view content for API response
+     * 
+     * @param string $view View name
+     * @param string|null $action Optional action
+     * @return void
+     * @throws Throwable If view loading fails
+     */
+    private function load_view(string $view, ?string $action = null): void {
         try {
             $dashboard = $this->getDashboardInstance();
             
@@ -307,8 +322,11 @@ class ApiController extends MainController {
     
     /**
      * Get template cache value (helper to access parent's private static property)
+     * 
+     * @param string $key Cache key
+     * @return bool|null Cached value or null
      */
-    private function getTemplateCacheValue($key) {
+    private function getTemplateCacheValue(string $key): ?bool {
         $reflection = new ReflectionClass('MainController');
         $property = $reflection->getProperty('template_cache');
         $property->setAccessible(true);
@@ -319,8 +337,12 @@ class ApiController extends MainController {
     
     /**
      * Set template cache value (helper to access parent's private static property)
+     * 
+     * @param string $key Cache key
+     * @param bool $value Cache value
+     * @return void
      */
-    private function setTemplateCacheValue($key, $value) {
+    private function setTemplateCacheValue(string $key, bool $value): void {
         $reflection = new ReflectionClass('MainController');
         $property = $reflection->getProperty('template_cache');
         $property->setAccessible(true);

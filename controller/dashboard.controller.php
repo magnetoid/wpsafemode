@@ -15,7 +15,7 @@ class DashboardController extends MainController {
      * 
      * @return void
      */
-    function __construct(): void {
+    function __construct() {
         parent::__construct();
         $this->dashboard_model = new DashboardModel;
         $this->init_data();

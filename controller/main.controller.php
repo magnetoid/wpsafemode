@@ -123,14 +123,55 @@ class MainController {
 	* @return void 
 	*/
     function redirect( $location = ''){
+    	// Prevent redirect loops by checking if we're already redirecting
+    	if (isset($_SESSION['wpsm']['redirecting'])) {
+    		unset($_SESSION['wpsm']['redirecting']);
+    		return;
+    	}
+    	
     	if(empty($this->current_page)){
 			$this->current_page = 'info';
 		}
     	if(empty($location)){
 			$location = '?view='.$this->current_page;
 		}
-	 header("location: " . $location);
-	 exit;	  
+		
+		// Build absolute URL to prevent redirect loops
+		$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+		$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+		
+		// If location is already absolute, use it as-is
+		if (strpos($location, 'http://') === 0 || strpos($location, 'https://') === 0) {
+			$redirect_url = $location;
+		} else {
+			// Get the current request URI path (without query string)
+			$request_uri = $_SERVER['REQUEST_URI'] ?? '/';
+			$request_path = parse_url($request_uri, PHP_URL_PATH);
+			
+			// Get the directory of the current script
+			$script_dir = dirname($_SERVER['SCRIPT_NAME'] ?? '/index.php');
+			if ($script_dir === '/' || $script_dir === '\\' || $script_dir === '.') {
+				$script_dir = '';
+			}
+			
+			// If location starts with ?, it's a query string - append to current path
+			if (strpos($location, '?') === 0) {
+				// Use the current path or script directory
+				$base_path = $script_dir ?: $request_path;
+				// Remove any existing query string from base path
+				$base_path = preg_replace('/\?.*$/', '', $base_path);
+				$redirect_url = $protocol . $host . rtrim($base_path, '/') . $location;
+			} else {
+				// Relative path - build from script directory
+				$redirect_url = $protocol . $host . $script_dir . '/' . ltrim($location, '/');
+			}
+		}
+		
+		// Mark that we're redirecting to prevent loops
+		$_SESSION['wpsm']['redirecting'] = true;
+		
+		header("Location: " . $redirect_url, true, 302);
+		exit;	  
 	}
     
     /**
@@ -289,6 +330,12 @@ class MainController {
 		$this->redirect();
 	}
 	function action_login(){
+		// Prevent redirect loops - check if we just redirected
+		if (isset($_SESSION['wpsm']['redirecting'])) {
+			unset($_SESSION['wpsm']['redirecting']);
+			return;
+		}
+		
 		$login = $this->dashboard_model->get_login();
 		if(empty($login)){
 			$this->set_message('Login is not set. Please Set your login');
@@ -300,11 +347,9 @@ class MainController {
 		$check_login = $this->get_session_var('login');
 		if(empty($check_login) || $check_login!=true){
 			if($this->current_page!='login'){
-			
-			$this->set_message('please login');
-			$this->redirect('?view=login');	
+				$this->set_message('please login');
+				$this->redirect('?view=login');	
 			}
-			
 			return;
 		}else{
 			if($this->current_page=='login'){

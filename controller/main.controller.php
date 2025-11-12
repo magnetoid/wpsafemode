@@ -103,7 +103,7 @@ class MainController {
 	 * @param array|string $includes Additional files to include
 	 * @return void
 	 */
-    function render(string $template = '', mixed $data = '', array|string $includes = ''): void {
+    function render(string $template = '', $data = '', $includes = ''): void {
         if (is_array($includes)) {
             foreach ($includes as $include) {
                 include_once $include;
@@ -415,7 +415,7 @@ class MainController {
 	 * @param string $var Variable name (empty for all)
 	 * @return mixed Session value or null
 	 */
-	protected function get_session_var(string $var = ''): mixed {
+	protected function get_session_var(string $var = '') {
 		if (!isset($_SESSION['wpsm'])) {
 			$_SESSION['wpsm'] = array();
 			return $var === '' ? $_SESSION['wpsm'] : null;
@@ -444,7 +444,7 @@ class MainController {
 	 * @param mixed $val Value to set
 	 * @return void
 	 */
-	protected function set_session_var(string $var, mixed $val): void {
+	protected function set_session_var(string $var, $val): void {
 		if (empty($var)) {
 			return;
 		}

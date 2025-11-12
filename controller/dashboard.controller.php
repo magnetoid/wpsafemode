@@ -832,8 +832,13 @@ class DashboardController extends MainController {
     	$download = InputValidator::getInput('download', INPUT_GET, 'string');
     	$filename = InputValidator::getInput('filename', INPUT_GET, 'string');
     	
+    	// Only process if download parameter is set
+    	if (empty($download)) {
+    		return;
+    	}
+    	
     	// SECURITY FIX: Validate filename format
-    	if (!InputValidator::validate($filename, 'filename')) {
+    	if (empty($filename) || !InputValidator::validate($filename, 'filename')) {
     		$this->set_message('Invalid filename');
     		$this->redirect();
     		return;

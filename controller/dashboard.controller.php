@@ -11,11 +11,6 @@ class DashboardController extends MainController {
     protected $dirs;
     
     /**
-	* 
-	* 
-	* @return
-	*/
-    /**
      * Constructor - initialize dashboard controller
      * 
      * @return void

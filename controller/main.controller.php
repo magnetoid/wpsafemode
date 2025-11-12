@@ -95,13 +95,22 @@ class MainController {
 	* 
 	* @return void 
 	*/
-    function render($template = '', $data = '' , $includes = ''){
-        if(is_array($includes)){
-            foreach($includes as $include){
+	/**
+	 * Render template with data
+	 * 
+	 * @param string $template Template name (empty uses current page)
+	 * @param mixed $data Data to pass to template
+	 * @param array|string $includes Additional files to include
+	 * @return void
+	 */
+    function render(string $template = '', mixed $data = '', array|string $includes = ''): void {
+        if (is_array($includes)) {
+            foreach ($includes as $include) {
                 include_once $include;
             }
         }
-        if(empty($template)){
+        
+        if (empty($template)) {
             $template = $this->view_url . $this->current_page;
         }
         
@@ -113,9 +122,9 @@ class MainController {
             self::$template_cache[$cache_key] = $template_path && file_exists($template_path);
         }
         
-        if(self::$template_cache[$cache_key]){
+        if (self::$template_cache[$cache_key]) {
              include $template_path;
-        }else{
+        } else {
             $this->last_missing_template = $template_path ?: $template;
             // Only log in debug mode
             if ($this->settings['debug'] ?? false) {
@@ -123,7 +132,6 @@ class MainController {
             }
             $this->show_404();
         }
-       
     }
 
 	/**
@@ -178,16 +186,9 @@ class MainController {
     }
 	
 	/**
-	* Handles redirection to specific section 
-	* 
-	* @param string $location slug of section. If empty it will redirect to default section 
-	* 
-	* @return void 
-	*/
-	/**
 	 * Redirect to a new location with loop prevention
 	 * 
-	 * @param string $location URL or query string to redirect to
+	 * @param string $location URL or query string to redirect to (empty redirects to current page)
 	 * @return void
 	 */
     function redirect(string $location = ''): void {
@@ -474,6 +475,16 @@ class MainController {
 	}
 	
 	/**
+	 * Clear redirect flags from session
+	 * 
+	 * @return void
+	 */
+	private function clearRedirectFlags(): void {
+		unset($_SESSION['wpsm']['redirecting']);
+		unset($_SESSION['wpsm']['redirect_count']);
+	}
+	
+	/**
 	 * Check login status (placeholder for future implementation)
 	 * 
 	 * @return void
@@ -498,6 +509,22 @@ class MainController {
 	 * @return void
 	 */
 	function action_login(): void {
+		// Check if dashboard_model is available (only in DashboardController)
+		if (!isset($this->dashboard_model)) {
+			// If no dashboard_model, just check session
+			$check_login = $this->get_session_var('login');
+			if (empty($check_login) || $check_login !== true) {
+				if ($this->current_page !== 'login') {
+					$this->set_message('please login');
+					$this->redirect('?view=login');
+				}
+			} else {
+				$this->data['login'] = true;
+			}
+			$this->clearRedirectFlags();
+			return;
+		}
+		
 		$login = $this->dashboard_model->get_login();
 		$check_login = $this->get_session_var('login');
 		
@@ -534,14 +561,24 @@ class MainController {
 		$this->data['login'] = true;
 	}
 	
-	function view_global_settings(){
+	/**
+	 * View global settings page
+	 * 
+	 * @return void
+	 */
+	function view_global_settings(): void {
+		if (!isset($this->dashboard_model)) {
+			$this->set_message('Dashboard model not available');
+			return;
+		}
+		
 		$user_data_default = array(
 			'username' => '',
-			'email' => '',		
+			'email' => '',
 		);
 		$api_key_data = array(
 			'api_key' => '',
-			'openai_api_key' => '',	
+			'openai_api_key' => '',
 		);
 		$login = $this->dashboard_model->get_login();
 		$global_settings = $this->dashboard_model->get_global_settings();
@@ -564,11 +601,26 @@ class MainController {
 		$this->data['global_settings']['login'] = $user_data_default;
 		$this->render($this->view_url . 'global_settings' , $this->data);
 	}
-	function submit_global_settings(){
+	/**
+	 * Submit global settings
+	 * 
+	 * @return void
+	 */
+	function submit_global_settings(): void {
 		$this->submit_login_settings();
 		$this->redirect();
 	}
-	function submit_login_settings(){
+	
+	/**
+	 * Submit login settings
+	 * 
+	 * @return void
+	 */
+	function submit_login_settings(): void {
+		if (!isset($this->dashboard_model)) {
+			$this->set_message('Dashboard model not available');
+			return;
+		}
 		$user_data = array(
 		'username' =>'',
 		'email' => '',		

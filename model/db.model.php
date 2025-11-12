@@ -16,7 +16,7 @@ class dbModel extends PDO {
      * @param Config|null $config Configuration instance
      * @throws RuntimeException If database connection fails
      */
-    public function __construct(?Config $config = null) {
+    public function __construct($config = null) {
         $this->config = $config ?? Config::getInstance();
         
         if (!defined('DB_NAME')) {

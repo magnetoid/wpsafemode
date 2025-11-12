@@ -28,7 +28,7 @@ class DashboardModel extends dbModel {
      * 
      * @param Config|null $config Configuration instance
      */
-    public function __construct(?Config $config = null){
+    public function __construct($config = null){
         $this->config = $config ?? Config::getInstance();
         parent::__construct($this->config);
         

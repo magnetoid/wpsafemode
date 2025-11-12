@@ -13,7 +13,7 @@ class Config {
      * 
      * @return Config
      */
-    public static function getInstance(): Config {
+    public static function getInstance() {
         if (self::$instance === null) {
             self::$instance = new self();
         }
@@ -50,7 +50,7 @@ class Config {
      * @param mixed $value Setting value
      * @return void
      */
-    public function set(string $key, $value): void {
+    public function set(string $key, $value) {
         $this->settings[$key] = $value;
     }
     
@@ -59,7 +59,7 @@ class Config {
      * 
      * @return array
      */
-    public function all(): array {
+    public function all() {
         return $this->settings;
     }
     
@@ -69,7 +69,7 @@ class Config {
      * @param string $key Setting key
      * @return bool
      */
-    public function has(string $key): bool {
+    public function has(string $key) {
         return isset($this->settings[$key]);
     }
 }

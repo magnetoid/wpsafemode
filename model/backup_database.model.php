@@ -58,9 +58,27 @@
 			    $backup_file_csv_zip = $sourcedir_tables_csv.'tables_database_'.DB_NAME.'-'.$date.'.zip';
 			   $backup_files_csv = array();
 			   foreach($tables as $table){
-			   	   $backup_file_csv = $sourcedir_tables_csv.$table.'-'.$date.'.csv';
+			   	   // SECURITY FIX: Validate table name before use
+			   	   $validated_table = $this->validate_table_name($table);
+			   	   if (!$validated_table) {
+			   	       error_log('WP Safe Mode: Invalid table name for CSV export: ' . htmlspecialchars($table, ENT_QUOTES, 'UTF-8'));
+			   	       continue;
+			   	   }
+			   	   
+			   	   $backup_file_csv = $sourcedir_tables_csv.$validated_table.'-'.$date.'.csv';
+			   	   // SECURITY FIX: Validate file path to prevent directory traversal
+			   	   $backup_file_csv = str_replace('..', '', $backup_file_csv);
+			   	   $backup_file_csv = realpath(dirname($backup_file_csv)) . '/' . basename($backup_file_csv);
+			   	   
 			       $backup_files_csv[] =  $backup_file_csv;
-			       $q = $this->query("SELECT * INTO OUTFILE '". $backup_file_csv. "' FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' LINES TERMINATED BY '\n'  FROM ".DB_NAME."." . $table . "");
+			       // Note: INTO OUTFILE requires FILE privilege and cannot use parameter binding
+			       // Table name is validated, file path is sanitized
+			       try {
+			           $q = $this->query("SELECT * INTO OUTFILE '". addslashes($backup_file_csv) . "' FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' LINES TERMINATED BY '\n'  FROM `".DB_NAME."`.`" . $validated_table . "`");
+			       } catch (PDOException $e) {
+			           error_log('WP Safe Mode: CSV export failed for table ' . $validated_table . ': ' . $e->getMessage());
+			           continue;
+			       }
 			   	}
 			   	
 			   	 if($archive == false){
@@ -139,7 +157,11 @@
 	            try{
 
 	            }catch(PDOException $ex) {
-	                echo '<p style="color:red">Error: </p>'. $ex->getMessage();
+	                error_log('WP Safe Mode Database Error: ' . $ex->getMessage());
+	                // Don't output in API context
+	                if (!defined('WPSM_API')) {
+	                    echo '<p style="color:red">Error: </p>'. $ex->getMessage();
+	                }
 	                return false;
 	            }
 	            

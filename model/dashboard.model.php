@@ -8,36 +8,48 @@
 * 
 */
 class DashboardModel extends dbModel {
+    
+    private $config;
+    protected $settings;
+    protected $db_prefix;
+    protected $wp_dir;
+    protected $wp_config_path;
+    protected $wp_config_backup_path;
+    protected $robots_path;
+    protected $wp_config;
+    protected $htaccess_path;
+    protected $htaccess_backup_path;
+    protected $htaccess;
+    protected $wp_config_array;
+    protected $default_themes;
 
     /**
-	* Construct method for class DashboardModel 
-	* 
-	* @return void 
-	*/
-    public function __construct(){
-        parent::__construct();
-
-        global $settings;
-        $this->settings = $settings;
-        $this->db_prefix = $this->settings['wp_db_prefix'];   
-        $this->wp_dir = $this->settings['wp_dir'];
-        $this->wp_config_path =  $this->wp_dir ."wp-config.php";
+     * Constructor - initialize dashboard model
+     * 
+     * @param Config|null $config Configuration instance
+     */
+    public function __construct(?Config $config = null){
+        $this->config = $config ?? Config::getInstance();
+        parent::__construct($this->config);
+        
+        $this->settings = $this->config->all();
+        $this->db_prefix = $this->settings['wp_db_prefix'] ?? 'wp_';   
+        $this->wp_dir = $this->settings['wp_dir'] ?? '../';
+        $this->wp_config_path = $this->wp_dir . "wp-config.php";
         $this->wp_config_backup_path = $this->settings['sfstore'] . 'wp-config-safemode-backup.php';
         
-        $this->robots_path = $this->wp_dir ."robots.txt";;
+        $this->robots_path = $this->wp_dir . "robots.txt";
         $this->wp_config = $this->get_wp_config();
         $this->htaccess_path = $this->wp_dir . '.htaccess';
         $this->htaccess_backup_path = $this->settings['sfstore'] . '.htaccess.safemode.backup';
         $this->htaccess = $this->get_htaccess();
         $this->wp_config_array = $this->get_wp_config_array();
         $this->default_themes = array(
-            'twentyfifteen'=>'Twenty Fifteen',
-            'twentyfourteen'=>'Twenty Fourteen',
-            'twentythirteen'=>'Twenty Thirteen',
-            'twentytwelve'=>'Twenty Twelve',
+            'twentyfifteen' => 'Twenty Fifteen',
+            'twentyfourteen' => 'Twenty Fourteen',
+            'twentythirteen' => 'Twenty Thirteen',
+            'twentytwelve' => 'Twenty Twelve',
         ); 
-    
-
     }
     /**
 	* Returns htaccess options for .htaccess section in array format. Each item holds several keys so we can use to build a form.  
@@ -1174,12 +1186,35 @@ class DashboardModel extends dbModel {
 	* 
 	* @return string value from option_value for active_plugins option
 	*/
+    /**
+     * Get active plugins with caching
+     * 
+     * @return array
+     */
     public function get_active_plugins(){
-       
+        $cache = Cache::getInstance();
+        return $cache->remember('active_plugins', function() {
+            return $this->get_active_plugins_uncached();
+        }, 300); // Cache for 5 minutes
+    }
+    
+    /**
+     * Get active plugins (uncached)
+     * 
+     * @return array
+     */
+    private function get_active_plugins_uncached(): array {
         $q = $this->prepare("SELECT * FROM " . $this->db_prefix . "options WHERE option_name LIKE 'active_plugins';");
         $q->execute();
-
-        return $q->fetch(PDO::FETCH_ASSOC);
+        $result = $q->fetch(PDO::FETCH_ASSOC);
+        if(empty($result)){
+            return array();
+        }
+        $plugins = unserialize($result['option_value']);
+        if(empty($plugins) || !is_array($plugins)){
+            return array();
+        }
+        return $plugins;
     }
 
     /**
@@ -1327,20 +1362,34 @@ class DashboardModel extends dbModel {
 	* 
 	* @return void
 	*/
-    public function save_plugins($option_value = '' , $serialize = false){
-        // SECURITY FIX: Validate input
-        if (!is_string($option_value)) {
-            throw new InvalidArgumentException("Option value must be a string");
+    /**
+     * Save plugins and clear cache
+     * 
+     * @param string|array $option_value Plugin data
+     * @param bool $serialize Whether to serialize
+     * @return bool
+     */
+    public function save_plugins($option_value = '' , $serialize = false): bool {
+        if(empty($option_value)){
+            return false;
         }
-        
-        // SECURITY FIX: Use parameter binding
+        if(is_array($option_value)){
+            if($serialize == false){
+                $option_value = serialize($option_value);
+            }else{
+                $option_value = json_encode($option_value);
+            }
+        }
+        // SECURITY FIX: Use parameter binding to prevent SQL injection
         $q = $this->prepare("UPDATE `" . $this->db_prefix . "options` SET option_value = :option_value WHERE option_name = 'active_plugins'");
-        $q->bindValue(':option_value', $option_value, PDO::PARAM_STR);
+        $q->bindParam(':option_value', $option_value, PDO::PARAM_STR);
         $q->execute();
         
-        if ($q->rowCount() === 0) {
-            throw new Exception("Failed to update active plugins");
-        }
+        // Clear cache after saving
+        $cache = Cache::getInstance();
+        $cache->delete('active_plugins');
+        
+        return true;
     }
 
     /**
@@ -1595,9 +1644,27 @@ class DashboardModel extends dbModel {
 		    $backup_file_csv_zip = $sourcedir_tables_csv.'tables_database_'.DB_NAME.'-'.$date.'.zip';
 		   $backup_files_csv = array();
 		   foreach($tables as $table){
-		   	   $backup_file_csv = $sourcedir_tables_csv.$table.'-'.$date.'.csv';
+		   	   // SECURITY FIX: Validate table name before use
+		   	   $validated_table = $this->validate_table_name($table);
+		   	   if (!$validated_table) {
+		   	       error_log('WP Safe Mode: Invalid table name for CSV export: ' . htmlspecialchars($table, ENT_QUOTES, 'UTF-8'));
+		   	       continue;
+		   	   }
+		   	   
+		   	   $backup_file_csv = $sourcedir_tables_csv.$validated_table.'-'.$date.'.csv';
+		   	   // SECURITY FIX: Validate file path to prevent directory traversal
+		   	   $backup_file_csv = str_replace('..', '', $backup_file_csv);
+		   	   $backup_file_csv = realpath(dirname($backup_file_csv)) . '/' . basename($backup_file_csv);
+		   	   
 		       $backup_files_csv[] =  $backup_file_csv;
-		       $q = $this->query("SELECT * INTO OUTFILE '". $backup_file_csv. "' FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' LINES TERMINATED BY '\n'  FROM ".DB_NAME."." . $table . "");
+		       // Note: INTO OUTFILE requires FILE privilege and cannot use parameter binding
+		       // Table name is validated, file path is sanitized
+		       try {
+		           $q = $this->query("SELECT * INTO OUTFILE '". addslashes($backup_file_csv) . "' FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' LINES TERMINATED BY '\n'  FROM `".DB_NAME."`.`" . $validated_table . "`");
+		       } catch (PDOException $e) {
+		           error_log('WP Safe Mode: CSV export failed for table ' . $validated_table . ': ' . $e->getMessage());
+		           continue;
+		       }
 		   	}
 		   	
 		   	 if($archive == false){
@@ -2137,9 +2204,97 @@ class DashboardModel extends dbModel {
    	'slug' =>'migration',
    	'name' => 'Website Migration',
    	'icon'=> 'icon_flowchart',   	
-   	);  
+   	);
+   	
+   	// System Health
+   	$items[] = array(
+   	'link' => '?view=system-health', 
+   	'slug' =>'system-health',
+   	'name' => 'System Health',
+   	'icon'=> 'icon_pulse',   	
+   	);
+   	
+   	// File Manager
+   	$items[] = array(
+   	'link' => '?view=file-manager', 
+   	'slug' =>'file-manager',
+   	'name' => 'File Manager',
+   	'icon'=> 'icon_folder',   	
+   	);
+   	
+   	// User Management
+   	$items[] = array(
+   	'link' => '?view=users', 
+   	'slug' =>'users',
+   	'name' => 'User Management',
+   	'icon'=> 'icon_users',   	
+   	);
+   	
+   	// Cron Manager
+   	$items[] = array(
+   	'link' => '?view=cron', 
+   	'slug' =>'cron',
+   	'name' => 'Cron Jobs',
+   	'icon'=> 'icon_clock',   	
+   	);
+   	
+   	// Database Query
+   	$items[] = array(
+   	'link' => '?view=database-query', 
+   	'slug' =>'database-query',
+   	'name' => 'Database Query',
+   	'icon'=> 'icon_database',   	
+   	);
+   	
+   	// Activity Log
+   	$items[] = array(
+   	'link' => '?view=activity-log', 
+   	'slug' =>'activity-log',
+   	'name' => 'Activity Log',
+   	'icon'=> 'icon_list',   	
+   	);
+   	
+   	// Email Testing
+   	$items[] = array(
+   	'link' => '?view=email-test', 
+   	'slug' =>'email-test',
+   	'name' => 'Email Testing',
+   	'icon'=> 'icon_mail',   	
+   	);
+   	
+   	// Security Scanner
+   	$items[] = array(
+   	'link' => '?view=security-scanner', 
+   	'slug' =>'security-scanner',
+   	'name' => 'Security Scanner',
+   	'icon'=> 'icon_shield',   	
+   	);
+   	
+   	// Performance Profiler
+   	$items[] = array(
+   	'link' => '?view=performance', 
+   	'slug' =>'performance',
+   	'name' => 'Performance Profiler',
+   	'icon'=> 'icon_speedometer',   	
+   	);
+   	
+   	// Media Library
+   	$items[] = array(
+   	'link' => '?view=media', 
+   	'slug' =>'media',
+   	'name' => 'Media Library',
+   	'icon'=> 'icon_image',   	
+   	);
+   	
+   	// Database Optimizer
+   	$items[] = array(
+   	'link' => '?view=database-optimizer', 
+   	'slug' =>'database-optimizer',
+   	'name' => 'Database Optimizer',
+   	'icon'=> 'icon_database_alt',   	
+   	);
 
- 	
+	
     return $items;
     
    }
@@ -2284,15 +2439,44 @@ class DashboardModel extends dbModel {
    * 
    * @return array an associative array that holds data for record from options table 
    */
-   function get_option_data($option_name = ''){
-   	     
-   	if(empty($option_name))
-   	return;
+   /**
+    * Get option data with caching
+    * 
+    * @param string $option_name Option name
+    * @return array|null
+    */
+   function get_option_data(string $option_name = ''): ?array {
+   	if(empty($option_name)) {
+   		return null;
+   	}
    	
-      	$q = $this->prepare("SELECT * FROM  ".$this->db_prefix."options WHERE option_name = '".$option_name."';");
+   	// Cache frequently accessed options
+   	$cacheable_options = ['home', 'siteurl', 'active_plugins', 'template', 'stylesheet'];
+   	$cache = Cache::getInstance();
+   	$cacheKey = 'option_' . $option_name;
+   	
+   	if (in_array($option_name, $cacheable_options)) {
+   		return $cache->remember($cacheKey, function() use ($option_name) {
+   			return $this->get_option_data_uncached($option_name);
+   		}, 600); // Cache for 10 minutes
+   	}
+   	
+   	return $this->get_option_data_uncached($option_name);
+   }
+   
+   /**
+    * Get option data (uncached)
+    * 
+    * @param string $option_name Option name
+    * @return array|null
+    */
+   private function get_option_data_uncached(string $option_name): ?array {
+      	// SECURITY FIX: Use parameter binding to prevent SQL injection
+      	$q = $this->prepare("SELECT * FROM  ".$this->db_prefix."options WHERE option_name = :option_name;");
+      	$q->bindParam(':option_name', $option_name, PDO::PARAM_STR);
         $q->execute();
         $result = $q->fetch(PDO::FETCH_ASSOC);
-        return $result;
+        return $result ?: null;
    }
    
    /**
@@ -2305,7 +2489,15 @@ class DashboardModel extends dbModel {
    * 
    * @return void
    */
-   function update_option_data( $option_name , $option_value = '' , $to_json = false){
+   /**
+    * Update option data and clear cache
+    * 
+    * @param string $option_name Option name
+    * @param mixed $option_value Option value
+    * @param bool $to_json Whether to JSON encode
+    * @return bool
+    */
+   function update_option_data(string $option_name, $option_value = '', bool $to_json = false): bool {
    	
    	if(is_array($option_value)){
 		if($to_json == false){
@@ -2320,15 +2512,21 @@ class DashboardModel extends dbModel {
       $q = $this->prepare("UPDATE  " . $this->db_prefix . "options SET option_value = :option_value WHERE option_name = :option_name;");
       $q->bindParam(':option_value', $option_value);
       $q->bindParam(':option_name', $option_name);
-      $q->execute();        
+      $q->execute();
+      
+      // Clear cache for this option
+      $cache = Cache::getInstance();
+      $cache->delete('option_' . $option_name);
+      
+      return true;
        }catch(PDOException $ex) {
-	             error_log('WP Safe Mode Database Error: ' . $ex->getMessage());
+	             Logger::error('Database error updating option', ['option' => $option_name, 'error' => $ex->getMessage()]);
 	             // Don't output in API context
 	             if (!defined('WPSM_API')) {
 	                 echo '<p style="color:red">Error: </p>'. $ex->getMessage();
 	             }
 	             return false;
-	         }
+       }
    }
    
    /**

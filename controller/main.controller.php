@@ -1,14 +1,31 @@
 <?php
-
-
-
+/**
+ * Main Controller
+ * Base controller for all application controllers
+ */
 class MainController {
 
+    protected $config;
     public $settings;
     public $message;
-    function __construct() {
-        global $settings;
-        $this->settings = $settings;
+    protected $wp_dir;
+    protected $wp_config_path;
+    protected $wp_config_backup_path;
+    protected $htaccess_path;
+    protected $htaccess_backup_path;
+    protected $view_url;
+    protected $current_page;
+    protected $action;
+    protected $data = array();
+    
+    /**
+     * Constructor - initialize main controller
+     * 
+     * @param Config|null $config Configuration instance
+     */
+    function __construct(?Config $config = null) {
+        $this->config = $config ?? Config::getInstance();
+        $this->settings = $this->config->all();
         $this->wp_dir = $this->settings['wp_dir'];
         $this->wp_config_path =  $this->wp_dir ."wp-config.php";
         $this->wp_config_backup_path = $this->settings['sfstore'] . 'wp-config-safemode-backup.php';

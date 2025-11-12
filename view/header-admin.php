@@ -5,17 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>WP Safe Mode - Admin Dashboard</title>
     
-    <!-- Google Font: Source Sans Pro -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
+    <!-- Material Design 3 - Roboto Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
     
-    <!-- AdminLTE 3 -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <!-- Material Design 3 CSS -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@material/web@1.0.0-pre.19/all.min.css">
     
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- Material Components for Web -->
+    <link rel="stylesheet" href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css">
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="assets/css/admin-custom.css">
@@ -23,7 +26,43 @@
     <link rel="icon" type="image/ico" href="favicon.ico">
     
     <style>
-        /* Loading Screen - Fixed for Mobile */
+        /* Material Design 3 Theme Variables */
+        :root {
+            --md-sys-color-primary: #6750A4;
+            --md-sys-color-on-primary: #FFFFFF;
+            --md-sys-color-primary-container: #EADDFF;
+            --md-sys-color-on-primary-container: #21005D;
+            --md-sys-color-secondary: #625B71;
+            --md-sys-color-on-secondary: #FFFFFF;
+            --md-sys-color-secondary-container: #E8DEF8;
+            --md-sys-color-on-secondary-container: #1D192B;
+            --md-sys-color-tertiary: #7D5260;
+            --md-sys-color-on-tertiary: #FFFFFF;
+            --md-sys-color-error: #BA1A1A;
+            --md-sys-color-on-error: #FFFFFF;
+            --md-sys-color-surface: #FFFBFE;
+            --md-sys-color-on-surface: #1C1B1F;
+            --md-sys-color-surface-variant: #E7E0EC;
+            --md-sys-color-on-surface-variant: #49454F;
+            --md-sys-color-outline: #79747E;
+            --md-sys-color-shadow: #000000;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        /* Loading Screen - Material Design 3 Style */
         .app-loader {
             position: fixed;
             top: 0;
@@ -35,7 +74,7 @@
             max-width: 100%;
             max-height: 100%;
             background: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(2px);
+            backdrop-filter: blur(4px);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -49,18 +88,19 @@
         }
         
         .app-loader p {
-            margin-top: 1rem;
+            margin-top: 1.5rem;
             font-size: 1rem;
-            font-weight: 500;
+            font-weight: 400;
             color: white;
+            font-family: 'Roboto', sans-serif;
         }
         
         .spinner {
+            width: 48px;
+            height: 48px;
             border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top: 4px solid #007bff;
+            border-top-color: var(--md-sys-color-primary);
             border-radius: 50%;
-            width: 50px;
-            height: 50px;
             animation: spin 1s linear infinite;
             flex-shrink: 0;
         }
@@ -76,14 +116,106 @@
             min-height: 200px;
         }
         
-        /* Content Wrapper Fixes */
-        .content-wrapper {
-            min-height: calc(100vh - 57px);
-            position: relative;
+        /* Prevent body scroll when loader is active */
+        body.loading-active {
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
         }
         
-        /* Mobile Responsive Fixes */
+        /* Material Design 3 Layout */
+        .md3-layout {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        
+        .md3-top-app-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background-color: var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            box-shadow: 0px 2px 3px 0px rgba(0, 0, 0, 0.3), 0px 1px 1px 0px rgba(0, 0, 0, 0.2), 0px 1px 3px 0px rgba(0, 0, 0, 0.12);
+        }
+        
+        .md3-navigation-drawer {
+            position: fixed;
+            top: 64px;
+            left: 0;
+            width: 256px;
+            height: calc(100vh - 64px);
+            background-color: var(--md-sys-color-surface);
+            box-shadow: 2px 0px 3px 0px rgba(0, 0, 0, 0.3), 1px 0px 1px 0px rgba(0, 0, 0, 0.2), 1px 0px 3px 0px rgba(0, 0, 0, 0.12);
+            overflow-y: auto;
+            transition: transform 0.3s ease-in-out;
+            z-index: 999;
+        }
+        
+        .md3-navigation-drawer.closed {
+            transform: translateX(-100%);
+        }
+        
+        .md3-content {
+            margin-left: 256px;
+            margin-top: 64px;
+            padding: 24px;
+            min-height: calc(100vh - 64px);
+            transition: margin-left 0.3s ease-in-out;
+        }
+        
+        .md3-content.full-width {
+            margin-left: 0;
+        }
+        
+        /* Mobile Responsive */
+        @media (max-width: 960px) {
+            .md3-navigation-drawer {
+                transform: translateX(-100%);
+                box-shadow: 2px 0px 8px 0px rgba(0, 0, 0, 0.3);
+            }
+            
+            .md3-navigation-drawer.open {
+                transform: translateX(0);
+            }
+            
+            .md3-content {
+                margin-left: 0;
+            }
+            
+            .md3-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 998;
+                display: none;
+            }
+            
+            .md3-overlay.show {
+                display: block;
+            }
+        }
+        
         @media (max-width: 768px) {
+            .md3-top-app-bar {
+                height: 56px;
+            }
+            
+            .md3-navigation-drawer {
+                top: 56px;
+                height: calc(100vh - 56px);
+            }
+            
+            .md3-content {
+                margin-top: 56px;
+                padding: 16px;
+            }
+            
             .app-loader {
                 z-index: 999999;
             }
@@ -97,199 +229,134 @@
             .app-loader p {
                 font-size: 0.9rem;
             }
-            
-            .content-wrapper {
-                min-height: calc(100vh - 50px);
-            }
-            
-            /* Prevent horizontal scroll on mobile */
-            body {
-                overflow-x: hidden;
-            }
-            
-            .wrapper {
-                overflow-x: hidden;
-            }
-        }
-        
-        /* Fix for iOS Safari viewport issues */
-        @supports (-webkit-touch-callout: none) {
-            .app-loader {
-                position: -webkit-sticky;
-                position: sticky;
-            }
-        }
-        
-        /* Prevent body scroll when loader is active */
-        body.loading-active {
-            overflow: hidden;
-            position: fixed;
-            width: 100%;
         }
     </style>
 </head>
-<body class="hold-transition sidebar-mini layout-fixed <?php echo (isset($data['current_page']) && $data['current_page'] == 'login') ? 'login-page' : ''; ?>">
-<div class="wrapper">
+<body class="<?php echo (isset($data['current_page']) && $data['current_page'] == 'login') ? 'login-page' : ''; ?>">
+<div class="md3-layout">
 
-    <!-- Navbar -->
-    <nav class="main-header navbar navbar-expand navbar-white navbar-light">
-        <!-- Left navbar links -->
-        <ul class="navbar-nav">
-            <li class="nav-item">
-                <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
-            </li>
-            <li class="nav-item d-none d-sm-inline-block">
-                <a href="?view=info" data-view="info" class="nav-link">Dashboard</a>
-            </li>
-        </ul>
-
-        <!-- Right navbar links -->
-        <ul class="navbar-nav ml-auto">
-            <li class="nav-item">
-                <span class="nav-link">
-                    <small class="text-muted">v0.6 beta</small>
-                </span>
-            </li>
-            <li class="nav-item">
-                <a href="http://wpsafemode.com/bug-report/" target="_blank" class="nav-link">
-                    <i class="fas fa-bug"></i> Bug Report
+    <!-- Top App Bar -->
+    <header class="md3-top-app-bar">
+        <div style="display: flex; align-items: center; height: 64px; padding: 0 16px;">
+            <button class="md3-icon-button" id="menu-toggle" style="margin-right: 16px; background: none; border: none; cursor: pointer; padding: 8px; color: var(--md-sys-color-on-surface);">
+                <span class="material-symbols-outlined">menu</span>
+            </button>
+            <h1 class="md3-title" style="flex: 1; margin: 0; font-size: 1.25rem; font-weight: 500; line-height: 2rem; letter-spacing: 0.0125em;" id="page-title">Dashboard</h1>
+            <div style="display: flex; gap: 8px;">
+                <?php if(isset($data['login']) && $data['login'] == true): ?>
+                <a href="<?php echo DashboardHelpers::build_url('',array('view'=>'info' , 'action' => 'logout')); ?>" 
+                   class="md3-icon-button" 
+                   style="background: none; border: none; cursor: pointer; padding: 8px; color: var(--md-sys-color-on-surface); text-decoration: none; display: flex; align-items: center;">
+                    <span class="material-symbols-outlined">logout</span>
                 </a>
-            </li>
-            <li class="nav-item">
-                <a href="http://wpsafemode.com/contact-us/" target="_blank" class="nav-link">
-                    <i class="fas fa-envelope"></i> Contact
-                </a>
-            </li>
-            <?php if(isset($data['login']) && $data['login'] == true): ?>
-            <li class="nav-item">
-                <a href="<?php echo DashboardHelpers::build_url('',array('view'=>'info' , 'action' => 'logout')); ?>" class="nav-link">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </a>
-            </li>
-            <?php endif; ?>
-        </ul>
-    </nav>
-
-    <!-- Main Sidebar Container -->
-    <aside class="main-sidebar sidebar-dark-primary elevation-4">
-        <!-- Brand Logo -->
-        <a href="?view=info" data-view="info" class="brand-link">
-            <img src="assets/img/safemode-logo.png" alt="WP Safe Mode" class="brand-image img-circle elevation-3" style="opacity: .8" onerror="this.style.display='none'">
-            <span class="brand-text font-weight-light">WP Safe Mode</span>
-        </a>
-
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <!-- Sidebar Menu -->
-            <nav class="mt-2">
-                <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-                    <?php if(isset($data['menu_items'])): ?>
-                    <?php foreach($data['menu_items'] as $menu_item): ?>
-                        <?php if(isset($menu_item['disabled']) && $menu_item['disabled'] == true): ?>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link disabled">
-                                <i class="nav-icon <?php 
-                                    $icon = isset($menu_item['icon']) ? $menu_item['icon'] : 'fas fa-circle';
-                                    // Convert various icon formats to Font Awesome
-                                    $icon = str_replace('icon ', 'fas fa-', $icon);
-                                    $icon = str_replace('fi-', 'fas fa-', $icon);
-                                    // Map common icon names
-                                    $iconMap = array(
-                                        'info' => 'fas fa-info-circle',
-                                        'plugins' => 'fas fa-plug',
-                                        'themes' => 'fas fa-paint-brush',
-                                        'wpconfig' => 'fas fa-cog',
-                                        'backup' => 'fas fa-database',
-                                        'htaccess' => 'fas fa-file-code',
-                                        'robots' => 'fas fa-robot',
-                                        'error_log' => 'fas fa-exclamation-triangle',
-                                        'autobackup' => 'fas fa-clock',
-                                        'quick_actions' => 'fas fa-bolt',
-                                        'global_settings' => 'fas fa-sliders-h',
-                                        'ai-assistant' => 'fas fa-robot'
-                                    );
-                                    $slug = isset($menu_item['slug']) ? $menu_item['slug'] : '';
-                                    if (isset($iconMap[$slug])) {
-                                        $icon = $iconMap[$slug];
-                                    }
-                                    echo htmlspecialchars($icon);
-                                ?>"></i>
-                                <p><?php echo htmlspecialchars($menu_item['name']); ?> <small class="badge badge-warning">Soon</small></p>
-                            </a>
-                        </li>
-                        <?php else: ?>
-                        <li class="nav-item">
-                            <a href="<?php echo isset($menu_item['link'])?$menu_item['link']:'#'; ?>" 
-                               data-view="<?php echo $menu_item['slug']; ?>"
-                               class="nav-link <?php echo (isset($data['current_page']) && $data['current_page'] == $menu_item['slug'])?'active':''; ?>">
-                                <i class="nav-icon <?php 
-                                    $icon = isset($menu_item['icon']) ? $menu_item['icon'] : 'fas fa-circle';
-                                    // Convert various icon formats to Font Awesome
-                                    $icon = str_replace('icon ', 'fas fa-', $icon);
-                                    $icon = str_replace('fi-', 'fas fa-', $icon);
-                                    // Map common icon names
-                                    $iconMap = array(
-                                        'info' => 'fas fa-info-circle',
-                                        'plugins' => 'fas fa-plug',
-                                        'themes' => 'fas fa-paint-brush',
-                                        'wpconfig' => 'fas fa-cog',
-                                        'backup' => 'fas fa-database',
-                                        'htaccess' => 'fas fa-file-code',
-                                        'robots' => 'fas fa-robot',
-                                        'error_log' => 'fas fa-exclamation-triangle',
-                                        'autobackup' => 'fas fa-clock',
-                                        'quick_actions' => 'fas fa-bolt',
-                                        'global_settings' => 'fas fa-sliders-h',
-                                        'ai-assistant' => 'fas fa-robot'
-                                    );
-                                    $slug = isset($menu_item['slug']) ? $menu_item['slug'] : '';
-                                    if (isset($iconMap[$slug])) {
-                                        $icon = $iconMap[$slug];
-                                    }
-                                    echo htmlspecialchars($icon);
-                                ?>"></i>
-                                <p><?php echo htmlspecialchars($menu_item['name']); ?></p>
-                            </a>
-                        </li>
-                        <?php endif; ?>
-                    <?php endforeach; ?>
-                    <?php endif; ?>
-                </ul>
-            </nav>
-        </div>
-    </aside>
-
-    <!-- Content Wrapper -->
-    <div class="content-wrapper">
-        <!-- Content Header -->
-        <div class="content-header">
-            <div class="container-fluid">
-                <div class="row mb-2">
-                    <div class="col-sm-6">
-                        <h1 class="m-0" id="page-title">Dashboard</h1>
-                    </div>
-                    <div class="col-sm-6">
-                        <ol class="breadcrumb float-sm-right">
-                            <li class="breadcrumb-item"><a href="?view=info" data-view="info">Home</a></li>
-                            <li class="breadcrumb-item active" id="breadcrumb-current">Dashboard</li>
-                        </ol>
-                    </div>
-                </div>
+                <?php endif; ?>
             </div>
         </div>
+    </header>
 
-        <!-- Main content -->
-        <section class="content">
-            <div class="container-fluid" id="main-content">
-                
-                <!-- Messages -->
-                <?php if(isset($data['message'])): ?>
-                <div class="alert alert-info alert-dismissible fade show" role="alert">
-                    <?php echo $data['message']; ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+    <!-- Navigation Drawer -->
+    <nav class="md3-navigation-drawer" id="navigation-drawer">
+        <div style="padding: 16px;">
+            <div style="display: flex; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--md-sys-color-outline); margin-bottom: 8px;">
+                <img src="assets/img/safemode-logo.png" alt="WP Safe Mode" style="width: 40px; height: 40px; margin-right: 12px; border-radius: 50%;" onerror="this.style.display='none'">
+                <span style="font-size: 1.25rem; font-weight: 500; color: var(--md-sys-color-on-surface);">WP Safe Mode</span>
+            </div>
+            
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                <?php if(isset($data['menu_items'])): ?>
+                <?php foreach($data['menu_items'] as $menu_item): ?>
+                    <?php if(isset($menu_item['disabled']) && $menu_item['disabled'] == true): ?>
+                    <li style="margin: 4px 0;">
+                        <a href="#" class="md3-list-item disabled" style="display: flex; align-items: center; padding: 12px 16px; text-decoration: none; color: var(--md-sys-color-on-surface-variant); border-radius: 28px; cursor: not-allowed;">
+                            <span class="material-symbols-outlined" style="margin-right: 12px; font-size: 24px;"><?php 
+                                $slug = isset($menu_item['slug']) ? $menu_item['slug'] : '';
+                                $iconMap = array(
+                                    'info' => 'info',
+                                    'plugins' => 'extension',
+                                    'themes' => 'palette',
+                                    'wpconfig' => 'settings',
+                                    'backup' => 'database',
+                                    'htaccess' => 'code',
+                                    'robots' => 'smart_toy',
+                                    'error_log' => 'error',
+                                    'autobackup' => 'schedule',
+                                    'quick_actions' => 'bolt',
+                                    'global_settings' => 'tune',
+                                    'ai-assistant' => 'psychology',
+                                    'system-health' => 'monitor_heart',
+                                    'file-manager' => 'folder',
+                                    'users' => 'people',
+                                    'cron' => 'schedule',
+                                    'database-query' => 'data_object'
+                                );
+                                echo isset($iconMap[$slug]) ? $iconMap[$slug] : 'circle';
+                            ?></span>
+                            <span style="flex: 1; font-size: 0.875rem; font-weight: 500;"><?php echo htmlspecialchars($menu_item['name']); ?></span>
+                            <span style="font-size: 0.75rem; padding: 2px 8px; background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); border-radius: 12px;">Soon</span>
+                        </a>
+                    </li>
+                    <?php else: ?>
+                    <li style="margin: 4px 0;">
+                        <a href="<?php echo isset($menu_item['link'])?$menu_item['link']:'#'; ?>" 
+                           data-view="<?php echo $menu_item['slug']; ?>"
+                           class="md3-list-item <?php echo (isset($data['current_page']) && $data['current_page'] == $menu_item['slug'])?'active':''; ?>" 
+                           style="display: flex; align-items: center; padding: 12px 16px; text-decoration: none; color: var(--md-sys-color-on-surface); border-radius: 28px; transition: background-color 0.2s;">
+                            <span class="material-symbols-outlined" style="margin-right: 12px; font-size: 24px;"><?php 
+                                $slug = isset($menu_item['slug']) ? $menu_item['slug'] : '';
+                                $iconMap = array(
+                                    'info' => 'info',
+                                    'plugins' => 'extension',
+                                    'themes' => 'palette',
+                                    'wpconfig' => 'settings',
+                                    'backup' => 'database',
+                                    'htaccess' => 'code',
+                                    'robots' => 'smart_toy',
+                                    'error_log' => 'error',
+                                    'autobackup' => 'schedule',
+                                    'quick_actions' => 'bolt',
+                                    'global_settings' => 'tune',
+                                    'ai-assistant' => 'psychology',
+                                    'system-health' => 'monitor_heart',
+                                    'file-manager' => 'folder',
+                                    'users' => 'people',
+                                    'cron' => 'schedule',
+                                    'database-query' => 'data_object'
+                                );
+                                echo isset($iconMap[$slug]) ? $iconMap[$slug] : 'circle';
+                            ?></span>
+                            <span style="flex: 1; font-size: 0.875rem; font-weight: 500;"><?php echo htmlspecialchars($menu_item['name']); ?></span>
+                        </a>
+                    </li>
+                    <?php endif; ?>
+                <?php endforeach; ?>
                 <?php endif; ?>
+            </ul>
+        </div>
+    </nav>
 
+    <!-- Overlay for mobile -->
+    <div class="md3-overlay" id="drawer-overlay"></div>
+
+    <!-- Main Content -->
+    <main class="md3-content" id="main-content">
+        
+        <!-- Breadcrumb -->
+        <nav style="margin-bottom: 24px;">
+            <ol style="display: flex; list-style: none; padding: 0; margin: 0; gap: 8px; font-size: 0.875rem;">
+                <li><a href="?view=info" data-view="info" style="color: var(--md-sys-color-primary); text-decoration: none;">Home</a></li>
+                <li style="color: var(--md-sys-color-on-surface-variant);">/</li>
+                <li id="breadcrumb-current" style="color: var(--md-sys-color-on-surface);">Dashboard</li>
+            </ol>
+        </nav>
+
+        <!-- Messages -->
+        <?php if(isset($data['message'])): ?>
+        <div class="md3-snackbar" style="display: flex; align-items: center; padding: 16px; background: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface); border-radius: 4px; margin-bottom: 16px; box-shadow: 0px 3px 5px -1px rgba(0, 0, 0, 0.2), 0px 6px 10px 0px rgba(0, 0, 0, 0.14), 0px 1px 18px 0px rgba(0, 0, 0, 0.12);">
+            <span class="material-symbols-outlined" style="margin-right: 12px;">info</span>
+            <span style="flex: 1;"><?php echo $data['message']; ?></span>
+            <button onclick="this.parentElement.remove()" style="background: none; border: none; color: inherit; cursor: pointer; padding: 4px; margin-left: 8px;">
+                <span class="material-symbols-outlined" style="font-size: 20px;">close</span>
+            </button>
+        </div>
+        <?php endif; ?>
 

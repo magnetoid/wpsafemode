@@ -30,6 +30,12 @@ WP Safe Mode is an essential tool for WordPress end users and developers. It pro
   - Scan WordPress core files
 - **Auto Backup** - Configure automatic backups for files and database
 - **Search & Replace** - Database search and replace functionality
+- **Activity Log** - Track all user actions and system events with filtering and statistics
+- **Email Testing** - Test WordPress and PHP email functionality, check SMTP configuration
+- **Security Scanner** - Comprehensive security scan with vulnerability detection and security score
+- **Performance Profiler** - Real-time performance metrics, analysis, and optimization recommendations
+- **Media Library Manager** - Browse, search, and manage WordPress media files
+- **Database Optimizer** - Advanced database optimization with orphaned data cleanup and analysis
 
 ### 🔒 Security Features
 - **CSRF Protection** - All forms protected with CSRF tokens
@@ -130,7 +136,17 @@ wpsafemode/
 │   └── *.php                     # Legacy fallback views
 ├── security/                      # Security classes
 ├── services/
-│   └── AIService.php              # AI service
+│   ├── AIService.php              # AI service
+│   ├── ActivityLogService.php     # Activity logging
+│   ├── EmailService.php            # Email testing
+│   ├── SecurityScannerService.php # Security scanning
+│   ├── PerformanceProfilerService.php # Performance profiling
+│   ├── MediaLibraryService.php    # Media management
+│   ├── DatabaseOptimizerService.php # Database optimization
+│   ├── SystemHealthService.php    # System health monitoring
+│   ├── FileManagerService.php    # File management
+│   ├── UserManagementService.php  # User management
+│   └── CronService.php            # Cron job management
 └── settings.php                   # Configuration
 ```
 
@@ -182,6 +198,12 @@ WP Safe Mode includes comprehensive security features:
 - 📱 **Mobile Optimization** - Full mobile responsive design
 - 🧹 **Code Cleanup** - Removed 50+ unused files, modernized codebase
 - ⚡ **Performance Improvements** - Faster loading, better UX
+- 📊 **Activity Log** - Complete audit trail system for tracking all user actions
+- 📧 **Email Testing** - Test email functionality and SMTP configuration
+- 🔍 **Security Scanner** - Automated security vulnerability scanning with scoring
+- 📈 **Performance Profiler** - Real-time performance metrics and recommendations
+- 🖼️ **Media Library Manager** - Complete WordPress media file management
+- 🗄️ **Database Optimizer** - Advanced database optimization and cleanup tools
 
 ### v0.06 beta
 - Added login feature with secure authentication

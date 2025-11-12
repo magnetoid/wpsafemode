@@ -1,57 +1,55 @@
 <?php
+/**
+ * Database Model
+ * Base database model extending PDO with security enhancements
+ */
+class dbModel extends PDO {
 
-
-include_once('settings.php');
- class dbModel extends PDO {
-
-     private $engine;
-     private $host;
-     private $database;
-     private $user;
-     private $pass;
-     
+    private $config;
     public $condition;
     private $condition_params = array(); // For parameter binding
-    //public  $wp_options;
-    private $safemode_url; //change config to pull from db or external source
-     public function __construct(){
-         //   echo dirname(__FILE__);
-         global $settings;
-            
-
-        if(!defined('DB_NAME')){
+    private $safemode_url;
+    
+    /**
+     * Constructor - establish database connection
+     * 
+     * @param Config|null $config Configuration instance
+     * @throws RuntimeException If database connection fails
+     */
+    public function __construct(?Config $config = null) {
+        $this->config = $config ?? Config::getInstance();
+        
+        if (!defined('DB_NAME')) {
             error_log('WP Safe Mode: Database parameters not set');
-            // Don't output in API context - let it fail gracefully
             if (!defined('WPSM_API')) {
                 echo 'no database parameters set!';
                 exit;
             }
-            throw new Exception('Database parameters not set');
+            throw new RuntimeException('Database parameters not set');
         }
-         $this->wp_options = array();
-    
-         $this->safemode_url = $settings['safemode_url'];
-         $this->engine = 'mysql';
-         $this->host = DB_HOST;
-         $this->database = DB_NAME;
-         $this->user = DB_USER;
-         $this->pass = DB_PASSWORD;
-         $this->condition = '';
-         $dns = $this->engine.':dbname='.$this->database.";host=".$this->host;
-         try{
-             parent::__construct( $dns, $this->user, $this->pass );
-        }catch(PDOException $ex) {
-            // SECURITY FIX: Log error instead of displaying to user
+        
+        $this->wp_options = array();
+        $this->safemode_url = $this->config->get('safemode_url', '');
+        $this->condition = '';
+        
+        $engine = 'mysql';
+        $host = DB_HOST;
+        $database = DB_NAME;
+        $user = DB_USER;
+        $pass = DB_PASSWORD;
+        $dsn = $engine . ':dbname=' . $database . ';host=' . $host;
+        
+        try {
+            parent::__construct($dsn, $user, $pass);
+            $this->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        } catch (PDOException $ex) {
             error_log('Database connection error: ' . $ex->getMessage());
-            // Don't output in API context
             if (!defined('WPSM_API')) {
                 echo '<p style="color:red">Database connection error. Please contact administrator.</p>';
             }
-            // Throw exception so API can handle it properly
-            throw $ex;
+            throw new RuntimeException('Database connection failed', 0, $ex);
         }
-
-     }
+    }
      
      
      function add_condition( $field, $value = '', $options = array('condition'=>'AND','operator'=>'=','exact'=> true )){
@@ -129,14 +127,17 @@ include_once('settings.php');
 	*/
     public function show_tables(){
         try{
-            $q = $this->query("SHOW TABLES FROM " . DB_NAME . "");
-            $q->execute();
+            // Note: SHOW TABLES doesn't support parameter binding, but DB_NAME is from config, not user input
+            $q = $this->query("SHOW TABLES FROM `" . DB_NAME . "`");
+            return $q->fetchAll(PDO::FETCH_COLUMN);
         }catch(PDOException $ex) {
-            echo '<p style="color:red">Error: </p>'. $ex->getMessage();
-            return false;
+            error_log('WP Safe Mode Database Error (show_tables): ' . $ex->getMessage());
+            // Don't output in API context
+            if (!defined('WPSM_API')) {
+                echo '<p style="color:red">Error: </p>'. $ex->getMessage();
+            }
+            return array();
         }      
-        return $q->fetchAll(PDO::FETCH_COLUMN);
-    
     }
     
 	    function db_show_columns( $table = ''){

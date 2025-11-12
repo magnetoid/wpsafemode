@@ -1,6 +1,6 @@
 /**
  * WP Safe Mode - Admin Custom JavaScript
- * Custom functionality for AdminLTE integration
+ * Material Design 3 Integration
  */
 
 (function() {
@@ -21,6 +21,7 @@
         'autobackup': 'Auto Backup',
         'quick_actions': 'Quick Actions',
         'global_settings': 'Global Settings',
+        'ai-assistant': 'AI Assistant',
         'login': 'Login'
     };
 
@@ -38,17 +39,17 @@
         }
         
         // Update active menu item
-        document.querySelectorAll('.nav-link').forEach(link => {
-            link.classList.remove('active');
+        document.querySelectorAll('.md3-list-item').forEach(item => {
+            item.classList.remove('active');
         });
         
-        const activeLink = document.querySelector(`.nav-link[data-view="${view}"]`);
+        const activeLink = document.querySelector(`.md3-list-item[data-view="${view}"]`);
         if (activeLink) {
             activeLink.classList.add('active');
         }
     }
 
-    // Enhance AdminLTE with our app
+    // Initialize Material Design 3 components
     document.addEventListener('DOMContentLoaded', function() {
         // Wait for WPSafeMode to be initialized
         if (typeof WPSafeMode === 'undefined') {
@@ -72,109 +73,126 @@
             };
         }
         
-        // Enhance alerts - use Bootstrap dismiss
-        $(document).on('click', '.alert .close', function() {
-            $(this).closest('.alert').fadeOut(function() {
-                $(this).remove();
-            });
-        });
+        // Initialize Material Design components
+        initMaterialComponents();
         
-        // Auto-dismiss alerts after 5 seconds
+        // Auto-dismiss snackbars after 5 seconds
         setInterval(function() {
-            $('.alert:not(.alert-permanent)').each(function() {
-                const alert = $(this);
-                if (!alert.hasClass('show')) {
-                    alert.fadeOut(function() {
-                        $(this).remove();
-                    });
-                }
+            document.querySelectorAll('.md3-snackbar:not(.permanent)').forEach(function(snackbar) {
+                setTimeout(function() {
+                    snackbar.style.animation = 'slideOut 0.3s ease-in-out';
+                    setTimeout(function() {
+                        snackbar.remove();
+                    }, 300);
+                }, 5000);
             });
-        }, 5000);
-        
-        // Initialize AdminLTE components
-        if (window.AdminLTE) {
-            // AdminLTE should auto-initialize, but ensure it's ready
-            $(document).ready(function() {
-                // Initialize any widgets
-                $('[data-widget="pushmenu"]').PushMenu();
-                
-                // Mobile sidebar handling
-                initMobileSidebar();
-            });
-        }
+        }, 1000);
     });
     
-    // Mobile sidebar functionality
-    function initMobileSidebar() {
-        // Create sidebar overlay for mobile
-        if (!document.getElementById('sidebar-overlay')) {
-            const overlay = document.createElement('div');
-            overlay.id = 'sidebar-overlay';
-            overlay.className = 'sidebar-overlay';
-            overlay.addEventListener('click', function() {
-                closeMobileSidebar();
+    // Initialize Material Design 3 components
+    function initMaterialComponents() {
+        // Initialize text fields
+        const textFields = document.querySelectorAll('.md3-text-field input, .md3-text-field textarea');
+        textFields.forEach(field => {
+            field.addEventListener('focus', function() {
+                this.parentElement.classList.add('focused');
             });
-            document.body.appendChild(overlay);
-        }
-        
-        // Handle sidebar toggle on mobile
-        $(document).on('click', '[data-widget="pushmenu"]', function(e) {
-            if (window.innerWidth <= 768) {
-                e.preventDefault();
-                toggleMobileSidebar();
-            }
-        });
-        
-        // Close sidebar when clicking outside on mobile
-        $(document).on('click', '.main-sidebar .nav-link', function() {
-            if (window.innerWidth <= 768) {
-                setTimeout(closeMobileSidebar, 300);
-            }
-        });
-        
-        // Handle window resize
-        let resizeTimer;
-        $(window).on('resize', function() {
-            clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(function() {
-                if (window.innerWidth > 768) {
-                    closeMobileSidebar();
+            field.addEventListener('blur', function() {
+                if (!this.value) {
+                    this.parentElement.classList.remove('focused');
                 }
-            }, 250);
+            });
+        });
+        
+        // Initialize buttons with ripple effect
+        const buttons = document.querySelectorAll('.md3-button');
+        buttons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                createRipple(e, this);
+            });
+        });
+        
+        // Initialize icon buttons
+        const iconButtons = document.querySelectorAll('.md3-icon-button');
+        iconButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                createRipple(e, this);
+            });
         });
     }
     
-    function toggleMobileSidebar() {
-        document.body.classList.toggle('sidebar-open');
-        const sidebar = document.querySelector('.main-sidebar');
-        if (sidebar) {
-            sidebar.classList.toggle('sidebar-open');
-        }
+    // Create ripple effect for buttons
+    function createRipple(event, element) {
+        const ripple = document.createElement('span');
+        const rect = element.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height);
+        const x = event.clientX - rect.left - size / 2;
+        const y = event.clientY - rect.top - size / 2;
+        
+        ripple.style.width = ripple.style.height = size + 'px';
+        ripple.style.left = x + 'px';
+        ripple.style.top = y + 'px';
+        ripple.classList.add('ripple');
+        
+        element.style.position = 'relative';
+        element.style.overflow = 'hidden';
+        element.appendChild(ripple);
+        
+        setTimeout(() => {
+            ripple.remove();
+        }, 600);
     }
     
-    function closeMobileSidebar() {
-        document.body.classList.remove('sidebar-open');
-        const sidebar = document.querySelector('.main-sidebar');
-        if (sidebar) {
-            sidebar.classList.remove('sidebar-open');
-        }
-    }
-
-    // Enhance forms with AdminLTE styling
+    // Enhance forms with Material Design 3 styling
     function enhanceForms() {
-        $('form').each(function() {
-            if (!$(this).hasClass('form-modern')) {
-                $(this).addClass('form-modern');
+        const forms = document.querySelectorAll('form');
+        forms.forEach(form => {
+            if (!form.classList.contains('md3-form')) {
+                form.classList.add('md3-form');
+                
+                // Convert inputs to Material Design 3 text fields
+                const inputs = form.querySelectorAll('input[type="text"], input[type="email"], input[type="password"], textarea, select');
+                inputs.forEach(input => {
+                    if (!input.closest('.md3-text-field')) {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'md3-text-field';
+                        input.parentNode.insertBefore(wrapper, input);
+                        wrapper.appendChild(input);
+                        
+                        if (input.placeholder) {
+                            const label = document.createElement('label');
+                            label.textContent = input.placeholder;
+                            input.placeholder = '';
+                            wrapper.appendChild(label);
+                        }
+                    }
+                });
             }
         });
     }
 
-    // Enhance tables
+    // Enhance tables with Material Design 3 styling
     function enhanceTables() {
-        $('table').each(function() {
-            const $table = $(this);
-            if (!$table.hasClass('table-modern')) {
-                $table.addClass('table-modern table table-striped table-hover');
+        const tables = document.querySelectorAll('table');
+        tables.forEach(table => {
+            if (!table.classList.contains('md3-table')) {
+                table.classList.add('md3-table');
+            }
+        });
+    }
+    
+    // Enhance buttons with Material Design 3 styling
+    function enhanceButtons() {
+        const buttons = document.querySelectorAll('button, .btn, input[type="submit"]');
+        buttons.forEach(button => {
+            if (!button.classList.contains('md3-button') && !button.classList.contains('md3-icon-button')) {
+                if (button.classList.contains('btn-primary') || button.type === 'submit') {
+                    button.classList.add('md3-button', 'md3-button-filled');
+                } else if (button.classList.contains('btn-outline')) {
+                    button.classList.add('md3-button', 'md3-button-outlined');
+                } else {
+                    button.classList.add('md3-button', 'md3-button-text');
+                }
             }
         });
     }
@@ -189,10 +207,42 @@
             setTimeout(() => {
                 enhanceForms();
                 enhanceTables();
+                enhanceButtons();
+                initMaterialComponents();
             }, 100);
         };
     }
+    
+    // Add ripple effect styles
+    const style = document.createElement('style');
+    style.textContent = `
+        .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6);
+            transform: scale(0);
+            animation: ripple-animation 0.6s ease-out;
+            pointer-events: none;
+        }
+        
+        @keyframes ripple-animation {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateY(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+        }
+    `;
+    document.head.appendChild(style);
 
 })();
-
-

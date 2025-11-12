@@ -17,10 +17,20 @@ class AIController extends MainController {
      * Handle AI API requests
      */
     function handle() {
-        $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_STRING);
+        // PHP 8.0+ compatible: FILTER_SANITIZE_STRING is deprecated
+        if (PHP_VERSION_ID >= 80100) {
+            $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+        } else {
+            $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_STRING);
+        }
         $method = $_SERVER['REQUEST_METHOD'];
         
-        header('Content-Type: application/json');
+        // Clear any output buffers
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+        
+        header('Content-Type: application/json', true);
         
         try {
             switch ($action) {
@@ -51,7 +61,9 @@ class AIController extends MainController {
                 default:
                     $this->error('Invalid action', 400);
             }
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            // PHP 8.0+ compatible error handling
+            error_log('AI Controller Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             $this->error($e->getMessage(), 500);
         }
     }
@@ -107,7 +119,12 @@ class AIController extends MainController {
         $plugins = array();
         if (is_array($plugins_raw)) {
             foreach ($plugins_raw as $plugin) {
-                $plugins[] = filter_var($plugin, FILTER_SANITIZE_STRING);
+                // PHP 8.0+ compatible
+                if (PHP_VERSION_ID >= 80100) {
+                    $plugins[] = filter_var($plugin, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+                } else {
+                    $plugins[] = filter_var($plugin, FILTER_SANITIZE_STRING);
+                }
             }
         }
         
@@ -286,8 +303,9 @@ class AIController extends MainController {
             if ($result && isset($result[0]['version'])) {
                 return $result[0]['version'];
             }
-        } catch (Exception $e) {
-            // Ignore
+        } catch (Throwable $e) {
+            // PHP 8.0+ compatible error handling
+            // Ignore - return 'Unknown' below
         }
         return 'Unknown';
     }

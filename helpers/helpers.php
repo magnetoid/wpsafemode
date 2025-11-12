@@ -253,9 +253,25 @@ class DashboardHelpers {
 	* @return void 
 	*/
     public static function download_file($filename, $filepath){
+    	// SECURITY FIX: Validate file path to prevent directory traversal
+    	if (!SecureFileOperations::validate_file_path($filepath, dirname($filepath))) {
+    		throw new InvalidArgumentException('Invalid file path');
+    	}
+    	
+    	// SECURITY FIX: Ensure file exists and is readable
+    	if (!file_exists($filepath) || !is_readable($filepath)) {
+    		throw new RuntimeException('File not found or not readable');
+    	}
+    	
+    	// SECURITY FIX: Sanitize filename for header
+    	$filename = basename($filename);
+    	$filename = str_replace(array("\0", "\r", "\n"), '', $filename);
+    	
 		header('Content-type: "application/octet-stream"');
-        header('Content-Disposition: attachment; filename="'.$filename.'"');
+        header('Content-Disposition: attachment; filename="'.htmlspecialchars($filename, ENT_QUOTES, 'UTF-8').'"');
+        header('Content-Length: ' . filesize($filepath));
         readfile($filepath);
+        exit;
 	}
 	
 	/**

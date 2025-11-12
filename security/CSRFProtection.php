@@ -93,8 +93,13 @@ class CSRFProtection {
      * @return bool
      */
     public static function validate_post_token($form_name = 'default') {
-        $token = filter_input(INPUT_POST, 'csrf_token', FILTER_SANITIZE_STRING);
-        if ($token === null) {
+        // PHP 8.0+ compatible: FILTER_SANITIZE_STRING is deprecated
+        if (PHP_VERSION_ID >= 80100) {
+            $token = filter_input(INPUT_POST, 'csrf_token', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+        } else {
+            $token = filter_input(INPUT_POST, 'csrf_token', FILTER_SANITIZE_STRING);
+        }
+        if ($token === null || $token === false) {
             return false;
         }
         return self::validate_token($token, $form_name);
@@ -107,8 +112,13 @@ class CSRFProtection {
      * @return bool
      */
     public static function validate_get_token($form_name = 'default') {
-        $token = filter_input(INPUT_GET, 'csrf_token', FILTER_SANITIZE_STRING);
-        if ($token === null) {
+        // PHP 8.0+ compatible: FILTER_SANITIZE_STRING is deprecated
+        if (PHP_VERSION_ID >= 80100) {
+            $token = filter_input(INPUT_GET, 'csrf_token', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+        } else {
+            $token = filter_input(INPUT_GET, 'csrf_token', FILTER_SANITIZE_STRING);
+        }
+        if ($token === null || $token === false) {
             return false;
         }
         return self::validate_token($token, $form_name);

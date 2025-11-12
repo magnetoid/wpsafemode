@@ -299,7 +299,12 @@ class SecureInput {
         
         switch ($type) {
             case 'string':
-                return filter_var($input, FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES);
+                // PHP 8.0+ compatible: FILTER_SANITIZE_STRING is deprecated, use FILTER_SANITIZE_FULL_SPECIAL_CHARS
+                if (PHP_VERSION_ID >= 80100) {
+                    return filter_var($input, FILTER_SANITIZE_FULL_SPECIAL_CHARS, FILTER_FLAG_NO_ENCODE_QUOTES);
+                } else {
+                    return filter_var($input, FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES);
+                }
             
             case 'int':
                 return filter_var($input, FILTER_SANITIZE_NUMBER_INT);

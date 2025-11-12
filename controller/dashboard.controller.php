@@ -232,9 +232,9 @@ class DashboardController extends MainController {
 				
 			}
 		}
- 		if($page_found == false){
- 			$wild_page = array($this, 'view_' . $this->current_page);
- 			if(is_callable($wild_page)){
+		if($page_found == false){
+			$wild_page = array($this, 'view_' . str_replace('-', '_', $this->current_page));
+			if(is_callable($wild_page)){
 				call_user_func($wild_page);	
 			     $page_found  = true;
 				}else{

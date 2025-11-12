@@ -28,6 +28,27 @@ if (!defined('T_ML_COMMENT')) {
 define("HTPASSWDFILE", ".htpasswd");
 
 
+// Load core classes first
+include_once('core/Config.php');
+include_once('core/Database.php');
+include_once('core/Response.php');
+include_once('core/InputValidator.php');
+include_once('core/Logger.php');
+include_once('core/Cache.php');
+
+// Load services
+include_once('services/SystemHealthService.php');
+include_once('services/FileManagerService.php');
+include_once('services/UserManagementService.php');
+include_once('services/CronService.php');
+include_once('services/ActivityLogService.php');
+include_once('services/EmailService.php');
+include_once('services/SecurityScannerService.php');
+include_once('services/PerformanceProfilerService.php');
+include_once('services/MediaLibraryService.php');
+include_once('services/DatabaseOptimizerService.php');
+
+// Load settings (for backward compatibility)
 include_once('settings.php');
 include_once 'helpers/helpers.php';
 

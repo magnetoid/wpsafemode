@@ -67,62 +67,63 @@
         };
         
         this.showMessage = function(message, type = 'success') {
-            // Map types to Bootstrap alert classes
-            const alertTypeMap = {
+            // Map types to Material Design 3 snackbar classes
+            const snackbarTypeMap = {
                 'success': 'success',
-                'alert': 'danger',
-                'error': 'danger',
+                'error': 'error',
+                'alert': 'error',
                 'warning': 'warning',
                 'info': 'info'
             };
-            const alertClass = alertTypeMap[type] || 'info';
+            const snackbarClass = snackbarTypeMap[type] || 'info';
             
             // Find message container
             let messageContainer = document.getElementById('main-content');
             if (!messageContainer) {
-                messageContainer = document.querySelector('.content');
+                messageContainer = document.querySelector('.md3-content');
                 if (!messageContainer) {
                     messageContainer = document.body;
                 }
             }
             
-            // Create Bootstrap alert
-            const alertBox = document.createElement('div');
-            alertBox.className = `alert alert-${alertClass} alert-dismissible fade show`;
-            alertBox.setAttribute('role', 'alert');
-            alertBox.innerHTML = `
-                ${message}
-                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
+            // Create Material Design 3 snackbar
+            const snackbar = document.createElement('div');
+            snackbar.className = `md3-snackbar ${snackbarClass}`;
+            snackbar.setAttribute('role', 'alert');
+            
+            // Get icon based on type
+            const iconMap = {
+                'success': 'check_circle',
+                'error': 'error',
+                'warning': 'warning',
+                'info': 'info'
+            };
+            const icon = iconMap[snackbarClass] || 'info';
+            
+            snackbar.innerHTML = `
+                <span class="material-symbols-outlined" style="margin-right: 12px; font-size: 20px;">${icon}</span>
+                <span style="flex: 1;">${this.escapeHtml(message)}</span>
+                <button onclick="this.parentElement.remove()" style="background: none; border: none; color: inherit; cursor: pointer; padding: 4px; margin-left: 8px;">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">close</span>
                 </button>
             `;
             
             // Insert at the top
             if (messageContainer === document.body) {
-                messageContainer.insertBefore(alertBox, messageContainer.firstChild);
+                messageContainer.insertBefore(snackbar, messageContainer.firstChild);
             } else {
-                messageContainer.insertBefore(alertBox, messageContainer.firstChild);
-            }
-            
-            // Initialize Bootstrap dismiss
-            if (window.jQuery) {
-                $(alertBox).find('[data-dismiss="alert"]').on('click', function() {
-                    $(alertBox).fadeOut(function() {
-                        $(this).remove();
-                    });
-                });
+                messageContainer.insertBefore(snackbar, messageContainer.firstChild);
             }
             
             // Auto-hide after 5 seconds
             setTimeout(() => {
-                if (alertBox.parentNode) {
-                    if (window.jQuery) {
-                        $(alertBox).fadeOut(function() {
-                            $(this).remove();
-                        });
-                    } else {
-                        alertBox.remove();
-                    }
+                if (snackbar.parentNode) {
+                    snackbar.style.animation = 'slideOut 0.3s ease-in-out';
+                    setTimeout(() => {
+                        if (snackbar.parentNode) {
+                            snackbar.remove();
+                        }
+                    }, 300);
                 }
             }, 5000);
         };
@@ -278,7 +279,12 @@
             'autobackup': {module: 'AutobackupModule', view: 'autobackup'},
             'quick_actions': {module: 'QuickActionsModule', view: 'quick_actions'},
             'global_settings': {module: 'GlobalSettingsModule', view: 'global_settings'},
-            'ai-assistant': {module: 'AIAssistantModule', view: 'ai-assistant'}
+            'ai-assistant': {module: 'AIAssistantModule', view: 'ai-assistant'},
+            'system-health': {module: 'SystemHealthModule', view: 'system-health'},
+            'file-manager': {module: 'FileManagerModule', view: 'file-manager'},
+            'users': {module: 'UsersModule', view: 'users'},
+            'cron': {module: 'CronModule', view: 'cron'},
+            'database-query': {module: 'DatabaseQueryModule', view: 'database-query'}
         };
         
         this.currentModule = null;
@@ -365,19 +371,9 @@
                 contentArea.style.opacity = '0';
                 setTimeout(() => {
                     contentArea.innerHTML = html;
-                    // Reinitialize AdminLTE components if available
-                    if (window.AdminLTE && window.AdminLTE.init) {
-                        $(contentArea).find('[data-widget]').each(function() {
-                            const widget = $(this).data('widget');
-                            if (widget && AdminLTE[widget]) {
-                                AdminLTE[widget].call($(this));
-                            }
-                        });
-                    }
-                    // Reinitialize Bootstrap tooltips and popovers
-                    if (window.bootstrap || window.jQuery) {
-                        $(contentArea).find('[data-toggle="tooltip"]').tooltip();
-                        $(contentArea).find('[data-toggle="popover"]').popover();
+                    // Reinitialize Material Design 3 components
+                    if (typeof initMaterialComponents === 'function') {
+                        initMaterialComponents();
                     }
                     // Fade in
                     contentArea.style.opacity = '1';
@@ -391,11 +387,10 @@
      */
     function UI() {
         this.init = function() {
-            // Initialize AdminLTE/Bootstrap components
-            if (window.AdminLTE) {
-                // AdminLTE auto-initializes
+            // Initialize Material Design 3 components
+            if (typeof initMaterialComponents === 'function') {
+                initMaterialComponents();
             }
-            // Bootstrap tooltips and popovers will be initialized as needed
             
             // Handle form submissions
             document.addEventListener('submit', (e) => {
@@ -406,20 +401,19 @@
                 }
             });
             
-            // Handle Bootstrap alert close buttons
+            // Handle Material Design 3 snackbar close buttons
             document.addEventListener('click', (e) => {
-                if (e.target.classList.contains('close') || e.target.closest('.close')) {
-                    const closeBtn = e.target.classList.contains('close') ? e.target : e.target.closest('.close');
-                    const alert = closeBtn.closest('.alert');
-                    if (alert) {
+                const closeBtn = e.target.closest('.md3-snackbar button');
+                if (closeBtn) {
+                    const snackbar = closeBtn.closest('.md3-snackbar');
+                    if (snackbar) {
                         e.preventDefault();
-                        if (window.jQuery) {
-                            $(alert).fadeOut(function() {
-                                $(this).remove();
-                            });
-                        } else {
-                            alert.remove();
-                        }
+                        snackbar.style.animation = 'slideOut 0.3s ease-in-out';
+                        setTimeout(() => {
+                            if (snackbar.parentNode) {
+                                snackbar.remove();
+                            }
+                        }, 300);
                     }
                 }
             });

@@ -179,13 +179,20 @@
         // Get base URL - extract the wpsafemode directory path
         // e.g., /wpsm/ or / from window.location.pathname
         let basePath = window.location.pathname;
-        // Remove trailing filename if present
-        basePath = basePath.replace(/\/[^\/]*$/, '');
+        // Remove trailing filename if present (but keep index.php if it's there)
+        if (basePath.endsWith('.php')) {
+            // If path ends with .php, remove just the filename
+            basePath = basePath.replace(/\/[^\/]*\.php$/, '');
+        } else {
+            // Remove trailing filename
+            basePath = basePath.replace(/\/[^\/]*$/, '');
+        }
         // Ensure it ends with /
         if (!basePath.endsWith('/')) {
             basePath += '/';
         }
-        this.baseUrl = basePath;
+        // Use index.php for API calls to ensure proper routing
+        this.baseUrl = basePath + 'index.php';
         
         this.request = async function(endpoint, options = {}) {
             const defaultOptions = {
@@ -249,6 +256,13 @@
         };
         
         this.get = function(endpoint, params = {}) {
+            // If endpoint starts with /api/, convert to query parameter format
+            if (endpoint.startsWith('/api/')) {
+                const endpointName = endpoint.replace('/api/', '');
+                params.endpoint = endpointName;
+                const query = new URLSearchParams(params).toString();
+                return this.request('?' + query, {method: 'GET'});
+            }
             const query = new URLSearchParams(params).toString();
             return this.request(endpoint + (query ? '?' + query : ''), {method: 'GET'});
         };

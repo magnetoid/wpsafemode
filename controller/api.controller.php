@@ -117,6 +117,7 @@ class ApiController extends MainController {
      */
     private function get_endpoint() {
         // PHP 8.0+ compatible: FILTER_SANITIZE_STRING is deprecated, use FILTER_SANITIZE_FULL_SPECIAL_CHARS
+        // First check GET parameter (for index.php?endpoint=view format)
         $endpoint = filter_input(INPUT_GET, 'endpoint', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
         if (empty($endpoint)) {
             // Try to extract from URL (handles both /api/endpoint and /wpsm/api/endpoint)

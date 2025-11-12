@@ -292,29 +292,36 @@ class MainController {
 	* 
 	* @return void
 	*/
-	function set_message($message = ''){
-		if(empty($message))
-		return;
-		
-		$message.='<br/>';
-		$this->message.= '';
-		if(!isset($_SESSION['sfmessage'])){
-			$_SESSION['sfmessage'] = '';
+	/**
+	 * Set message to be displayed on next page load
+	 * 
+	 * @param string $message Message text
+	 * @return void
+	 */
+	function set_message(string $message): void {
+		if (empty($message)) {
+			return;
 		}
-		$_SESSION['sfmessage'].= $message;
 		
+		$message .= '<br/>';
+		$this->message .= '';
+		if (!isset($_SESSION[Constants::SESSION_MESSAGE_KEY])) {
+			$_SESSION[Constants::SESSION_MESSAGE_KEY] = '';
+		}
+		$_SESSION[Constants::SESSION_MESSAGE_KEY] .= $message;
 	}
 	
 	/**
-	* Retrieves messages stored in $_SESSION['sfmessage']) and sets it to $data['message']. Cleans up $_SESSION['sfmessage']) after. 
-	* 
-	* @return void 
-	*/
-	function get_message(){
-		if(isset($_SESSION['sfmessage'])){
-			$message = $_SESSION['sfmessage'];			
+	 * Retrieves messages stored in session and sets it to $data['message']
+	 * Cleans up session after
+	 * 
+	 * @return void
+	 */
+	function get_message(): void {
+		if (isset($_SESSION[Constants::SESSION_MESSAGE_KEY])) {
+			$message = $_SESSION[Constants::SESSION_MESSAGE_KEY];
 			$this->data['message'] = $message;
-			unset($_SESSION['sfmessage']);
+			unset($_SESSION[Constants::SESSION_MESSAGE_KEY]);
 		}
 	}
 	

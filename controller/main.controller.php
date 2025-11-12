@@ -35,10 +35,11 @@ class MainController {
         $this->action = filter_input(INPUT_GET , 'action');
         $this->setup_dirs();
         
-        // Clear redirect flag on successful page load (not during redirect)
+        // Clear redirect flag on successful page load
+        // This ensures the flag doesn't persist if a redirect was attempted but failed
         if (isset($_SESSION['wpsm']['redirecting']) && !headers_sent()) {
-            // Only clear if we're not in the middle of a redirect
-            // The redirect() method will handle clearing it during redirect
+            // Clear the flag since we successfully loaded the page
+            unset($_SESSION['wpsm']['redirecting']);
         }
     }
     
@@ -177,15 +178,6 @@ class MainController {
 		
 		// Send redirect header
 		header("Location: " . $redirect_url, true, 302);
-		
-		// Clear the flag after a short delay to allow redirect to complete
-		// This prevents the flag from persisting if redirect fails
-		register_shutdown_function(function() {
-			if (isset($_SESSION['wpsm']['redirecting'])) {
-				unset($_SESSION['wpsm']['redirecting']);
-			}
-		});
-		
 		exit;	  
 	}
     

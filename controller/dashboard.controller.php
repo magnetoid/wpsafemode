@@ -19,6 +19,7 @@ class DashboardController extends MainController
 	 */
 	function __construct()
 	{
+		error_log("DashboardController::__construct called");
 		parent::__construct();
 		$this->dashboard_model = new DashboardModel;
 		$this->init_data();
@@ -211,6 +212,9 @@ class DashboardController extends MainController
 		$this->data['htaccess_items'] = $this->dashboard_model->get_htaccess_options();
 		$this->data['robots_items'] = $this->dashboard_model->get_robots_options();
 
+	function view()
+	{
+		error_log("DashboardController::view called for page: " . $this->current_page);
 		// Skip header/footer for login page (it's a standalone HTML page)
 		$skip_layout = ($this->current_page === 'login');
 

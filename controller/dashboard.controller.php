@@ -10,6 +10,7 @@ class DashboardController extends MainController
 
 	protected $current_page;
 	protected $dirs;
+	protected $dashboard_model;
 
 	/**
 	 * Constructor - initialize dashboard controller

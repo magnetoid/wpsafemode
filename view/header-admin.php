@@ -127,6 +127,7 @@
             <header class="page-header">
                 <h1 class="page-title" id="page-title">
                     <?php echo isset($data['current_page']) ? ucfirst(str_replace('_', ' ', $data['current_page'])) : 'Dashboard'; ?>
+                    <small style="font-size: 10px; opacity: 0.5;">(Debug: <?php echo $data['current_page']; ?>)</small>
                 </h1>
 
                 <div style="display: flex; gap: var(--space-md); align-items: center;">

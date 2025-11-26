@@ -32,13 +32,23 @@
         </div>
     <?php endif; ?>
 
-    <?php if (isset($data['info']['plugins_info'])): ?>
+    <?php if (isset($data['info']['plugins_info']) && is_array($data['info']['plugins_info'])): ?>
         <div class="stat-card">
             <div class="stat-icon" style="background-color: rgba(0, 230, 118, 0.1); color: var(--color-success);">
                 <span class="material-symbols-outlined">extension</span>
             </div>
             <div class="stat-content">
                 <div class="stat-value"><?php echo count($data['info']['plugins_info']); ?></div>
+                <div class="stat-label">Active Plugins</div>
+            </div>
+        </div>
+    <?php else: ?>
+        <div class="stat-card">
+            <div class="stat-icon" style="background-color: rgba(0, 230, 118, 0.1); color: var(--color-success);">
+                <span class="material-symbols-outlined">extension</span>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">0</div>
                 <div class="stat-label">Active Plugins</div>
             </div>
         </div>
@@ -64,7 +74,8 @@
                         <div style="font-weight: 600; margin-bottom: 4px;"><?php echo htmlspecialchars($core_info['name']); ?>
                         </div>
                         <div class="text-muted" style="font-size: var(--font-size-sm);">
-                            <?php echo htmlspecialchars($core_info['description']); ?></div>
+                            <?php echo htmlspecialchars($core_info['description']); ?>
+                        </div>
                         <div style="margin-top: 4px;">
                             <span class="badge badge-success">v<?php echo htmlspecialchars($core_info['version']); ?></span>
                         </div>
@@ -130,10 +141,21 @@
                 Plugins
             </h3>
         </div>
-        <?php if (isset($data['info']['plugins_info'])): ?>
+        <?php if (isset($data['info']['plugins_info']) && is_array($data['info']['plugins_info'])): ?>
             <div style="text-align: center; padding: var(--space-xl) 0;">
                 <div style="font-size: 3rem; font-weight: 700; color: var(--color-primary);">
                     <?php echo count($data['info']['plugins_info']); ?>
+                </div>
+                <div class="text-muted">Total Plugins Installed</div>
+                <a href="?view=plugins" class="btn btn-primary" style="margin-top: var(--space-md);">
+                    <span class="material-symbols-outlined">settings</span>
+                    Manage Plugins
+                </a>
+            </div>
+        <?php else: ?>
+            <div style="text-align: center; padding: var(--space-xl) 0;">
+                <div style="font-size: 3rem; font-weight: 700; color: var(--color-primary);">
+                    0
                 </div>
                 <div class="text-muted">Total Plugins Installed</div>
                 <a href="?view=plugins" class="btn btn-primary" style="margin-top: var(--space-md);">

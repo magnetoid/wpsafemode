@@ -2635,13 +2635,13 @@ class DashboardModel extends dbModel
 		$robots_file = $this->robots_path;
 		if (file_exists($robots_file)) {
 			$content = file_get_contents($robots_file);
+			return $content;
 		} else {
 			$form = "<form action='' method='POST'>
 					<input type='submit' class='btn btn-blue' name='create_robots_file' id='create_robots_file' value='Create robots.txt'> 
 				</form>";
 			return "File robots.txt does't exists on your site<br/><br/>" . $form;
 		}
-		return;
 	}
 
 	function get_robots_options()

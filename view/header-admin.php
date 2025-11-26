@@ -36,7 +36,7 @@
 
             <nav>
                 <ul class="nav-list">
-                    <?php if (isset($data['menu_items'])): ?>
+                    <?php if (isset($data['menu_items']) && !empty($data['menu_items'])): ?>
                         <?php foreach ($data['menu_items'] as $menu_item): ?>
                             <?php
                             $slug = isset($menu_item['slug']) ? $menu_item['slug'] : '';
@@ -45,7 +45,10 @@
                                 'plugins' => 'extension',
                                 'themes' => 'palette',
                                 'wpconfig' => 'settings',
+                                'wpconfig_advanced' => 'settings',
                                 'backup' => 'database',
+                                'backup_files' => 'database',
+                                'backup_database' => 'database',
                                 'htaccess' => 'code',
                                 'robots' => 'smart_toy',
                                 'error_log' => 'error',
@@ -78,6 +81,40 @@
                                 </a>
                             <?php endif; ?>
                         <?php endforeach; ?>
+                    <?php else: ?>
+                        <!-- Fallback menu if menu_items is not set -->
+                        <a href="?view=info" class="nav-item active">
+                            <span class="material-symbols-outlined nav-icon">info</span>
+                            <span>Dashboard</span>
+                        </a>
+                        <a href="?view=plugins" class="nav-item">
+                            <span class="material-symbols-outlined nav-icon">extension</span>
+                            <span>Plugins</span>
+                        </a>
+                        <a href="?view=themes" class="nav-item">
+                            <span class="material-symbols-outlined nav-icon">palette</span>
+                            <span>Themes</span>
+                        </a>
+                        <a href="?view=wpconfig_advanced" class="nav-item">
+                            <span class="material-symbols-outlined nav-icon">settings</span>
+                            <span>WP Config</span>
+                        </a>
+                        <a href="?view=htaccess" class="nav-item">
+                            <span class="material-symbols-outlined nav-icon">code</span>
+                            <span>.htaccess</span>
+                        </a>
+                        <a href="?view=robots" class="nav-item">
+                            <span class="material-symbols-outlined nav-icon">smart_toy</span>
+                            <span>robots.txt</span>
+                        </a>
+                        <a href="?view=error_log" class="nav-item">
+                            <span class="material-symbols-outlined nav-icon">error</span>
+                            <span>Error Log</span>
+                        </a>
+                        <a href="?view=global_settings" class="nav-item">
+                            <span class="material-symbols-outlined nav-icon">tune</span>
+                            <span>Settings</span>
+                        </a>
                     <?php endif; ?>
                 </ul>
             </nav>

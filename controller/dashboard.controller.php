@@ -19,7 +19,6 @@ class DashboardController extends MainController
 	 */
 	function __construct()
 	{
-		error_log("DashboardController::__construct called");
 		parent::__construct();
 		$this->dashboard_model = new DashboardModel;
 		$this->init_data();
@@ -214,7 +213,6 @@ class DashboardController extends MainController
 
 	function view()
 	{
-		error_log("DashboardController::view called for page: " . $this->current_page);
 		// Skip header/footer for login page (it's a standalone HTML page)
 		$skip_layout = ($this->current_page === 'login');
 
@@ -2280,7 +2278,4 @@ class DashboardController extends MainController
 
 
 }
-global $dashboard;
-
-//define var for class use - not global variable
-$dashboard = new DashboardController;
+}

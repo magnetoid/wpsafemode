@@ -10,6 +10,7 @@ class dbModel extends PDO
 	public $condition;
 	private $condition_params = array(); // For parameter binding
 	private $safemode_url;
+	protected $wp_options; // Declare property to fix PHP 8.2 deprecation
 
 	/**
 	 * Constructor - establish database connection

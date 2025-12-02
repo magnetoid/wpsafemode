@@ -38,12 +38,13 @@ class DashboardModel extends dbModel
 		$this->db_prefix = $this->settings['wp_db_prefix'] ?? 'wp_';
 		$this->wp_dir = $this->settings['wp_dir'] ?? '../';
 		$this->wp_config_path = $this->wp_dir . "wp-config.php";
-		$this->wp_config_backup_path = $this->settings['sfstore'] . 'wp-config-safemode-backup.php';
+		$sfstore = $this->settings['sfstore'] ?? 'sfstore/';
+		$this->wp_config_backup_path = $sfstore . 'wp-config-safemode-backup.php';
 
 		$this->robots_path = $this->wp_dir . "robots.txt";
 		$this->wp_config = $this->get_wp_config();
 		$this->htaccess_path = $this->wp_dir . '.htaccess';
-		$this->htaccess_backup_path = $this->settings['sfstore'] . '.htaccess.safemode.backup';
+		$this->htaccess_backup_path = $sfstore . '.htaccess.safemode.backup';
 		$this->htaccess = $this->get_htaccess();
 		$this->wp_config_array = $this->get_wp_config_array();
 		$this->default_themes = array(

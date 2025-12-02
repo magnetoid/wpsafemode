@@ -1,6 +1,15 @@
 <?php
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+
+// Configure secure session settings BEFORE starting session
+ini_set('session.cookie_httponly', 1);
+if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
+	ini_set('session.cookie_secure', 1);
+}
+ini_set('session.use_strict_mode', 1);
+
+// Start session
 if (function_exists('session_status') && session_status() == PHP_SESSION_NONE) {
 	session_start();
 } else {
@@ -8,6 +17,7 @@ if (function_exists('session_status') && session_status() == PHP_SESSION_NONE) {
 		session_start();
 	}
 }
+
 if (!file_exists('settings.php')) {
 	if (!file_exists('settings.sample.php')) {
 		die('settings.sample.php missing. Please download new WP Safe Mode');
@@ -35,6 +45,7 @@ include_once('core/Database.php');
 include_once('core/Response.php');
 include_once('core/InputValidator.php');
 include_once('core/Logger.php');
+include_once('core/ErrorHandler.php');
 include_once('core/Cache.php');
 include_once('core/OutputBuffer.php');
 
@@ -60,7 +71,7 @@ include_once('security/SecurityFixes.php');
 include_once('security/CSRFProtection.php');
 include_once('security/RateLimiter.php');
 
-// Configure secure session settings
+// Configure secure session settings BEFORE starting session
 ini_set('session.cookie_httponly', 1);
 if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
 	ini_set('session.cookie_secure', 1);
@@ -73,4 +84,10 @@ include_once('model/help.model.php');
 include_once('model/basicinfo.model.php');
 include_once 'controller/main.controller.php';
 include_once 'controller/dashboard.controller.php';
+
+// Initialize error handler
+$errorLogService = new ErrorLogService();
+if ($errorLogService->isEnabled()) {
+	ErrorHandler::getInstance()->init(true);
+}
 

@@ -20,7 +20,7 @@ class DashboardController extends MainController
 	function __construct()
 	{
 		parent::__construct();
-		$this->dashboard_model = new DashboardModel;
+		$this->dashboard_model = new DashboardModel($this->config);
 		$this->init_data();
 		$this->actions();
 		$this->submit();
@@ -492,7 +492,7 @@ class DashboardController extends MainController
 	function view_themes()
 	{
 
-		$sfstore = $this->dashboard_model->settings['sfstore'];
+		$sfstore = $this->config->get('sfstore');
 		$this->data['themes']['active_theme'] = $this->dashboard_model->get_active_themes();
 		$this->data['themes']['all_themes'] = $this->dashboard_model->get_all_themes($this->wp_dir);
 
@@ -569,9 +569,11 @@ class DashboardController extends MainController
 		$search = filter_input(INPUT_GET, 'search', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
 		$date_from = filter_input(INPUT_GET, 'date_from', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
 		$date_to = filter_input(INPUT_GET, 'date_to', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
+		$severity = filter_input(INPUT_GET, 'severity', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
+		$source = filter_input(INPUT_GET, 'source', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'php'; // Default to WordPress/PHP errors only
 
 		$error_log_service = new ErrorLogService();
-		$this->data['results'] = $error_log_service->getErrorLog($page, $lines, $search, $date_from, $date_to);
+		$this->data['results'] = $error_log_service->getErrorLog($page, $lines, $search, $date_from, $date_to, $severity, $source);
 		$this->data['stats'] = $error_log_service->getStats();
 
 		if (isset($this->data['results']['error'])) {
@@ -583,6 +585,19 @@ class DashboardController extends MainController
 		$this->data['results']['search'] = $search;
 		$this->data['results']['date_from'] = $date_from;
 		$this->data['results']['date_to'] = $date_to;
+		$this->data['results']['severity'] = $severity;
+		$this->data['results']['source'] = $source;
+
+		// Check if AI is configured
+		$ai_service = new AIService();
+		$this->data['ai_configured'] = $ai_service->is_configured();
+
+		// Check for AI analysis in session
+		$show_ai = filter_input(INPUT_GET, 'show_ai', FILTER_SANITIZE_NUMBER_INT);
+		if ($show_ai && isset($_SESSION['ai_error_analysis'])) {
+			$this->data['ai_analysis'] = $_SESSION['ai_error_analysis'];
+			$this->data['ai_analysis_timestamp'] = $_SESSION['ai_analysis_timestamp'];
+		}
 
 		$this->render($this->view_url . 'error_log', $this->data);
 	}
@@ -632,11 +647,96 @@ class DashboardController extends MainController
 		$archive_path = $error_log_service->archiveErrorLog();
 
 		if ($archive_path) {
-			$this->set_message('Error log archived successfully: ' . basename($archive_path));
+			$this->set_message('Error log archived successfully: ' . $archive_path);
 		} else {
 			$this->set_message('Failed to archive error log');
 		}
 		$this->redirect('?view=error_log');
+	}
+
+	/**
+	 * Enable error logging
+	 */
+	function action_enable_error_log()
+	{
+		$error_log_service = new ErrorLogService();
+		if ($error_log_service->enable()) {
+			$this->set_message('Error logging enabled successfully');
+		} else {
+			$this->set_message('Failed to enable error logging');
+		}
+		$this->redirect('?view=error_log');
+	}
+
+	/**
+	 * Disable error logging
+	 */
+	function action_disable_error_log()
+	{
+		$error_log_service = new ErrorLogService();
+		if ($error_log_service->disable()) {
+			$this->set_message('Error logging disabled successfully');
+		} else {
+			$this->set_message('Failed to disable error logging');
+		}
+		$this->redirect('?view=error_log');
+	}
+
+	/**
+	 * AI analyze error log
+	 */
+	function action_ai_analyze_error_log()
+	{
+		try {
+			$ai_service = new AIService();
+
+			if (!$ai_service->is_configured()) {
+				$this->set_message('AI is not configured. Please set your OpenAI API key in Global Settings.');
+				$this->redirect('?view=error_log');
+				return;
+			}
+
+			$error_log_service = new ErrorLogService();
+
+			// Get recent errors (last 100 lines)
+			$results = $error_log_service->getErrorLog(1, 100, '', '', '', '', 'php');
+
+			if (empty($results['rows'])) {
+				$this->set_message('No errors found to analyze');
+				$this->redirect('?view=error_log');
+				return;
+			}
+
+			// Format errors for AI analysis
+			$error_content = "Recent WordPress Errors:\n\n";
+			foreach ($results['rows'] as $row) {
+				$error_content .= sprintf(
+					"[%s] %s - %s: %s\n",
+					$row[0], // date
+					$row[3], // severity
+					$row[2], // type
+					$row[4]  // message
+				);
+				if (!empty($row[5])) {
+					$error_content .= "  File: {$row[5]}:{$row[6]}\n";
+				}
+				$error_content .= "\n";
+			}
+
+			// Get AI analysis
+			$analysis = $ai_service->analyze_error_log($error_content);
+
+			// Store analysis in session for display
+			$_SESSION['ai_error_analysis'] = $analysis;
+			$_SESSION['ai_analysis_timestamp'] = time();
+
+			$this->set_message('AI analysis completed successfully');
+			$this->redirect('?view=error_log&show_ai=1');
+
+		} catch (Exception $e) {
+			$this->set_message('AI analysis failed: ' . $e->getMessage());
+			$this->redirect('?view=error_log');
+		}
 	}
 
 	/**

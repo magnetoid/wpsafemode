@@ -1222,12 +1222,14 @@ class DashboardModel extends dbModel
 	 */
 	private function get_active_plugins_uncached(): array
 	{
-		$q = $this->prepare("SELECT * FROM " . $this->db_prefix . "options WHERE option_name LIKE 'active_plugins';");
-		$q->execute();
-		$result = $q->fetch(PDO::FETCH_ASSOC);
-		if (empty($result)) {
+		// Use secure select helper
+		$results = $this->select($this->db_prefix . 'options', ['option_name' => 'active_plugins']);
+
+		if (empty($results)) {
 			return array();
 		}
+
+		$result = $results[0];
 		$plugins = unserialize($result['option_value']);
 		if (empty($plugins) || !is_array($plugins)) {
 			return array();

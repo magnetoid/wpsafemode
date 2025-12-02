@@ -5,35 +5,37 @@
  * PHP 8.0+ Compatible
  */
 
-class ApiController extends MainController {
-    
+class ApiController extends MainController
+{
+
     private $response = array(
         'success' => false,
         'message' => '',
         'data' => null
     );
-    
-    function __construct() {
+
+    function __construct()
+    {
         // Define API context to prevent HTML output in models
         if (!defined('WPSM_API')) {
             define('WPSM_API', true);
         }
-        
+
         // Clear any output that might have been sent
         OutputBuffer::clean();
-        
+
         // Set JSON header FIRST, before any parent constructor
         header('Content-Type: application/json', true);
-        
+
         parent::__construct();
-        
+
         // Handle CORS if needed
         if (isset($_SERVER['HTTP_ORIGIN'])) {
             header("Access-Control-Allow-Origin: {$_SERVER['HTTP_ORIGIN']}");
             header('Access-Control-Allow-Credentials: true');
             header('Access-Control-Max-Age: 86400');
         }
-        
+
         // Handle preflight
         if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
             if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])) {
@@ -45,14 +47,15 @@ class ApiController extends MainController {
             exit(0);
         }
     }
-    
+
     /**
      * Handle API requests
      */
-    function handle() {
+    function handle()
+    {
         $method = $_SERVER['REQUEST_METHOD'];
         $endpoint = $this->get_endpoint();
-        
+
         try {
             switch ($endpoint) {
                 case 'view':
@@ -100,6 +103,12 @@ class ApiController extends MainController {
                 case 'database-optimizer':
                     $this->handle_database_optimizer();
                     break;
+                case 'database-query':
+                    $this->handle_database_query();
+                    break;
+                case 'error-log':
+                    $this->handle_error_log();
+                    break;
                 default:
                     $this->error('Invalid endpoint', 404);
             }
@@ -109,13 +118,14 @@ class ApiController extends MainController {
             $this->error('Internal server error', Constants::HTTP_INTERNAL_ERROR);
         }
     }
-    
+
     /**
      * Get endpoint from request
      * 
      * @return string Endpoint name
      */
-    private function get_endpoint(): string {
+    private function get_endpoint(): string
+    {
         // PHP 8.0+ compatible: FILTER_SANITIZE_STRING is deprecated, use FILTER_SANITIZE_FULL_SPECIAL_CHARS
         // First check GET parameter (for index.php?endpoint=view format)
         $endpoint = filter_input(INPUT_GET, 'endpoint', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
@@ -132,15 +142,16 @@ class ApiController extends MainController {
         }
         return $endpoint ?: 'view';
     }
-    
+
     /**
      * Validate CSRF token
      * 
      * @return bool True if valid
      */
-    private function validate_csrf(): bool {
+    private function validate_csrf(): bool
+    {
         $token = null;
-        
+
         // Check header first
         if (isset($_SERVER['HTTP_X_CSRF_TOKEN'])) {
             $token = $_SERVER['HTTP_X_CSRF_TOKEN'];
@@ -156,32 +167,33 @@ class ApiController extends MainController {
                 $token = $input['csrf_token'];
             }
         }
-        
+
         if (!$token) {
             return false;
         }
-        
+
         // Validate token
         // PHP 8.0+ compatible
         $form_name = filter_input(INPUT_GET, 'form', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'default';
         return CSRFProtection::validate_token($token, $form_name);
     }
-    
+
     /**
      * Handle view requests
      */
-    private function handle_view() {
+    private function handle_view()
+    {
         try {
             // PHP 8.0+ compatible
             $view = filter_input(INPUT_GET, 'view', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'info';
             $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-            
+
             // Set current page
             $this->current_page = $view;
-            
+
             // Get view HTML
             try {
-                $html = OutputBuffer::capture(function() use ($view, $action) {
+                $html = OutputBuffer::capture(function () use ($view, $action) {
                     $this->load_view($view, $action);
                 });
             } catch (Throwable $e) {
@@ -189,14 +201,14 @@ class ApiController extends MainController {
                 $this->error('Error loading view: ' . $e->getMessage(), Constants::HTTP_INTERNAL_ERROR);
                 return;
             }
-            
+
             $this->success('View loaded', array('html' => $html, 'view' => $view));
         } catch (Throwable $e) {
             error_log('Error in handle_view: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             $this->error('Internal server error', Constants::HTTP_INTERNAL_ERROR);
         }
     }
-    
+
     /**
      * Get dashboard controller instance (optimized)
      * Note: DashboardController constructor has side effects, so we can't cache it
@@ -205,11 +217,12 @@ class ApiController extends MainController {
      * @return DashboardController Dashboard instance
      * @throws Throwable If instantiation fails
      */
-    private function getDashboardInstance(): DashboardController {
+    private function getDashboardInstance(): DashboardController
+    {
         try {
             // Suppress output from DashboardController constructor
             $dashboard = null;
-            OutputBuffer::suppress(function() use (&$dashboard) {
+            OutputBuffer::suppress(function () use (&$dashboard) {
                 $dashboard = new DashboardController();
             });
             return $dashboard;
@@ -218,7 +231,7 @@ class ApiController extends MainController {
             throw $e;
         }
     }
-    
+
     /**
      * Load view content for API response
      * 
@@ -227,14 +240,15 @@ class ApiController extends MainController {
      * @return void
      * @throws Throwable If view loading fails
      */
-    private function load_view(string $view, ?string $action = null): void {
+    private function load_view(string $view, ?string $action = null): void
+    {
         try {
             $dashboard = $this->getDashboardInstance();
-            
+
             if ($action) {
                 $dashboard->action = $action;
             }
-            
+
             // Set current page using the setter method
             // Temporarily set $_GET['view'] so set_current_page() works correctly
             $original_view = $_GET['view'] ?? null;
@@ -248,31 +262,31 @@ class ApiController extends MainController {
                     $_GET['view'] = $original_view;
                 }
             }
-            
+
             // Initialize data - this may call view-specific methods
             $dashboard->init_data();
-            
+
             // If view has a specific method, call it to ensure data is loaded
             $view_method = 'view_' . str_replace('-', '_', $view);
             if (method_exists($dashboard, $view_method) && is_callable(array($dashboard, $view_method))) {
                 // Suppress output from view method (it might call render)
-                OutputBuffer::suppress(function() use ($dashboard, $view_method) {
+                OutputBuffer::suppress(function () use ($dashboard, $view_method) {
                     call_user_func(array($dashboard, $view_method));
                 });
             }
-            
+
             $dashboard->get_message();
-            
+
             // Normalize view_url once
             $view_url = rtrim($this->settings['view_url'] ?? 'view/', '/\\') . '/';
-            
+
             // Try admin view first, then regular view
             $admin_template = $view_url . $view . '-admin.php';
             $regular_template = $view_url . $view . '.php';
-            
+
             $admin_path = $this->resolveTemplatePath($admin_template);
             $regular_path = $this->resolveTemplatePath($regular_template);
-            
+
             // Use cached file existence checks
             // Access parent class's template_cache using reflection since it's private
             $file_to_load = null;
@@ -287,7 +301,7 @@ class ApiController extends MainController {
                     $file_to_load = $admin_path;
                 }
             }
-            
+
             if (!$file_to_load && $regular_path) {
                 $cache_value = $this->getTemplateCacheValue($regular_path);
                 if ($cache_value === null) {
@@ -299,7 +313,7 @@ class ApiController extends MainController {
                     $file_to_load = $regular_path;
                 }
             }
-            
+
             if ($file_to_load) {
                 $data = $dashboard->data;
                 include $file_to_load;
@@ -316,14 +330,15 @@ class ApiController extends MainController {
             throw $e;
         }
     }
-    
+
     /**
      * Get template cache value (helper to access parent's private static property)
      * 
      * @param string $key Cache key
      * @return bool|null Cached value or null
      */
-    private function getTemplateCacheValue(string $key): ?bool {
+    private function getTemplateCacheValue(string $key): ?bool
+    {
         $reflection = new ReflectionClass('MainController');
         $property = $reflection->getProperty('template_cache');
         $property->setAccessible(true);
@@ -331,7 +346,7 @@ class ApiController extends MainController {
         $cache = $property->getValue(null);
         return isset($cache[$key]) ? $cache[$key] : null;
     }
-    
+
     /**
      * Set template cache value (helper to access parent's private static property)
      * 
@@ -339,7 +354,8 @@ class ApiController extends MainController {
      * @param bool $value Cache value
      * @return void
      */
-    private function setTemplateCacheValue(string $key, bool $value): void {
+    private function setTemplateCacheValue(string $key, bool $value): void
+    {
         $reflection = new ReflectionClass('MainController');
         $property = $reflection->getProperty('template_cache');
         $property->setAccessible(true);
@@ -348,53 +364,55 @@ class ApiController extends MainController {
         $cache[$key] = $value;
         $property->setValue(null, $cache);
     }
-    
+
     /**
      * Handle action requests
      */
-    private function handle_action() {
+    private function handle_action()
+    {
         // PHP 8.0+ compatible
         $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-        
+
         if (!$action) {
             $this->error('Action not specified');
             return;
         }
-        
+
         $dashboard = $this->getDashboardInstance();
         $dashboard->action = $action;
-        
+
         // Execute action
         $dashboard->actions();
-        
+
         // Get message
         $dashboard->get_message();
         $message = isset($dashboard->data['message']) ? $dashboard->data['message'] : 'Action completed';
-        
+
         $this->success($message);
     }
-    
+
     /**
      * Handle form submissions
      */
-    private function handle_submit() {
-        
+    private function handle_submit()
+    {
+
         // PHP 8.0+ compatible
         $form_type = filter_input(INPUT_GET, 'form', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-        
+
         if (!$form_type) {
             $this->error('Form type not specified');
             return;
         }
-        
+
         // Handle login separately (doesn't need DashboardController)
         if ($form_type === 'login') {
             $this->handle_login();
             return; // Return early to prevent default handling
         }
-        
+
         $dashboard = $this->getDashboardInstance();
-        
+
         // Handle different form types
         switch ($form_type) {
             case 'plugins':
@@ -425,57 +443,58 @@ class ApiController extends MainController {
                 $this->error('Unknown form type: ' . $form_type);
                 return;
         }
-        
+
         // Get message
         $dashboard->get_message();
         $message = isset($dashboard->data['message']) ? $dashboard->data['message'] : 'Form submitted successfully';
-        
+
         // Determine redirect
         $redirect = null;
         if (isset($dashboard->current_page)) {
             $redirect = array('view' => $dashboard->current_page);
         }
-        
+
         $this->success($message, null, $redirect);
     }
-    
+
     /**
      * Handle login submission (without redirects)
      */
-    private function handle_login() {
+    private function handle_login()
+    {
         // SECURITY FIX: Validate CSRF token first
         if (!CSRFProtection::validate_post_token('login')) {
             $this->error('Invalid security token. Please try again.', Constants::HTTP_FORBIDDEN);
             return;
         }
-        
+
         // SECURITY FIX: Check rate limiting
         if (!RateLimiter::check_rate_limit('login', Constants::RATE_LIMIT_LOGIN_ATTEMPTS, Constants::RATE_LIMIT_LOGIN_WINDOW)) {
             $remaining = RateLimiter::get_reset_time('login', Constants::RATE_LIMIT_LOGIN_WINDOW);
             $this->error('Too many login attempts. Please try again in ' . $remaining . ' seconds.', Constants::HTTP_TOO_MANY_REQUESTS);
             return;
         }
-        
+
         RateLimiter::record_attempt('login');
-        
+
         // Get raw input first for debugging
         $raw_username = $_POST['username'] ?? '';
         $raw_password = $_POST['password'] ?? '';
-        
+
         // SECURITY FIX: Use InputValidator for sanitization
         $user_data = array(
             'username' => InputValidator::getInput('username', INPUT_POST, 'string'),
             'password' => InputValidator::getInput('password', INPUT_POST, 'string'),
         );
-        
+
         // Debug logging (remove in production)
         if (defined('WPSM_DEBUG') && WPSM_DEBUG) {
             error_log('Login attempt - Username: ' . (empty($user_data['username']) ? 'EMPTY' : 'SET') . ', Password: ' . (empty($user_data['password']) ? 'EMPTY' : 'SET'));
         }
-        
+
         // Use output buffering to catch any HTML output from DashboardModel
         try {
-            OutputBuffer::suppress(function() use (&$login) {
+            OutputBuffer::suppress(function () use (&$login) {
                 $dashboard_model = new DashboardModel();
                 $login = $dashboard_model->get_login();
             });
@@ -484,15 +503,15 @@ class ApiController extends MainController {
             $this->error('Database error occurred. Please try again.', Constants::HTTP_INTERNAL_ERROR);
             return;
         }
-        
+
         if (empty($login)) {
             $this->error('Login is not configured. Please set your login credentials in Global Settings.', Constants::HTTP_BAD_REQUEST);
             return;
         }
-        
+
         $error = false;
         $error_message = '';
-        
+
         // Validate input
         if (empty($user_data['password']) || trim($user_data['password']) === '') {
             $error = true;
@@ -502,16 +521,16 @@ class ApiController extends MainController {
             $error = true;
             $error_message = 'Username/Email field cannot be empty.';
         }
-        
+
         if ($error) {
             $this->error($error_message, 400);
             return;
         }
-        
+
         if (!empty($login) && is_array($login)) {
             // Check username/email - Fixed logic for PHP 8.0+
             $is_email = filter_var($user_data['username'], FILTER_VALIDATE_EMAIL) !== false;
-            
+
             if ($is_email) {
                 // User entered email
                 if (!isset($login['email']) || $login['email'] !== $user_data['username']) {
@@ -523,7 +542,7 @@ class ApiController extends MainController {
                     $error = true;
                 }
             }
-            
+
             // Check password
             if (!$error) {
                 try {
@@ -531,7 +550,7 @@ class ApiController extends MainController {
                     $t_hasher = new PasswordHash(8, FALSE);
                     $hash = $login['password'] ?? '';
                     $check_hash = $user_data['password'];
-                    
+
                     if (empty($hash)) {
                         $error = true;
                     } else {
@@ -545,7 +564,7 @@ class ApiController extends MainController {
                     $error = true;
                 }
             }
-            
+
             if ($error) {
                 $this->error('Wrong email/username and/or password', 401);
                 return;
@@ -557,36 +576,38 @@ class ApiController extends MainController {
                 return;
             }
         }
-        
+
         $this->error('Login failed', Constants::HTTP_INTERNAL_ERROR);
     }
-    
+
     /**
      * Handle CSRF token requests
      */
-    private function handle_csrf() {
+    private function handle_csrf()
+    {
         // PHP 8.0+ compatible
         $form_name = filter_input(INPUT_GET, 'form', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'default';
         $token = CSRFProtection::get_token($form_name);
         $this->success('Token generated', array('token' => $token));
     }
-    
+
     /**
      * Handle data requests
      */
-    private function handle_data() {
+    private function handle_data()
+    {
         // PHP 8.0+ compatible
         $data_type = filter_input(INPUT_GET, 'type', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-        
+
         if (!$data_type) {
             $this->error('Data type not specified');
             return;
         }
-        
+
         $dashboard = $this->getDashboardInstance();
-        
+
         $data = null;
-        
+
         switch ($data_type) {
             case 'info':
                 $data = array(
@@ -612,9 +633,9 @@ class ApiController extends MainController {
                 );
                 break;
             case 'themes':
-                
+
                 $data = array(
-                    'themes' => $dashboard->dashboard_model->scan_themes_directory($dashboard->wp_dir)
+                    'themes' => $dashboard->dashboard_model->get_all_themes($dashboard->wp_dir)
                 );
                 break;
             case 'backup':
@@ -634,26 +655,28 @@ class ApiController extends MainController {
                 $this->error('Unknown data type: ' . $data_type);
                 return;
         }
-        
+
         $this->success('Data retrieved', $data);
     }
-    
+
     /**
      * Handle system health data request
      */
-    private function handle_system_health() {
+    private function handle_system_health()
+    {
         $health_service = new SystemHealthService();
         $metrics = $health_service->getHealthMetrics();
         $this->success('Health metrics retrieved', $metrics);
     }
-    
+
     /**
      * Handle file manager operations
      */
-    private function handle_file_manager() {
+    private function handle_file_manager()
+    {
         $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'list';
         $file_manager = new FileManagerService();
-        
+
         try {
             switch ($action) {
                 case 'list':
@@ -661,7 +684,7 @@ class ApiController extends MainController {
                     $files = $file_manager->listDirectory($path);
                     $this->success('Files retrieved', array('files' => $files, 'path' => $path));
                     break;
-                    
+
                 case 'read':
                     $path = filter_input(INPUT_GET, 'path', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
                     if (empty($path)) {
@@ -671,7 +694,7 @@ class ApiController extends MainController {
                     $content = $file_manager->readFile($path);
                     $this->success('File read', array('content' => $content, 'path' => $path));
                     break;
-                    
+
                 case 'write':
                     $path = filter_input(INPUT_POST, 'path', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
                     $content = $_POST['content'] ?? '';
@@ -686,7 +709,7 @@ class ApiController extends MainController {
                         $this->error('Failed to save file');
                     }
                     break;
-                    
+
                 case 'delete':
                     $path = filter_input(INPUT_POST, 'path', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
                     if (empty($path)) {
@@ -700,7 +723,7 @@ class ApiController extends MainController {
                         $this->error('Failed to delete file');
                     }
                     break;
-                    
+
                 default:
                     $this->error('Invalid action');
             }
@@ -709,35 +732,36 @@ class ApiController extends MainController {
             $this->error($e->getMessage());
         }
     }
-    
+
     /**
      * Handle user management operations
      */
-    private function handle_users() {
+    private function handle_users()
+    {
         $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'list';
         $user_service = new UserManagementService();
-        
+
         try {
             switch ($action) {
                 case 'list':
                     $users = $user_service->getUsers();
                     $this->success('Users retrieved', array('users' => $users));
                     break;
-                    
+
                 case 'get':
                     $user_id = filter_input(INPUT_GET, 'id', FILTER_SANITIZE_NUMBER_INT);
                     if (empty($user_id)) {
                         $this->error('User ID is required');
                         return;
                     }
-                    $user = $user_service->getUser((int)$user_id);
+                    $user = $user_service->getUser((int) $user_id);
                     if ($user) {
                         $this->success('User retrieved', array('user' => $user));
                     } else {
                         $this->error('User not found');
                     }
                     break;
-                    
+
                 case 'create':
                     $user_data = array(
                         'user_login' => InputValidator::getInput('user_login', INPUT_POST, 'string'),
@@ -753,7 +777,7 @@ class ApiController extends MainController {
                         $this->error($result['message'] ?? 'Failed to create user');
                     }
                     break;
-                    
+
                 case 'update':
                     $user_id = filter_input(INPUT_POST, 'user_id', FILTER_SANITIZE_NUMBER_INT);
                     if (empty($user_id)) {
@@ -773,14 +797,14 @@ class ApiController extends MainController {
                     if (isset($_POST['role'])) {
                         $user_data['role'] = InputValidator::getInput('role', INPUT_POST, 'string');
                     }
-                    $result = $user_service->updateUser((int)$user_id, $user_data);
+                    $result = $user_service->updateUser((int) $user_id, $user_data);
                     if ($result) {
                         $this->success('User updated');
                     } else {
                         $this->error('Failed to update user');
                     }
                     break;
-                    
+
                 case 'delete':
                     $user_id = filter_input(INPUT_POST, 'user_id', FILTER_SANITIZE_NUMBER_INT);
                     if (empty($user_id)) {
@@ -789,14 +813,14 @@ class ApiController extends MainController {
                     }
                     $reassign = filter_input(INPUT_POST, 'reassign', FILTER_VALIDATE_BOOLEAN);
                     $reassign_to = filter_input(INPUT_POST, 'reassign_to', FILTER_SANITIZE_NUMBER_INT);
-                    $result = $user_service->deleteUser((int)$user_id, $reassign, $reassign_to ?: null);
+                    $result = $user_service->deleteUser((int) $user_id, $reassign, $reassign_to ?: null);
                     if ($result) {
                         $this->success('User deleted');
                     } else {
                         $this->error('Failed to delete user');
                     }
                     break;
-                    
+
                 default:
                     $this->error('Invalid action');
             }
@@ -805,23 +829,26 @@ class ApiController extends MainController {
             $this->error($e->getMessage());
         }
     }
-    
+
     /**
      * Handle cron operations
      */
-    private function handle_cron() {
+    private function handle_cron()
+    {
         $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'list';
         $cron_service = new CronService();
-        
+
         try {
             switch ($action) {
                 case 'list':
                     $jobs = $cron_service->getCronJobs();
                     $this->success('Cron jobs retrieved', array('jobs' => $jobs));
                     break;
-                    
+
                 case 'run':
-                    $hook = filter_input(INPUT_POST, 'hook', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+                    // Read JSON input from request body
+                    $input = json_decode(file_get_contents('php://input'), true);
+                    $hook = $input['hook'] ?? '';
                     if (empty($hook)) {
                         $this->error('Hook is required');
                         return;
@@ -833,22 +860,24 @@ class ApiController extends MainController {
                         $this->error($result['message']);
                     }
                     break;
-                    
+
                 case 'delete':
-                    $hook = filter_input(INPUT_POST, 'hook', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-                    $timestamp = filter_input(INPUT_POST, 'timestamp', FILTER_SANITIZE_NUMBER_INT);
+                    // Read JSON input from request body
+                    $input = json_decode(file_get_contents('php://input'), true);
+                    $hook = $input['hook'] ?? '';
+                    $timestamp = $input['timestamp'] ?? '';
                     if (empty($hook) || empty($timestamp)) {
                         $this->error('Hook and timestamp are required');
                         return;
                     }
-                    $result = $cron_service->deleteCronJob($hook, (int)$timestamp);
+                    $result = $cron_service->deleteCronJob($hook, (int) $timestamp);
                     if ($result) {
                         $this->success('Cron job deleted');
                     } else {
                         $this->error('Failed to delete cron job');
                     }
                     break;
-                    
+
                 default:
                     $this->error('Invalid action');
             }
@@ -857,14 +886,15 @@ class ApiController extends MainController {
             $this->error($e->getMessage());
         }
     }
-    
+
     /**
      * Handle activity log operations
      */
-    private function handle_activity_log() {
+    private function handle_activity_log()
+    {
         $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'list';
         $activity_service = new ActivityLogService();
-        
+
         try {
             switch ($action) {
                 case 'list':
@@ -874,12 +904,12 @@ class ApiController extends MainController {
                     $logs = $activity_service->getLogs($limit, $filter_action, $filter_user);
                     $this->success('Activity logs retrieved', array('logs' => $logs));
                     break;
-                    
+
                 case 'statistics':
                     $stats = $activity_service->getStatistics();
                     $this->success('Statistics retrieved', array('statistics' => $stats));
                     break;
-                    
+
                 case 'clear':
                     $days = filter_input(INPUT_POST, 'days', FILTER_SANITIZE_NUMBER_INT) ?: 30;
                     $result = $activity_service->clearOldLogs($days);
@@ -889,7 +919,7 @@ class ApiController extends MainController {
                         $this->error('Failed to clear logs');
                     }
                     break;
-                    
+
                 default:
                     $this->error('Invalid action');
             }
@@ -898,31 +928,32 @@ class ApiController extends MainController {
             $this->error($e->getMessage());
         }
     }
-    
+
     /**
      * Handle email operations
      */
-    private function handle_email() {
+    private function handle_email()
+    {
         $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'info';
         $email_service = new EmailService();
-        
+
         try {
             switch ($action) {
                 case 'info':
                     $info = $email_service->getEmailInfo();
                     $this->success('Email info retrieved', array('info' => $info));
                     break;
-                    
+
                 case 'test':
                     $to = InputValidator::getInput('to', INPUT_POST, 'email');
                     $subject = InputValidator::getInput('subject', INPUT_POST, 'string');
                     $message = InputValidator::getInput('message', INPUT_POST, 'string');
-                    
+
                     if (empty($to)) {
                         $this->error('Email address is required');
                         return;
                     }
-                    
+
                     $result = $email_service->testEmail($to, $subject, $message);
                     if ($result['success']) {
                         $this->success($result['message']);
@@ -930,17 +961,17 @@ class ApiController extends MainController {
                         $this->error($result['message']);
                     }
                     break;
-                    
+
                 case 'test_php':
                     $to = InputValidator::getInput('to', INPUT_POST, 'email');
                     $subject = InputValidator::getInput('subject', INPUT_POST, 'string') ?: 'Test Email';
                     $message = InputValidator::getInput('message', INPUT_POST, 'string') ?: 'This is a test email.';
-                    
+
                     if (empty($to)) {
                         $this->error('Email address is required');
                         return;
                     }
-                    
+
                     $result = $email_service->testPhpMail($to, $subject, $message);
                     if ($result['success']) {
                         $this->success($result['message']);
@@ -948,7 +979,7 @@ class ApiController extends MainController {
                         $this->error($result['message']);
                     }
                     break;
-                    
+
                 default:
                     $this->error('Invalid action');
             }
@@ -957,21 +988,22 @@ class ApiController extends MainController {
             $this->error($e->getMessage());
         }
     }
-    
+
     /**
      * Handle security scanner operations
      */
-    private function handle_security_scanner() {
+    private function handle_security_scanner()
+    {
         $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'scan';
         $scanner_service = new SecurityScannerService();
-        
+
         try {
             switch ($action) {
                 case 'scan':
                     $results = $scanner_service->scan();
                     $this->success('Security scan completed', array('results' => $results));
                     break;
-                    
+
                 default:
                     $this->error('Invalid action');
             }
@@ -980,21 +1012,22 @@ class ApiController extends MainController {
             $this->error($e->getMessage());
         }
     }
-    
+
     /**
      * Handle performance profiler operations
      */
-    private function handle_performance() {
+    private function handle_performance()
+    {
         $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'metrics';
         $profiler_service = new PerformanceProfilerService();
-        
+
         try {
             switch ($action) {
                 case 'metrics':
                     $metrics = $profiler_service->getMetrics();
                     $this->success('Performance metrics retrieved', array('metrics' => $metrics));
                     break;
-                    
+
                 default:
                     $this->error('Invalid action');
             }
@@ -1003,14 +1036,15 @@ class ApiController extends MainController {
             $this->error($e->getMessage());
         }
     }
-    
+
     /**
      * Handle media library operations
      */
-    private function handle_media() {
+    private function handle_media()
+    {
         $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'list';
         $media_service = new MediaLibraryService();
-        
+
         try {
             switch ($action) {
                 case 'list':
@@ -1020,12 +1054,12 @@ class ApiController extends MainController {
                     $result = $media_service->getMediaFiles($limit, $offset, $search);
                     $this->success('Media files retrieved', $result);
                     break;
-                    
+
                 case 'statistics':
                     $stats = $media_service->getStatistics();
                     $this->success('Media statistics retrieved', array('statistics' => $stats));
                     break;
-                    
+
                 case 'delete':
                     $file_id = filter_input(INPUT_POST, 'file_id', FILTER_SANITIZE_NUMBER_INT);
                     if (empty($file_id)) {
@@ -1039,7 +1073,7 @@ class ApiController extends MainController {
                         $this->error($result['message']);
                     }
                     break;
-                    
+
                 default:
                     $this->error('Invalid action');
             }
@@ -1048,42 +1082,43 @@ class ApiController extends MainController {
             $this->error($e->getMessage());
         }
     }
-    
+
     /**
      * Handle database optimizer operations
      */
-    private function handle_database_optimizer() {
+    private function handle_database_optimizer()
+    {
         $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'analyze';
         $optimizer_service = new DatabaseOptimizerService();
-        
+
         try {
             switch ($action) {
                 case 'analyze':
                     $analysis = $optimizer_service->analyze();
                     $this->success('Database analysis completed', array('analysis' => $analysis));
                     break;
-                    
+
                 case 'optimize':
                     $result = $optimizer_service->optimizeAllTables();
                     $this->success('Tables optimized', $result);
                     break;
-                    
+
                 case 'clean_orphaned':
                     $result = $optimizer_service->cleanOrphaned();
                     $this->success('Orphaned data cleaned', $result);
                     break;
-                    
+
                 case 'clean_revisions':
                     $keep = filter_input(INPUT_POST, 'keep', FILTER_SANITIZE_NUMBER_INT) ?: 3;
                     $result = $optimizer_service->cleanRevisions($keep);
                     $this->success('Revisions cleaned', $result);
                     break;
-                    
+
                 case 'clean_transients':
                     $result = $optimizer_service->cleanTransients();
                     $this->success('Transients cleaned', $result);
                     break;
-                    
+
                 default:
                     $this->error('Invalid action');
             }
@@ -1092,7 +1127,7 @@ class ApiController extends MainController {
             $this->error($e->getMessage());
         }
     }
-    
+
     /**
      * Send success response
      * 
@@ -1101,10 +1136,11 @@ class ApiController extends MainController {
      * @param array|null $redirect Redirect information
      * @return void
      */
-    private function success(string $message, $data = null, ?array $redirect = null): void {
+    private function success(string $message, $data = null, ?array $redirect = null): void
+    {
         Response::jsonSuccess($message, $data, $redirect);
     }
-    
+
     /**
      * Send error response
      * 
@@ -1112,7 +1148,153 @@ class ApiController extends MainController {
      * @param int $code HTTP status code
      * @return void
      */
-    private function error(string $message, int $code = 400): void {
+    private function error(string $message, int $code = 400): void
+    {
         Response::jsonError($message, $code);
+    }
+    /**
+     * Handle database query execution
+     */
+    private function handle_database_query()
+    {
+        // Only allow POST requests
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->error('Method not allowed', 405);
+            return;
+        }
+
+        // Read JSON input from request body
+        $input = json_decode(file_get_contents('php://input'), true);
+        $query = $input['query'] ?? '';
+
+        if (empty($query)) {
+            $this->error('Query is required');
+            return;
+        }
+
+        try {
+            $dashboard = $this->getDashboardInstance();
+            $db = $dashboard->dashboard_model;
+
+            // Execute query
+            // We use the underlying PDO connection from dbModel
+            $stmt = $db->query($query);
+
+            $results = [];
+            $columns = [];
+
+            // If it's a SELECT/SHOW/DESCRIBE query, fetch results
+            if ($stmt->columnCount() > 0) {
+                $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                // Get column names from the first row if available
+                if (!empty($results)) {
+                    $columns = array_keys($results[0]);
+                } else {
+                    // If no rows, try to get column metadata
+                    for ($i = 0; $i < $stmt->columnCount(); $i++) {
+                        $meta = $stmt->getColumnMeta($i);
+                        $columns[] = $meta['name'];
+                    }
+                }
+
+                $this->success('Query executed successfully', [
+                    'results' => $results,
+                    'columns' => $columns,
+                    'count' => count($results)
+                ]);
+            } else {
+                // For INSERT/UPDATE/DELETE, return affected rows
+                $this->success('Query executed successfully', [
+                    'affected_rows' => $stmt->rowCount()
+                ]);
+            }
+
+        } catch (PDOException $e) {
+            $this->error('Database Error: ' . $e->getMessage());
+        } catch (Throwable $e) {
+            $this->error('Error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Handle error log operations
+     */
+    private function handle_error_log()
+    {
+        $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'list';
+        $error_log_service = new ErrorLogService();
+
+        try {
+            switch ($action) {
+                case 'list':
+                    $page = filter_input(INPUT_GET, 'page', FILTER_SANITIZE_NUMBER_INT) ?: 1;
+                    $lines = filter_input(INPUT_GET, 'lines', FILTER_SANITIZE_NUMBER_INT) ?: 20;
+                    $search = filter_input(INPUT_GET, 'search', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
+                    $date_from = filter_input(INPUT_GET, 'date_from', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
+                    $date_to = filter_input(INPUT_GET, 'date_to', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
+
+                    $result = $error_log_service->getErrorLog($page, $lines, $search, $date_from, $date_to);
+                    $this->success('Error log retrieved', $result);
+                    break;
+
+                case 'stats':
+                    $stats = $error_log_service->getStats();
+                    $this->success('Error log statistics retrieved', ['stats' => $stats]);
+                    break;
+
+                case 'download':
+                    $path = $error_log_service->getErrorLogPath();
+                    if (!$path || !file_exists($path)) {
+                        $this->error('Error log file not found');
+                        return;
+                    }
+
+                    // For download, we don't return JSON
+                    // We need to bypass the JSON header set in constructor
+                    // But since constructor already ran, we can just output file
+
+                    // Ideally we should have a separate download handler, but for now:
+                    header('Content-Type: text/plain');
+                    header('Content-Disposition: attachment; filename="error_log.txt"');
+                    header('Content-Length: ' . filesize($path));
+                    readfile($path);
+                    exit;
+                    break;
+
+                case 'clear':
+                    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                        $this->error('Method not allowed', 405);
+                        return;
+                    }
+
+                    if ($error_log_service->clearErrorLog()) {
+                        $this->success('Error log cleared successfully');
+                    } else {
+                        $this->error('Failed to clear error log');
+                    }
+                    break;
+
+                case 'archive':
+                    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                        $this->error('Method not allowed', 405);
+                        return;
+                    }
+
+                    $archive_path = $error_log_service->archiveErrorLog();
+                    if ($archive_path) {
+                        $this->success('Error log archived successfully', ['path' => basename($archive_path)]);
+                    } else {
+                        $this->error('Failed to archive error log');
+                    }
+                    break;
+
+                default:
+                    $this->error('Invalid action');
+            }
+        } catch (Throwable $e) {
+            Logger::error('Error log error', ['action' => $action, 'error' => $e->getMessage()]);
+            $this->error($e->getMessage());
+        }
     }
 }

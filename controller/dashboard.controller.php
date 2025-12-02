@@ -10,7 +10,7 @@ class DashboardController extends MainController
 
 	protected $current_page;
 	protected $dirs;
-	protected $dashboard_model;
+	public $dashboard_model;
 
 	/**
 	 * Constructor - initialize dashboard controller
@@ -211,8 +211,6 @@ class DashboardController extends MainController
 		$this->data['htaccess_items'] = $this->dashboard_model->get_htaccess_options();
 		$this->data['robots_items'] = $this->dashboard_model->get_robots_options();
 
-	function view()
-	{
 		// Skip header/footer for login page (it's a standalone HTML page)
 		$skip_layout = ($this->current_page === 'login');
 
@@ -566,29 +564,79 @@ class DashboardController extends MainController
 	 */
 	function view_error_log()
 	{
+		$page = filter_input(INPUT_GET, 'page', FILTER_SANITIZE_NUMBER_INT) ?: 1;
+		$lines = filter_input(INPUT_GET, 'lines', FILTER_SANITIZE_NUMBER_INT) ?: 20;
+		$search = filter_input(INPUT_GET, 'search', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
+		$date_from = filter_input(INPUT_GET, 'date_from', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
+		$date_to = filter_input(INPUT_GET, 'date_to', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: '';
 
-		$page = filter_input(INPUT_GET, 'page');
-		$lines = filter_input(INPUT_GET, 'lines');
-		$search = filter_input(INPUT_GET, 'search'); //sanitize
+		$error_log_service = new ErrorLogService();
+		$this->data['results'] = $error_log_service->getErrorLog($page, $lines, $search, $date_from, $date_to);
+		$this->data['stats'] = $error_log_service->getStats();
 
-		if (empty($lines)) {
-			$lines = 20;
+		if (isset($this->data['results']['error'])) {
+			$this->set_message($this->data['results']['error']);
 		}
-		if (empty($page)) {
-			$page = 1;
-		}
-		$this->data['results'] = $this->dashboard_model->get_error_log($page, $lines, $search);
 
-		if (!is_array($this->data['results'])) {
-
-
-			$this->set_message($this->data['results']);
-		}
 		$this->data['results']['page'] = $page;
 		$this->data['results']['lines'] = $lines;
 		$this->data['results']['search'] = $search;
+		$this->data['results']['date_from'] = $date_from;
+		$this->data['results']['date_to'] = $date_to;
 
 		$this->render($this->view_url . 'error_log', $this->data);
+	}
+
+	/**
+	 * Download error log file
+	 */
+	function action_download_error_log()
+	{
+		$error_log_service = new ErrorLogService();
+		$path = $error_log_service->getErrorLogPath();
+
+		if ($path && file_exists($path)) {
+			header('Content-Type: text/plain');
+			header('Content-Disposition: attachment; filename="error_log.txt"');
+			header('Content-Length: ' . filesize($path));
+			readfile($path);
+			exit;
+		}
+
+		$this->set_message('Error log file not found');
+		$this->redirect('?view=error_log');
+	}
+
+	/**
+	 * Clear error log file
+	 */
+	function action_clear_error_log()
+	{
+		// Add CSRF check here if not already handled globally
+
+		$error_log_service = new ErrorLogService();
+		if ($error_log_service->clearErrorLog()) {
+			$this->set_message('Error log cleared successfully');
+		} else {
+			$this->set_message('Failed to clear error log');
+		}
+		$this->redirect('?view=error_log');
+	}
+
+	/**
+	 * Archive error log file
+	 */
+	function action_archive_error_log()
+	{
+		$error_log_service = new ErrorLogService();
+		$archive_path = $error_log_service->archiveErrorLog();
+
+		if ($archive_path) {
+			$this->set_message('Error log archived successfully: ' . basename($archive_path));
+		} else {
+			$this->set_message('Failed to archive error log');
+		}
+		$this->redirect('?view=error_log');
 	}
 
 	/**
@@ -2277,5 +2325,4 @@ class DashboardController extends MainController
 
 
 
-}
 }

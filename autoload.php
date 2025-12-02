@@ -71,13 +71,6 @@ include_once('security/SecurityFixes.php');
 include_once('security/CSRFProtection.php');
 include_once('security/RateLimiter.php');
 
-// Configure secure session settings BEFORE starting session
-ini_set('session.cookie_httponly', 1);
-if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
-	ini_set('session.cookie_secure', 1);
-}
-ini_set('session.use_strict_mode', 1);
-
 include_once('model/db.model.php');
 include_once('model/dashboard.model.php');
 include_once('model/help.model.php');

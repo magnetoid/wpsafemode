@@ -54,6 +54,38 @@ class DashboardModel extends dbModel
 			'twentytwelve' => 'Twenty Twelve',
 		);
 	}
+
+	/**
+	 * Get settings array
+	 * @return array
+	 */
+	public function get_settings()
+	{
+		return $this->settings;
+	}
+
+	/**
+	 * Get database instance
+	 * @return DashboardModel
+	 */
+	public static function get_db_instance()
+	{
+		return new self();
+	}
+
+	/**
+	 * Get MySQL version
+	 * @return string
+	 */
+	public function get_mysql_version()
+	{
+		try {
+			return $this->getAttribute(PDO::ATTR_SERVER_VERSION);
+		} catch (PDOException $e) {
+			return 'Unknown';
+		}
+	}
+
 	/**
 	 * Returns htaccess options for .htaccess section in array format. Each item holds several keys so we can use to build a form.  
 	 * 
@@ -1456,16 +1488,19 @@ class DashboardModel extends dbModel
 	 * Updates all relevant options related with them to set current theme 
 	 * @param array $theme
 	 * 
-	 * @return void
+	 * @return bool
 	 */
-	function set_active_theme($theme = '')
+	function set_active_theme($theme = ''): bool
 	{
 		if (!empty($theme)) {
 			foreach ($theme as $key => $value) {
-				$this->update_option_data($key, $value);
+				if (!$this->update_option_data($key, $value)) {
+					return false;
+				}
 			}
-
+			return true;
 		}
+		return false;
 	}
 
 	/**
@@ -1707,7 +1742,7 @@ class DashboardModel extends dbModel
 		if ($archive == false) {
 			return $backup_files_csv;
 		} else {
-			if (DashboardHelpers::zip_data($backup_files_csv, $backup_file_csv_zip, $sourcedir_tables_csv)) {
+			if (DashboardHelpers::zip_data($backup_file_csv_zip, $backup_files_csv, $sourcedir_tables_csv)) {
 				foreach ($backup_files_csv as $table_file) {
 					unlink($table_file);
 				}
@@ -1795,7 +1830,7 @@ class DashboardModel extends dbModel
 			if ($archive == false) {
 				return $full_path;
 			} else {
-				if (DashboardHelpers::zip_data(array($full_path), $backup_file_master_zip, $sourcedir_master_sql)) {
+				if (DashboardHelpers::zip_data($backup_file_master_zip, array($full_path), $sourcedir_master_sql)) {
 					unlink($full_path);
 					return $backup_file_master_zip;
 				}
@@ -1805,7 +1840,7 @@ class DashboardModel extends dbModel
 			if ($archive == false) {
 				return $backup_files_sql;
 			} else {
-				if (DashboardHelpers::zip_data($backup_files_sql, $backup_file_tables_zip, $sourcedir_tables_sql)) {
+				if (DashboardHelpers::zip_data($backup_file_tables_zip, $backup_files_sql, $sourcedir_tables_sql)) {
 					foreach ($backup_files_sql as $table_file) {
 						unlink($table_file);
 					}
@@ -2188,6 +2223,20 @@ class DashboardModel extends dbModel
 			'slug' => 'backup_database',
 			'name' => 'Backup Database',
 			'icon' => 'icon_drive',
+		);
+		//Database Inspector
+		$items[] = array(
+			'link' => '?view=database-inspector',
+			'slug' => 'database-inspector',
+			'name' => 'Database Inspector',
+			'icon' => 'icon_datareport',
+		);
+		//Malware Scanner
+		$items[] = array(
+			'link' => '?view=malware-scanner',
+			'slug' => 'malware-scanner',
+			'name' => 'Malware Scanner',
+			'icon' => 'icon_security',
 		);
 		//htaccess settings
 		$items[] = array(

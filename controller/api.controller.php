@@ -106,6 +106,12 @@ class ApiController extends MainController
                 case 'database-query':
                     $this->handle_database_query();
                     break;
+                case 'database':
+                    $this->handle_database();
+                    break;
+                case 'malware-scanner':
+                    $this->handle_malware_scanner();
+                    break;
                 case 'error-log':
                     $this->handle_error_log();
                     break;
@@ -450,8 +456,8 @@ class ApiController extends MainController
 
         // Determine redirect
         $redirect = null;
-        if (isset($dashboard->current_page)) {
-            $redirect = array('view' => $dashboard->current_page);
+        if (method_exists($dashboard, 'get_current_page')) {
+            $redirect = array('view' => $dashboard->get_current_page());
         }
 
         $this->success($message, null, $redirect);
@@ -691,18 +697,25 @@ class ApiController extends MainController
                         $this->error('Path is required');
                         return;
                     }
-                    $content = $file_manager->readFile($path);
-                    $this->success('File read', array('content' => $content, 'path' => $path));
+                    $result = $file_manager->readFile($path);
+                    $this->success('File read', array(
+                        'content' => $result['content'],
+                        'is_binary' => $result['is_binary'],
+                        'path' => $path
+                    ));
                     break;
 
                 case 'write':
                     $path = filter_input(INPUT_POST, 'path', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
                     $content = $_POST['content'] ?? '';
+                    $is_base64 = filter_input(INPUT_POST, 'is_base64', FILTER_VALIDATE_BOOLEAN) ?? false;
+
                     if (empty($path)) {
                         $this->error('Path is required');
                         return;
                     }
-                    $result = $file_manager->writeFile($path, $content);
+
+                    $result = $file_manager->writeFile($path, $content, $is_base64);
                     if ($result) {
                         $this->success('File saved', array('path' => $path));
                     } else {
@@ -721,6 +734,66 @@ class ApiController extends MainController
                         $this->success('File deleted', array('path' => $path));
                     } else {
                         $this->error('Failed to delete file');
+                    }
+                    break;
+
+                case 'zip':
+                    $path = filter_input(INPUT_POST, 'path', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+                    $destination = filter_input(INPUT_POST, 'destination', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+
+                    if (empty($path) || empty($destination)) {
+                        $this->error('Path and destination are required');
+                        return;
+                    }
+
+                    if ($file_manager->zipPath($path, $destination)) {
+                        $this->success('Zip created successfully');
+                    } else {
+                        $this->error('Failed to create zip file');
+                    }
+                    break;
+
+                case 'unzip':
+                    $path = filter_input(INPUT_POST, 'path', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+                    $destination = filter_input(INPUT_POST, 'destination', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+
+                    if (empty($path) || empty($destination)) {
+                        $this->error('Path and destination are required');
+                        return;
+                    }
+
+                    if ($file_manager->unzipFile($path, $destination)) {
+                        $this->success('File unzipped successfully');
+                    } else {
+                        $this->error('Failed to unzip file');
+                    }
+                    break;
+
+                case 'upload':
+                    $destination = filter_input(INPUT_POST, 'destination', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+                    if (empty($destination)) {
+                        $this->error('Destination is required');
+                        return;
+                    }
+
+                    if (!isset($_FILES['file'])) {
+                        $this->error('No file uploaded');
+                        return;
+                    }
+
+                    try {
+                        // Create directory if needed
+                        if (!is_dir($file_manager->validatePath($destination))) {
+                            $file_manager->createDirectory($destination);
+                        }
+
+                        $result = $file_manager->uploadFile($_FILES['file'], $destination . '/' . $_FILES['file']['name']);
+                        $this->success('File uploaded successfully', $result);
+                    } catch (Throwable $e) {
+                        // If it's a "File exists" error (from validatePath possibly returning existing path), we might need to handle overwrite? 
+                        // But validatePath doesn't error on exist.
+                        // Check if file exists, if so overwrite? FileManagerService uploadFile overwrites?
+                        $this->error($e->getMessage());
                     }
                     break;
 
@@ -1294,6 +1367,91 @@ class ApiController extends MainController
             }
         } catch (Throwable $e) {
             Logger::error('Error log error', ['action' => $action, 'error' => $e->getMessage()]);
+            $this->error($e->getMessage());
+        }
+    }
+    /**
+     * Handle database inspector operations
+     */
+    private function handle_database()
+    {
+        $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'tables';
+        $db_service = new DatabaseService();
+
+        try {
+            switch ($action) {
+                case 'tables':
+                    $tables = $db_service->getTables();
+                    $this->success('Tables retrieved', array('tables' => $tables));
+                    break;
+
+                case 'schema':
+                    $table = filter_input(INPUT_GET, 'table', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+                    if (empty($table)) {
+                        $this->error('Table name is required');
+                        return;
+                    }
+                    $schema = $db_service->getTableSchema($table);
+                    $this->success('Table schema retrieved', $schema);
+                    break;
+
+                case 'data':
+                    $table = filter_input(INPUT_GET, 'table', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+                    $limit = filter_input(INPUT_GET, 'limit', FILTER_SANITIZE_NUMBER_INT) ?: 50;
+                    $offset = filter_input(INPUT_GET, 'offset', FILTER_SANITIZE_NUMBER_INT) ?: 0;
+
+                    if (empty($table)) {
+                        $this->error('Table name is required');
+                        return;
+                    }
+
+                    $data = $db_service->getTableData($table, $limit, $offset);
+                    $this->success('Table data retrieved', $data);
+                    break;
+
+                case 'query':
+                    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                        $this->error('Method not allowed', 405);
+                        return;
+                    }
+                    $input = json_decode(file_get_contents('php://input'), true);
+                    $query = $input['query'] ?? '';
+                    if (empty($query)) {
+                        $this->error('Query is required');
+                        return;
+                    }
+                    $result = $db_service->executeQuery($query);
+                    $this->success('Query executed', $result);
+                    break;
+
+                default:
+                    $this->error('Invalid action');
+            }
+        } catch (Throwable $e) {
+            Logger::error('Database inspector error', ['action' => $action, 'error' => $e->getMessage()]);
+            $this->error($e->getMessage());
+        }
+    }
+    /**
+     * Handle malware scanner operations
+     */
+    private function handle_malware_scanner()
+    {
+        $action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?: 'scan';
+        $scanner = new MalwareScannerService();
+
+        try {
+            switch ($action) {
+                case 'scan':
+                    $results = $scanner->scan();
+                    $this->success('Scan completed', array('results' => $results));
+                    break;
+
+                default:
+                    $this->error('Invalid action');
+            }
+        } catch (Throwable $e) {
+            Logger::error('Malware scanner error', ['action' => $action, 'error' => $e->getMessage()]);
             $this->error($e->getMessage());
         }
     }

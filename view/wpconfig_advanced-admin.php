@@ -44,7 +44,8 @@
                                 </div>
                                 <?php if ($desc): ?>
                                     <div class="text-muted" style="font-size: var(--font-size-sm); margin-top: var(--space-xs);">
-                                        <?php echo htmlspecialchars($desc); ?></div>
+                                        <?php echo htmlspecialchars($desc); ?>
+                                    </div>
                                 <?php endif; ?>
 
                             <?php elseif ($type === 'bigtext' || $type === 'textarea'): ?>
@@ -54,7 +55,8 @@
                                     style="width: 100%; padding: var(--space-sm); background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text-main); font-family: monospace;"><?php echo htmlspecialchars($value); ?></textarea>
                                 <?php if ($desc): ?>
                                     <div class="text-muted" style="font-size: var(--font-size-sm); margin-top: var(--space-xs);">
-                                        <?php echo htmlspecialchars($desc); ?></div>
+                                        <?php echo htmlspecialchars($desc); ?>
+                                    </div>
                                 <?php endif; ?>
 
                             <?php else: ?>
@@ -65,7 +67,8 @@
                                     style="width: 100%; padding: var(--space-sm); background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text-main);">
                                 <?php if ($desc): ?>
                                     <div class="text-muted" style="font-size: var(--font-size-sm); margin-top: var(--space-xs);">
-                                        <?php echo htmlspecialchars($desc); ?></div>
+                                        <?php echo htmlspecialchars($desc); ?>
+                                    </div>
                                 <?php endif; ?>
                             <?php endif; ?>
 
@@ -81,6 +84,7 @@
                     <span class="material-symbols-outlined">save</span>
                     Save Configuration
                 </button>
+                <?php echo CSRFProtection::get_token_field('wpconfig_advanced'); ?>
             </div>
         </div>
     </form>

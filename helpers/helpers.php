@@ -178,13 +178,13 @@ class DashboardHelpers
 	}
 	/**
 	 * Archives all data from files list in one zip archive 
-	 * @param mixed $files list of files to be archived
-	 * @param string $destination path to zip file that will be created 
+	 * @param string $destination destination path for zip file
+	 * @param mixed $files list of files to be archived (optional, default empty)
 	 * @param string $sourcedir path of main directory where files are being stored 
 	 * 
 	 * @return boolean 
 	 */
-	public static function zip_data($files = '', $destination, $sourcedir = '')
+	public static function zip_data($destination, $files = '', $sourcedir = '')
 	{
 		if (extension_loaded('zip')) {
 			if (!empty($files)) {

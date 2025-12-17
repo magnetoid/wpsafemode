@@ -60,7 +60,9 @@
                                 'file-manager' => 'folder',
                                 'users' => 'people',
                                 'cron' => 'schedule',
-                                'database-query' => 'data_object'
+                                'database-query' => 'data_object',
+                                'database-inspector' => 'dataset',
+                                'malware-scanner' => 'security'
                             );
                             $icon = isset($iconMap[$slug]) ? $iconMap[$slug] : 'circle';
                             $isActive = (isset($data['current_page']) && $data['current_page'] == $slug);
@@ -131,6 +133,9 @@
                 </h1>
 
                 <div style="display: flex; gap: var(--space-md); align-items: center;">
+                    <button id="theme-toggle" class="btn btn-outline" style="padding: 4px 8px;" title="Toggle Theme">
+                        <span class="material-symbols-outlined" id="theme-icon">light_mode</span>
+                    </button>
                     <?php if (isset($data['login']) && $data['login'] == true): ?>
                         <a href="<?php echo DashboardHelpers::build_url('', array('view' => 'info', 'action' => 'logout')); ?>"
                             class="btn btn-outline">

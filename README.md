@@ -1,4 +1,4 @@
-# WP Safe Mode v1.0
+# WP Safe Mode v1.1
 
 A powerful, self-hosted administration and development tool for WordPress that helps you fix, manage, and optimize your WordPress site outside of WordPress itself.
 
@@ -302,7 +302,64 @@ WP Safe Mode includes comprehensive security features:
 
 ## 📝 Change Log
 
-### v1.0.1 (Current) - Code Quality & Refactoring
+### v1.1.0 (Current) - Advanced Recovery & Security
+**Released:** December 2025
+
+#### 🛡️ Advanced Security & Recovery
+- **Malware Scanner** (Signature Match)
+  - Scans `.php` files for suspicious functions (`eval`, `base64_decode`, `shell_exec`)
+  - Identifies known malware patterns (obfuscated code, backdoors)
+  - Displays severity levels (Critical, Warning, Info)
+  - Direct links to inspect suspicious files in File Manager
+  
+- **Emergency Admin Link** ("Magic Login")
+  - Generates a temporary, secure one-time login link
+  - Bypasses password requirements (useful if locked out or hacked)
+  - Uses secure token validation with expiration
+
+- **Database Inspector**
+  - Full table browser with pagination
+  - View table schema (columns, indexes)
+  - Execute custom SQL queries via API
+  - Integrated into new "Database Inspector" view
+  
+#### 🎨 UI/UX & System Health
+- **Dark Mode Support**
+  - Toggle between Light and Dark themes
+  - Persists preference via local storage
+  
+- **Enhanced System Health**
+  - **Database Insights**: Identifies largest tables and fragmented tables
+  - **Auto-Security Scan**: AI-powered security analysis integration
+  
+- **Secure Architecture**
+  - **Secure Backups**: Replaced `SELECT INTO OUTFILE` with PHP CSV generation (safer, works without FILE privilege)
+  - **CSRF Protection**: Extended to all AI and API endpoints
+  
+### v1.0.2 - Service Layer & Security
+**Released:** December 2025
+
+#### 🏗️ Architecture & Refactoring
+- **Service Layer Expansion**
+  - Created `ThemeService` to handle all theme-related operations
+  - Enhanced `PluginService` with complete plugin management capabilities
+  - Refactored `DashboardController` to use dependency injection for services
+  - Removed direct model dependencies from controller
+  - Improved separation of concerns
+
+- **Code Quality**
+  - Added strict type hints to `DashboardController` methods
+  - Added return type declarations (`: void`, `: bool`, `: array`)
+  - Fixed lint errors and improved code standards compliance
+  - Removed unnecessary serialization logic
+
+#### 🔒 Security Improvements
+- **CSRF Protection**
+  - Implemented CSRF token validation for all `DashboardController` actions
+  - Secured plugin and theme management forms
+  - Secured backup and settings operations
+
+### v1.0.1 - Code Quality & Refactoring
 **Released:** November 2025
 
 #### 🔧 Bug Fixes

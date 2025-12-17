@@ -60,7 +60,9 @@ include_once('services/SecurityScannerService.php');
 include_once('services/PerformanceProfilerService.php');
 include_once('services/MediaLibraryService.php');
 include_once('services/DatabaseOptimizerService.php');
+include_once('services/DatabaseOptimizerService.php');
 include_once('services/ErrorLogService.php');
+include_once('services/AuthService.php');
 
 // Load settings (for backward compatibility)
 include_once('settings.php');

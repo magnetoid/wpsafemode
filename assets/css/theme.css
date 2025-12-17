@@ -59,6 +59,29 @@
     --transition-normal: 250ms ease;
 }
 
+[data-theme="light"] {
+    --color-bg-app: #f6f8fa;
+    --color-bg-surface: #ffffff;
+    --color-bg-surface-hover: #f3f4f6;
+    
+    --color-primary: #0969da;
+    --color-primary-dim: rgba(9, 105, 218, 0.1);
+    --color-secondary: #8250df;
+    --color-accent: #1a7f37;
+    
+    --color-text-main: #24292f;
+    --color-text-muted: #57606a;
+    --color-text-dim: #6e7781;
+    
+    --color-border: #d0d7de;
+    --color-border-hover: #eaeef2;
+    
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.05);
+    --shadow-lg: 0 10px 15px rgba(0,0,0,0.05);
+    --shadow-glow: 0 0 10px rgba(9, 105, 218, 0.2);
+}
+
 /* Base Reset & Typography */
 * {
     box-sizing: border-box;

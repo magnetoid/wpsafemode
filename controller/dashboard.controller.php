@@ -11,6 +11,33 @@ class DashboardController extends MainController
 	protected $current_page;
 	protected $dirs;
 	public $dashboard_model;
+	protected $plugin_service;
+	protected $theme_service;
+
+	/**
+	 * Get server info
+	 * 
+	 * @return array
+	 */
+	public function get_server_info()
+	{
+		return array(
+			'php_version' => phpversion(),
+			'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'Unknown',
+			'server_ip' => $_SERVER['SERVER_ADDR'] ?? 'Unknown',
+			'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown',
+			'mysql_version' => $this->dashboard_model->get_mysql_version() ?? 'Unknown'
+		);
+	}
+
+	/**
+	 * Get current page
+	 * @return string|null
+	 */
+	public function get_current_page()
+	{
+		return $this->current_page;
+	}
 
 	/**
 	 * Constructor - initialize dashboard controller
@@ -21,6 +48,8 @@ class DashboardController extends MainController
 	{
 		parent::__construct();
 		$this->dashboard_model = new DashboardModel($this->config);
+		$this->plugin_service = new PluginService($this->dashboard_model);
+		$this->theme_service = new ThemeService($this->dashboard_model);
 		$this->init_data();
 		$this->actions();
 		$this->submit();
@@ -61,6 +90,7 @@ class DashboardController extends MainController
 			'autobackup' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
 			'download' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
 			'message' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
+			'generate_magic_link' => array(Constants::ACTION_TYPE_ACTION => 'generate_magic_link'),
 		);
 
 		foreach ($actions as $key => $action) {
@@ -89,7 +119,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void
 	 */
-	function action_message(): void
+	function set_message($message): void
 	{
 		$this->get_message();
 	}
@@ -144,7 +174,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view()
+	function view(): void
 	{
 
 
@@ -197,7 +227,7 @@ class DashboardController extends MainController
 
 		$pages['core_scan'] = array(
 			'slug' => 'core_scan',
-			'callback' => array($this, 'core_scan'),
+			'callback' => array($this, 'action_core_scan'),
 		);
 
 		$pages['global_settings'] = array(
@@ -260,7 +290,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_quick_actions()
+	function view_quick_actions(): void
 	{
 		//turn on off maintenance 
 		$check_maintenance = $this->action_check_maintenance(false);
@@ -268,7 +298,8 @@ class DashboardController extends MainController
 			'maintenance_enable' => array('action' => 'maintenance_enable', 'text' => 'Enable Maintenance Mode'),
 			'maintenance_disable' => array('action' => 'maintenance_disable', 'text' => 'Disable Maintenance Mode'),
 			'optimize_tables' => array('action' => 'optimize_tables', 'text' => 'Optimize Database Tables'),
-			'delete_revisions' => array('action' => 'delete_revisions', 'text' => 'Delete Post Revisions'),
+			'reset_active_plugins' => array('action' => 'reset_active_plugins', 'text' => 'Reset Active Plugins'),
+			'generate_magic_link' => array('action' => 'generate_magic_link', 'text' => 'Generate Magic Login Link'),
 			'delete_spam_comments' => array('action' => 'delete_spam_comments', 'text' => 'Delete All Spam Comments'),
 			'delete_unapproved_comments' => array('action' => 'delete_unapproved_comments', 'text' => 'Delete All Unapproved Comments'),
 			'core_scan' => array('action' => 'core_scan', 'text' => 'Scan WordPress Core'),
@@ -306,7 +337,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return
 	 */
-	function view_info()
+	function view_info(): void
 	{
 
 		if (!isset($this->data['info'])) {
@@ -327,7 +358,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_autobackup()
+	function view_autobackup(): void
 	{
 		$autobackup_settings_file = $this->settings['sfstore'] . 'autobackup_settings.json';
 		$default_settings = array(
@@ -383,15 +414,15 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_plugins()
+	function view_plugins(): void
 	{
 
 		$sfstore = $this->settings['sfstore'];
-		$this->data['plugins']['active_plugins'] = $this->dashboard_model->get_active_plugins();
+		$this->data['plugins']['active_plugins'] = $this->plugin_service->getActivePlugins();
 		$this->data['plugins']['all_plugins'] = $this->dashboard_model->scan_plugins_directory($this->wp_dir);
 
 		if (!file_exists($sfstore . 'active_plugins.txt')) {
-			$this->dashboard_model->backup_active_plugins_list();
+			$this->plugin_service->backupActivePluginsList();
 		}
 
 		$this->data['plugins']['active_plugins'] = unserialize($this->data['plugins']['active_plugins']['option_value']);
@@ -403,13 +434,13 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function submit_plugins()
+	function submit_plugins(): void
 	{
 		$rebuild_plugins_backup = filter_input(INPUT_POST, 'rebuild_plugins_backup');
 		$submit_plugins_action = filter_input(INPUT_POST, 'submit_plugins_action');
 
 		if (!empty($rebuild_plugins_backup) && $rebuild_plugins_backup == 'rebuild') {
-			$this->dashboard_model->backup_active_plugins_list();
+			$this->plugin_service->backupActivePluginsList();
 			$this->set_message('Plugins backup file has been rebuild');
 		}
 		if (!empty($submit_plugins_action) && $submit_plugins_action != 'revert') {
@@ -431,7 +462,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void
 	 */
-	function enable_all_plugins()
+	function enable_all_plugins(): void
 	{
 		$this->redirect('?view=' . $this->current_page);
 	}
@@ -441,9 +472,9 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function disable_all_plugins()
+	function disable_all_plugins(): void
 	{
-		$this->dashboard_model->disable_all_plugins();
+		$this->plugin_service->disableAll();
 		$this->redirect('?view=' . $this->current_page);
 	}
 
@@ -452,11 +483,10 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function enable_selected_plugins()
+	function enable_selected_plugins(): void
 	{
 		$selected_plugins = filter_input(INPUT_POST, 'plugins', FILTER_DEFAULT, FILTER_REQUIRE_ARRAY);
-		$selected_plugins = serialize($selected_plugins);
-		$this->dashboard_model->save_plugins($selected_plugins);
+		$this->plugin_service->savePlugins($selected_plugins);
 		$this->set_message('Selected plugins have been enabled');
 		$this->redirect('?view=' . $this->current_page);
 
@@ -468,11 +498,12 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function revert_plugins()
+	function revert_plugins(): void
 	{
 
 
-		$revert = $this->dashboard_model->save_revert_plugins();
+
+		$revert = $this->plugin_service->revertPlugins();
 
 		if ($revert) {
 			$this->set_message('Plugins reverted to initial state');
@@ -489,12 +520,12 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_themes()
+	function view_themes(): void
 	{
 
 		$sfstore = $this->config->get('sfstore');
-		$this->data['themes']['active_theme'] = $this->dashboard_model->get_active_themes();
-		$this->data['themes']['all_themes'] = $this->dashboard_model->get_all_themes($this->wp_dir);
+		$this->data['themes']['active_theme'] = $this->theme_service->getActiveTheme();
+		$this->data['themes']['all_themes'] = $this->theme_service->getAllThemes($this->wp_dir);
 
 		$this->render($this->view_url . 'themes', $this->data);
 	}
@@ -504,20 +535,20 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function submit_themes()
+	function submit_themes(): void
 	{
 		$set_active_theme = filter_input(INPUT_POST, 'active_theme');
 		$all_themes = $this->dashboard_model->get_all_themes($this->wp_dir);
 		if (!empty($set_active_theme) && $set_active_theme == 'downloadsafe') {
 
-			$this->dashboard_model->safemode_download_theme();
+			$this->theme_service->downloadSafeModeTheme();
 
 			$theme = array(
 				'template' => 'twentyfifteen',
 				'stylesheet' => 'twentyfifteen',
 				'current_theme' => 'twentyfifteen',
 			);
-			$this->dashboard_model->set_active_theme($theme);
+			$this->theme_service->setActiveTheme($theme);
 			$this->redirect('?view=' . $this->current_page);
 			return;
 		}
@@ -537,7 +568,7 @@ class DashboardController extends MainController
 						'current_theme' => $value['theme_name'],
 					);
 				}
-				$this->dashboard_model->set_active_theme($theme);
+				$this->theme_service->setActiveTheme($theme);
 				$this->redirect('?view=' . $this->current_page);
 				return;
 			}
@@ -550,7 +581,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_wpconfig()
+	function view_wpconfig(): void
 	{
 		$this->data['wpconfig']['config'] = $this->dashboard_model->get_wp_config();
 		$this->data['wpconfig']['array'] = $this->dashboard_model->get_wp_config_array();
@@ -562,7 +593,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_error_log()
+	function view_error_log(): void
 	{
 		$page = filter_input(INPUT_GET, 'page', FILTER_SANITIZE_NUMBER_INT) ?: 1;
 		$lines = filter_input(INPUT_GET, 'lines', FILTER_SANITIZE_NUMBER_INT) ?: 20;
@@ -605,7 +636,7 @@ class DashboardController extends MainController
 	/**
 	 * Download error log file
 	 */
-	function action_download_error_log()
+	function action_download_error_log(): void
 	{
 		$error_log_service = new ErrorLogService();
 		$path = $error_log_service->getErrorLogPath();
@@ -625,7 +656,7 @@ class DashboardController extends MainController
 	/**
 	 * Clear error log file
 	 */
-	function action_clear_error_log()
+	function action_clear_error_log(): void
 	{
 		// Add CSRF check here if not already handled globally
 
@@ -641,7 +672,7 @@ class DashboardController extends MainController
 	/**
 	 * Archive error log file
 	 */
-	function action_archive_error_log()
+	function action_archive_error_log(): void
 	{
 		$error_log_service = new ErrorLogService();
 		$archive_path = $error_log_service->archiveErrorLog();
@@ -657,7 +688,7 @@ class DashboardController extends MainController
 	/**
 	 * Enable error logging
 	 */
-	function action_enable_error_log()
+	function action_enable_error_log(): void
 	{
 		$error_log_service = new ErrorLogService();
 		if ($error_log_service->enable()) {
@@ -671,7 +702,7 @@ class DashboardController extends MainController
 	/**
 	 * Disable error logging
 	 */
-	function action_disable_error_log()
+	function action_disable_error_log(): void
 	{
 		$error_log_service = new ErrorLogService();
 		if ($error_log_service->disable()) {
@@ -685,7 +716,7 @@ class DashboardController extends MainController
 	/**
 	 * AI analyze error log
 	 */
-	function action_ai_analyze_error_log()
+	function action_ai_analyze_error_log(): void
 	{
 		try {
 			$ai_service = new AIService();
@@ -744,7 +775,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_wpconfig_advanced()
+	function view_wpconfig_advanced(): void
 	{
 		$this->data['wpconfig_options'] = $this->dashboard_model->get_wp_config_options();
 		$this->render($this->view_url . 'wpconfig_advanced', $this->data);
@@ -758,7 +789,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return array $wp_config_array updated with new value for given wp config option 
 	 */
-	function update_wp_config_value($wpconfig_option, $wpconfig_array)
+	function update_wp_config_value($wpconfig_option, $wpconfig_array): array
 	{
 
 		if ($wpconfig_option['value_type'] == 'boolean') {
@@ -833,8 +864,14 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function submit_wpconfig_advanced()
+	function submit_wpconfig_advanced(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('wpconfig_advanced')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 
 		$wpconfig_options = $this->dashboard_model->get_wp_config_options();
 		$wpconfig_array = $this->dashboard_model->get_wp_config_array();
@@ -880,8 +917,14 @@ class DashboardController extends MainController
 	 * @return void 
 	 * 
 	 */
-	function submit_wpconfig()
+	function submit_wpconfig(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('wpconfig')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 		$saveconfig = filter_input(INPUT_POST, 'saveconfig');
 		$wpdebug = filter_input(INPUT_POST, 'wpdebug');
 		$automatic_updater = filter_input(INPUT_POST, 'automatic_updater');
@@ -990,7 +1033,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function action_download()
+	function action_download(): void
 	{
 		// SECURITY FIX: Use InputValidator for sanitization
 		$download = InputValidator::getInput('download', INPUT_GET, 'string');
@@ -1074,7 +1117,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_backup_database()
+	function view_backup_database(): void
 	{
 
 		$this->data['tables'] = $this->dashboard_model->show_tables();
@@ -1087,7 +1130,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_backup_files()
+	function view_backup_files(): void
 	{
 		$this->data['backups'] = $this->dashboard_model->get_file_backups();
 		$this->render($this->view_url . 'files_backup', $this->data);
@@ -1099,7 +1142,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_robots()
+	function view_robots(): void
 	{
 		$robots_settings_file = $this->settings['sfstore'] . 'robots_revision_last.json';
 		$robots_settings = DashboardHelpers::get_data($robots_settings_file, true);
@@ -1152,11 +1195,16 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function submit_robots()
+	function submit_robots(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('robots')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 		$robots_action = filter_input(INPUT_POST, 'save_robots');
 		$file = $this->wp_dir . "robots.txt";
-		$robots_content = file_get_contents($file);
 		$robots_settings_file = $this->settings['sfstore'] . 'robots_revision_last.json';
 		$robots_settings = DashboardHelpers::get_data($robots_settings_file, true);
 		$string = "User-agent: *\nAllow: /";
@@ -1283,7 +1331,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function view_htaccess()
+	function view_htaccess(): void
 	{
 		$htaccess_settings_file = $this->settings['sfstore'] . 'htaccess_revision_last.json';
 		$htaccess_settings = DashboardHelpers::get_data($htaccess_settings_file, true);
@@ -1373,8 +1421,14 @@ class DashboardController extends MainController
 	 * 
 	 * @return void
 	 */
-	function submit_htaccess()
+	function submit_htaccess(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('htaccess')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 		$htaccess_action = filter_input(INPUT_POST, 'save_htaccess');
 
 		$file = $this->wp_dir . ".htaccess";
@@ -1705,8 +1759,14 @@ class DashboardController extends MainController
 	 * 
 	 * @return
 	 */
-	function submit_htaccess_to_revert()
+	function submit_htaccess_to_revert(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('htaccess_revert')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 		$htaccess_revert = filter_input(INPUT_POST, 'save_revert');
 		$dir = $this->settings['wp_dir'] . "htaccess.safemode.backup";
 		$htaccess_revision_json_last_filename = $this->settings['sfstore'] . 'htaccess_revision_last.json';
@@ -1726,8 +1786,14 @@ class DashboardController extends MainController
 	 * 
 	 * @return void
 	 */
-	function save_htaccess_backup()
+	function save_htaccess_backup(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('backup_files')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 		$save_backup = filter_input(INPUT_POST, 'save_htaccess_backup');
 		$file = $this->dashboard_model->htaccess_path;
 		$file_backup = $this->dashboard_model->htaccess_backup_path;
@@ -1742,8 +1808,14 @@ class DashboardController extends MainController
 	 * 
 	 * @return void
 	 */
-	function submit_backup_database()
+	function submit_backup_database(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('backup_database')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 
 		set_time_limit(0);
 		$backup_tables_list = filter_input(INPUT_POST, 'backup_tables_list', FILTER_DEFAULT, FILTER_REQUIRE_ARRAY);
@@ -1795,8 +1867,14 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function submit_backup_files()
+	function submit_backup_files(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('backup_files')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 		$this->backup_all_files();
 	}
 
@@ -1855,8 +1933,14 @@ class DashboardController extends MainController
 	 * 
 	 * @return array|void|mixed  
 	 */
-	function submit_search_replace()
+	function submit_search_replace(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('search_replace')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 		$allowed_criteria_term = array('contains', 'exact', 'any');
 		$allowed_criteria_db = array('full', 'partial');
 
@@ -1944,7 +2028,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return array set of data from $_SERVER along with description 
 	 */
-	function get_server_info()
+	function get_script_url(): string
 	{
 		$server_option = $this->dashboard_model->get_server_options();
 		return $server_option;
@@ -1955,13 +2039,21 @@ class DashboardController extends MainController
 	 * 
 	 * @return array 
 	 */
-	public function action_core_scan()
+	public function action_core_scan(): void
 	{
 		set_time_limit(0);
 		$time_start = microtime(true);
 		$versions = $this->dashboard_model->get_core_info();
 		if ($versions && isset($versions['wp_version'])) {
 			$wp_version = $versions['wp_version']['version'];
+
+			// SECURITY FIX: Validate wp_version format to prevent command injection or path traversal
+			if (!preg_match('/^[0-9]+\.[0-9]+(\.[0-9]+)?$/', $wp_version)) {
+				$this->set_message('Invalid WordPress version format');
+				$this->redirect();
+				return;
+			}
+
 			$remote_file = 'https://wordpress.org/wordpress-' . $wp_version . '.zip';
 
 			$local_file = $this->settings['sfstore'] . 'temp/wordpress-' . $wp_version . '.zip';
@@ -2044,7 +2136,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function action_autobackup()
+	function action_autobackup(): void
 	{
 		set_time_limit(0);
 		$default_interval = '6 hours';
@@ -2135,7 +2227,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function action_optimize_tables()
+	function action_optimize_tables(): void
 	{
 		$this->dashboard_model->optimize_tables();
 		$this->set_message('All database tables have been optimized');
@@ -2147,7 +2239,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function action_delete_revisions()
+	function action_delete_revisions(): void
 	{
 		$this->dashboard_model->delete_revisions();
 		$this->set_message('All post revisions have been removed');
@@ -2159,7 +2251,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function action_delete_spam_comments()
+	function action_delete_spam_comments(): void
 	{
 		$this->dashboard_model->delete_spam_comments();
 		$this->set_message('All spam comments have been removed');
@@ -2171,7 +2263,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return
 	 */
-	function action_delete_unapproved_comments()
+	function action_delete_unapproved_comments(): void
 	{
 		$this->dashboard_model->delete_unapproved_comments();
 		$this->set_message('All unapproved comments have been removed');
@@ -2206,8 +2298,14 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function submit_autobackup()
+	function submit_autobackup(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('autobackup')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 		$default_interval = '6 hours';
 		$submit_autobackup = filter_input(INPUT_POST, 'submit_autobackup');
 
@@ -2280,7 +2378,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return boolean depends on if maintenance is active or not 
 	 */
-	function action_check_maintenance($set_message = true)
+	function action_check_maintenance($redirect = true): bool
 	{
 
 
@@ -2288,7 +2386,7 @@ class DashboardController extends MainController
 
 		if (!empty($htaccess_content) && $htaccess_content) {
 			if (strstr($htaccess_content, 'WPSM-MAINTENANCE')) {
-				if ($set_message == true) {
+				if ($redirect == true) {
 					$this->set_message('Wordpress site is in maintenance mode. To disable it, go to Quick Actions.');
 				}
 
@@ -2307,7 +2405,7 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function action_maintenance()
+	function action_maintenance(): void
 	{
 
 		if (!empty($this->action)) {
@@ -2394,8 +2492,14 @@ class DashboardController extends MainController
 	 * 
 	 * @return void 
 	 */
-	function submit_site_url()
+	function submit_site_url(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('site_url')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 		$siteurl = filter_input(INPUT_POST, 'site_url');
 		$home = filter_input(INPUT_POST, 'home_url');
 
@@ -2413,7 +2517,7 @@ class DashboardController extends MainController
 	}
 
 
-	function create_robots_file()
+	function create_robots_file(): void
 	{
 		$file = $this->dashboard_model->settings['wp_dir'] . 'robots.txt';
 		$content = "User-agent: *\nDisallow: /";

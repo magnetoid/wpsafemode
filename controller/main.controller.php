@@ -658,6 +658,12 @@ class MainController
 	 */
 	function submit_global_settings(): void
 	{
+		// SECURITY FIX: Validate CSRF token
+		if (!CSRFProtection::validate_post_token('global_settings')) {
+			$this->set_message('Invalid CSRF token');
+			$this->redirect();
+			return;
+		}
 		$this->submit_login_settings();
 		$this->redirect();
 	}
@@ -669,6 +675,15 @@ class MainController
 	 */
 	function submit_login_settings(): void
 	{
+		// CSRF check is handled in submit_global_settings if called from there,
+		// but if called directly or we want double safety:
+		// However, since submit_global_settings calls this, we shouldn't double check 
+		// if the token is consumed (one-time use). 
+		// But CSRFProtection implementation uses expiration, not one-time use per se (unless we implemented it strictly).
+		// Looking at CSRFProtection.php, it checks expiration.
+		// So we can check here too, or rely on caller.
+		// Given the structure, submit_global_settings is the action entry point usually.
+
 		if (!isset($this->dashboard_model)) {
 			$this->set_message('Dashboard model not available');
 			return;

@@ -1,14 +1,14 @@
 <?php
 /**
 * 
-* WP Safe Mode v0.06 beta 
+* WP Safe Mode v1.1 
 * @author CloudIndustry - http://cloud-industry.com 
 * @author and contributors Nikola Kirincic, Marko Tiosavljevic, Daliborka Ciric, Luka Cvetinovic , Nikola Stojanovic
 * @see For more information about installation, usage, licensing and other notes see README 
   @author
 */
 
-define('WPSM',true);
+define('WPSM', true);
 
 // Start output buffering early for API routes to prevent any output before headers
 // Check for API routes (handles both root and subdirectory installations)
@@ -33,7 +33,8 @@ if (strpos($request_uri, '/ai/') !== false) {
     // Define API context
     define('WPSM_API', true);
     // Clear any buffered output
-    if (ob_get_level()) ob_clean();
+    if (ob_get_level())
+        ob_clean();
     include_once('controller/ai.controller.php');
     $ai = new AIController();
     $ai->handle();
@@ -48,11 +49,35 @@ if (strpos($request_uri, '/api/') !== false || $has_endpoint_param) {
         define('WPSM_API', true);
     }
     // Clear any buffered output
-    if (ob_get_level()) ob_clean();
+    if (ob_get_level())
+        ob_clean();
     include_once('controller/api.controller.php');
     $api = new ApiController();
     $api->handle();
     exit;
+
+}
+
+// Handle Magic Login
+$action = filter_input(INPUT_GET, 'action', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+if ($action === 'magic_login') {
+    $token = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+    if ($token) {
+        $auth = new AuthService();
+        $user_id = $auth->validateMagicLink($token);
+        if ($user_id) {
+            $redirect_url = $auth->loginUser($user_id);
+            if ($redirect_url) {
+                header('Location: ' . $redirect_url);
+                exit;
+            } else {
+                echo 'Failed to login user.';
+            }
+        } else {
+            echo 'Invalid or expired magic link.';
+        }
+        exit;
+    }
 }
 
 // Handle regular page requests - instantiate DashboardController

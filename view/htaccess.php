@@ -36,6 +36,8 @@
 				</div>
 				<input type='submit' class='btn btn-blue' name="save_htaccess" id="save_htaccess" value="Save .htaccess"> 
 				<input type='submit' class='btn btn-blue' name="save_revert" id="save_revert" value="Revert .htaccess"> 
+				<?php echo CSRFProtection::get_token_field('htaccess'); ?>
+				<?php echo CSRFProtection::get_token_field('htaccess_revert'); ?>
 			</form>
 				<?php else: ?>
 				<div class="columns text-left large-12">
@@ -50,6 +52,7 @@
 			<textarea placeholder=".htaccess content" rows="18" cols="5" name="htaccess_content" id="htaccess_content" disabled="disabled"><?php echo $file_open; ?></textarea></br>
 			<form method="post" action="">
 				<input type='submit' class='btn btn-blue' name="save_htaccess_backup" id="save_htaccess_backup" value="Save .htaccess backup"> 
+				<?php echo CSRFProtection::get_token_field('backup_files'); ?>
 			</form>
 		
 		</div>

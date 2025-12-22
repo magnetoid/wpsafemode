@@ -64,6 +64,16 @@ class DashboardModel extends dbModel
 		return $this->settings;
 	}
 
+	public function get_db_prefix()
+	{
+		return $this->db_prefix;
+	}
+
+	public function get_wp_dir()
+	{
+		return $this->wp_dir;
+	}
+
 	/**
 	 * Get database instance
 	 * @return DashboardModel

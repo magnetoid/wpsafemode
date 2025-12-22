@@ -790,10 +790,20 @@ class ApiController extends MainController
                         $result = $file_manager->uploadFile($_FILES['file'], $destination . '/' . $_FILES['file']['name']);
                         $this->success('File uploaded successfully', $result);
                     } catch (Throwable $e) {
-                        // If it's a "File exists" error (from validatePath possibly returning existing path), we might need to handle overwrite? 
-                        // But validatePath doesn't error on exist.
-                        // Check if file exists, if so overwrite? FileManagerService uploadFile overwrites?
                         $this->error($e->getMessage());
+                    }
+                    break;
+
+                case 'fix_permissions':
+                    $path = filter_input(INPUT_POST, 'path', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+                    if ($path === null)
+                        $path = ''; // Allow empty path for root
+
+                    try {
+                        $result = $file_manager->fixPermissions($path);
+                        $this->success('Permissions fixed', $result);
+                    } catch (Throwable $e) {
+                        $this->error('Failed to fix permissions: ' . $e->getMessage());
                     }
                     break;
 

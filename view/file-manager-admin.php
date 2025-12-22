@@ -41,6 +41,10 @@
                 <span class="material-symbols-outlined" style="margin-right: 8px; vertical-align: middle;">upload</span>
                 Upload
             </button>
+            <button class="md3-button md3-button-outlined" onclick="fixPermissions()" style="margin-left: 8px;">
+                <span class="material-symbols-outlined" style="margin-right: 8px; vertical-align: middle;">build</span>
+                Fix Permissions
+            </button>
         </div>
     </div>
 
@@ -422,6 +426,33 @@
                     refreshFiles();
                 } else {
                     WPSafeMode.Utils.showMessage(response.message || 'Failed to upload file', 'error');
+                }
+            })
+            .catch(error => {
+                WPSafeMode.Utils.showMessage('Error: ' + error.message, 'error');
+            })
+            .finally(() => {
+                WPSafeMode.Utils.showLoading(false);
+            });
+    }
+
+    function fixPermissions() {
+        const currentPath = '<?php echo htmlspecialchars($data['current_path'] ?? ''); ?>';
+        if (!confirm('Are you sure you want to fix permissions for this directory? This will set all directories to 0755 and files to 0644 recursively.')) {
+            return;
+        }
+
+        WPSafeMode.Utils.showLoading(true);
+        const formData = new FormData();
+        formData.append('path', currentPath);
+
+        WPSafeMode.API.post('/api/file-manager?action=fix_permissions', formData)
+            .then(response => {
+                if (response.success) {
+                    WPSafeMode.Utils.showMessage('Permissions fixed: ' + response.data.dirs + ' dirs, ' + response.data.files + ' files', 'success');
+                    refreshFiles();
+                } else {
+                    WPSafeMode.Utils.showMessage(response.message || 'Failed to fix permissions', 'error');
                 }
             })
             .catch(error => {

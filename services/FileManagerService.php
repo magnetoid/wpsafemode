@@ -372,6 +372,59 @@ class FileManagerService
         $bytes /= pow(1024, $pow);
         return round($bytes, 2) . ' ' . $units[$pow];
     }
+    /**
+     * Fix permissions for file or directory
+     * Directories: 0755, Files: 0644
+     * 
+     * @param string $path Path to fix
+     * @return array Result count of fixed items
+     */
+    public function fixPermissions(string $path): array
+    {
+        $full_path = $this->validatePath($path);
+        if (!$full_path) {
+            throw new InvalidArgumentException('Invalid path');
+        }
+
+        $count = ['dirs' => 0, 'files' => 0];
+
+        if (is_file($full_path)) {
+            if (chmod($full_path, 0644)) {
+                $count['files']++;
+            }
+            return $count;
+        }
+
+        // It's a directory
+        if (!is_dir($full_path)) {
+            throw new RuntimeException('Path not found');
+        }
+
+        // Fix the directory itself
+        if (chmod($full_path, 0755)) {
+            $count['dirs']++;
+        }
+
+        // Recursive fix
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($full_path, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+
+        foreach ($iterator as $item) {
+            if ($item->isDir()) {
+                if (chmod($item->getRealPath(), 0755)) {
+                    $count['dirs']++;
+                }
+            } else {
+                if (chmod($item->getRealPath(), 0644)) {
+                    $count['files']++;
+                }
+            }
+        }
+
+        return $count;
+    }
 }
 
 

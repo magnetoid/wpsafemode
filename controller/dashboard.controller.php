@@ -91,6 +91,8 @@ class DashboardController extends MainController
 			'download' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
 			'message' => array(Constants::ACTION_TYPE_AUTOLOAD => true),
 			'generate_magic_link' => array(Constants::ACTION_TYPE_ACTION => 'generate_magic_link'),
+			'flush_object_cache' => array(Constants::ACTION_TYPE_ACTION => 'flush_object_cache'),
+			'clean_transients' => array(Constants::ACTION_TYPE_ACTION => 'clean_transients'),
 		);
 
 		foreach ($actions as $key => $action) {
@@ -207,6 +209,10 @@ class DashboardController extends MainController
 		$pages['backup_database'] = array(
 			'slug' => 'backup_database',
 			'callback' => array($this, 'view_backup_database'),
+		);
+		$pages['database_optimizer'] = array(
+			'slug' => 'database_optimizer',
+			'callback' => array($this, 'view_database_optimizer'),
 		);
 		$pages['backup_files'] = array(
 			'slug' => 'backup_files',
@@ -330,6 +336,43 @@ class DashboardController extends MainController
 
 		$this->render('', $this->data);
 
+	}
+
+	/**
+	 * Renders database optimizer section
+	 */
+	function view_database_optimizer(): void
+	{
+		$cache = new CacheService($this->dashboard_model);
+		$this->data['cache_status'] = $cache->getCacheStatus();
+		$this->data['transient_stats'] = $cache->getTransientStats();
+
+		$this->render($this->view_url . 'database-optimizer', $this->data);
+	}
+
+	/**
+	 * Flush Object Cache
+	 */
+	function action_flush_object_cache(): void
+	{
+		$cache = new CacheService($this->dashboard_model);
+		if ($cache->flushCache()) {
+			$this->set_message('Object Cache flushed successfully.');
+		} else {
+			$this->set_message('Failed to flush Object Cache. WordPress might not be loadable or no persistent cache plugin active.');
+		}
+		$this->redirect('?view=database_optimizer');
+	}
+
+	/**
+	 * Clean Expired Transients
+	 */
+	function action_clean_transients(): void
+	{
+		$cache = new CacheService($this->dashboard_model);
+		$count = $cache->cleanExpiredTransients();
+		$this->set_message("Cleaned $count expired transients.");
+		$this->redirect('?view=database_optimizer');
 	}
 
 	/**

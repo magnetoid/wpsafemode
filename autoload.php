@@ -21,7 +21,6 @@ if (function_exists('session_status') && session_status() == PHP_SESSION_NONE) {
 if (!file_exists('settings.php')) {
 	if (!file_exists('settings.sample.php')) {
 		die('settings.sample.php missing. Please download new WP Safe Mode');
-		return;
 	}
 	$file_contents = file_get_contents('settings.sample.php');
 	file_put_contents('settings.php', $file_contents);
@@ -60,9 +59,9 @@ include_once('services/SecurityScannerService.php');
 include_once('services/PerformanceProfilerService.php');
 include_once('services/MediaLibraryService.php');
 include_once('services/DatabaseOptimizerService.php');
-include_once('services/DatabaseOptimizerService.php');
 include_once('services/ErrorLogService.php');
 include_once('services/AuthService.php');
+include_once('services/CacheService.php');
 
 // Load settings (for backward compatibility)
 include_once('settings.php');

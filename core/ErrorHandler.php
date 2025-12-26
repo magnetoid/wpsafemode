@@ -258,7 +258,7 @@ class ErrorHandler
             E_USER_ERROR => 'PHP User Error',
             E_USER_WARNING => 'PHP User Warning',
             E_USER_NOTICE => 'PHP User Notice',
-            E_STRICT => 'PHP Strict Standards',
+            2048 => 'PHP Strict Standards',
             E_RECOVERABLE_ERROR => 'PHP Recoverable Error',
             E_DEPRECATED => 'PHP Deprecated',
             E_USER_DEPRECATED => 'PHP User Deprecated',
@@ -279,7 +279,7 @@ class ErrorHandler
             return 'CRITICAL';
         } elseif (in_array($errno, [E_WARNING, E_CORE_WARNING, E_COMPILE_WARNING, E_USER_WARNING, E_RECOVERABLE_ERROR])) {
             return 'ERROR';
-        } elseif (in_array($errno, [E_NOTICE, E_USER_NOTICE, E_STRICT, E_DEPRECATED, E_USER_DEPRECATED])) {
+        } elseif (in_array($errno, [E_NOTICE, E_USER_NOTICE, 2048, E_DEPRECATED, E_USER_DEPRECATED])) {
             return 'WARNING';
         }
         return 'INFO';

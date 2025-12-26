@@ -190,6 +190,7 @@ class HtaccessService
         $htaccess_maintenance .= '</IfModule>' . "\n";
         $htaccess_maintenance .= '# END WPSM-MAINTENANCE' . "\n";
 
-        file_put_contents($this->wp_dir . '.htaccess', $htaccess_content . $htaccess_maintenance);
+        // Prepend logic: maintenance rules + existing content
+        file_put_contents($this->wp_dir . '.htaccess', $htaccess_maintenance . $htaccess_content);
     }
 }

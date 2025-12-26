@@ -62,6 +62,14 @@ include_once('services/DatabaseOptimizerService.php');
 include_once('services/ErrorLogService.php');
 include_once('services/AuthService.php');
 include_once('services/CacheService.php');
+include_once('services/PluginService.php');
+include_once('services/ThemeService.php');
+include_once('services/WpConfigService.php');
+include_once('services/HtaccessService.php');
+include_once('services/AIService.php');
+include_once('services/BackupService.php');
+include_once('services/DatabaseService.php');
+include_once('services/MalwareScannerService.php');
 
 // Load settings (for backward compatibility)
 include_once('settings.php');

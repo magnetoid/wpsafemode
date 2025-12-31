@@ -25,8 +25,8 @@
                 Deselect All
             </button>
             <button type="submit" name="submit_plugins_action" value="activate" class="btn btn-primary">
-                <span class="material-symbols-outlined">check_circle</span>
-                Activate Selected
+                <span class="material-symbols-outlined">save</span>
+                Save Changes
             </button>
             <button type="submit" name="submit_plugins_action" value="disable_all_plugins" class="btn" style="background-color: var(--color-danger); color: white;">
                 <span class="material-symbols-outlined">cancel</span>

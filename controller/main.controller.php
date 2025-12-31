@@ -33,7 +33,7 @@ class MainController
 		$this->settings = $this->config->all();
 		$this->base_path = rtrim($this->settings[Constants::SETTING_SAFEMODE_DIR] ?? dirname(__DIR__), '/\\') . '/';
 		$this->view_url = rtrim($this->settings[Constants::SETTING_VIEW_URL] ?? Constants::DEFAULT_VIEW_URL, '/\\') . '/';
-		$this->wp_dir = $this->settings[Constants::SETTING_WP_DIR] ?? '';
+		$this->wp_dir = rtrim($this->settings[Constants::SETTING_WP_DIR] ?? '', '/\\') . '/';
 		$this->wp_config_path = $this->wp_dir . Constants::WP_CONFIG_FILE;
 		$sfstore = $this->settings[Constants::SETTING_SFSTORE] ?? '';
 		$this->wp_config_backup_path = $sfstore . Constants::WP_CONFIG_BACKUP_SUFFIX;

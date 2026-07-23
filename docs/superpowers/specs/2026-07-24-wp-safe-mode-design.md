@@ -102,7 +102,7 @@ ship in v1**. Rescue never uses Tier W by design, and Doctor is fully served by 
 and database access. Building either the sandboxed `wp-load.php` HTTP endpoint or the REST
 + application-password path would add significant M2 work, an extra onboarding step a
 locked-out user cannot complete, and — in the loader case — the single most dangerous file
-in the ZIP. The `Tier` enum and adapter interface still exist so v2 can fill it in.
+in the ZIP. The `Tier` type and adapter interface still exist so v2 can fill it in.
 
 ### 3.5 Frontend: Preact + Tailwind, compiled to static files
 
@@ -423,7 +423,10 @@ interface Tool
 
 Supporting types:
 
-- `Tier` — enum: `Filesystem`, `Database`, `WordPress`, `Exec`.
+- `Tier` — `final class` exposing `public const` members `FILESYSTEM`, `DATABASE`,
+  `WORDPRESS`, `EXEC`. **Not a PHP enum:** enums are PHP 8.1 and our floor is 8.0 (§2).
+  The same rule applies to every other closed set in the codebase — session status,
+  step kind, approval decision.
 - `SnapshotPlan` — named constructors: `renameRecord()`, `fileCopy()`, `dbRows()`,
   `dbTable()`. Carries an estimated byte size for the disk precheck.
 - `Plan` — `summary`, `changes[]`, `rollback`, `tier`, `risk`.

@@ -1,0 +1,23 @@
+# Runtime data — NEVER commit. Contains the encrypted API key, the master
+# secret, session state, and site snapshots.
+data/
+src/data/
+
+# Build + dependency artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+vendor/
+*.zip
+
+# Local environment
+.env
+.env.*
+!.env.example
+docker/playground/.wp-data/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

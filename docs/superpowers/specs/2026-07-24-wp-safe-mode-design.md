@@ -243,6 +243,17 @@ their schemas — **the model's tool calls are untrusted input**. Validation is 
 where possible: a plugin `slug` is checked against an actual directory listing rather than
 a regex, which makes path traversal impossible by construction rather than by filtering.
 
+**SQL identifiers are whitelisted, not escaped.** Table names, column names, and
+`wp_options` option names cannot be parameter-bound — only *values* can. Every Tier D tool
+that touches an identifier (`switch_theme_db`, `fix_siteurl`, `disable_all_plugins_db`,
+`reset_user_password`, `analyze_db_health`) resolves it against a fixed allowlist, or
+against the live result of `SHOW TABLES`, before it reaches a query. Values are always
+bound with `bindValue()`. This is the single most repeated finding in v1.1's
+`SECURITY_PATCH_PLAN.md` — table names interpolated into `SHOW TABLE STATUS`, option
+values concatenated into `UPDATE … SET option_value = '…'`, and an unvalidated path in
+`SELECT … INTO OUTFILE` — and every one of those is reachable again from a tool handler
+that takes a string from the model.
+
 ### 5.7 No credentials to the model
 
 Tools receive logical parameters only. Handlers resolve paths and credentials server-side
@@ -690,9 +701,16 @@ On any other model this falls back to a marked block inside a user turn.
 
 ### 10.3 Token budgeting
 
-- `read_debug_log` caps the raw read at 64KB / 400 lines and returns head **and** tail with
-  an explicit `[… N lines omitted …]` marker. Fatal errors cluster at the tail, but the
-  *first* occurrence is what identifies the culprit, so both ends must survive truncation.
+- `read_debug_log` **must seek backward from EOF** (`fseek` with a negative offset, or
+  `SplFileObject::seek`) and never read the whole file. This is a hard requirement, not an
+  optimisation: v1.1's `ErrorLogService::readLogFile()` does `file_get_contents()` on the
+  entire log and then `preg_split` on the result — roughly twice the file size resident. A
+  site stuck in a fatal-error loop produces a `debug.log` of hundreds of megabytes, so on a
+  128MB shared host the log viewer fataled on exactly the sites that needed it (see §15).
+  A cap implemented by reading everything and then trimming is the same bug.
+  Having seeked, cap at 64KB / 400 lines and return head **and** tail with an explicit
+  `[… N lines omitted …]` marker: fatal errors cluster at the tail, but the *first*
+  occurrence is what identifies the culprit, so both ends must survive truncation.
 - Every `ToolResult` carries `truncated` and `bytesTotal`, so the model knows it is looking
   at a fragment and can request a narrower slice.
 - A per-session token ceiling with a running counter in the UI. Reaching it stops the
@@ -811,7 +829,100 @@ Work proceeds in order. Small commits, conventional commit messages.
 
 ---
 
-## 15. Known risks
+## 15. Lessons carried forward from v1.1
+
+WP Safe Mode v1.1 lives on `main` in this repository: ~175 files, an MVC-ish PHP codebase
+with 21 services, last released 2025-12-31. It is the direct predecessor and the best
+available evidence about this problem domain. What it teaches:
+
+### 15.1 The data directory *will* be web-readable unless proven otherwise
+
+v1.1 stores its state in `sfstore/`: `global_settings.json` (the API key),
+`wpsm_login.json` (username, email, bcrypt password hash), and
+`wp-config-safemode-backup.php` (a copy of wp-config, therefore database credentials).
+
+Its only protection is `sfstore/index.php`, whose entire contents are:
+
+```php
+<?php
+//mighty bush 
+?>
+```
+
+That prevents directory *listing*. It does nothing for sibling files. There is no
+`.htaccess` in `sfstore/` and none at the document root — `htaccess.safemode.backup` is an
+empty file. Both Apache and nginx serve a `.json` as a static file without ever invoking
+PHP, so on a deployed install `GET /<install-dir>/sfstore/global_settings.json` discloses
+the API key in plaintext.
+
+**This is the motivating evidence for §5.4.** The web-accessibility self-test — write a
+canary into `data/`, fetch our own URL over cURL, refuse to store the API key while it is
+reachable — was specified as a defence against a hypothetical. It is not hypothetical: it
+is the failure that shipped. The self-test is a launch blocker for M1, not a nice-to-have,
+and it must run on every login as well as at install, because a host migration or a
+control-panel change can silently remove protection later.
+
+Corollary for v1: no file under `data/` may have an extension the web server will serve
+as a static asset. State files are `.php` with a leading `die()` guard, or they live
+outside the document root where the host permits it.
+
+### 15.2 Read logs by seeking, never by loading
+
+`ErrorLogService::readLogFile()` reads the whole log with `file_get_contents()` and then
+`preg_split`s it. See §10.3 — this fatals on the sites that most need the feature.
+
+### 15.3 Identifiers are the recurring SQL injection vector
+
+`SECURITY_PATCH_PLAN.md` is 465 lines of real, found-in-production vulnerabilities. The
+pattern that repeats is not unbound *values* — it is interpolated *identifiers*. See §5.6.
+
+### 15.4 The v1.1 AI is a different species, and validates our scope
+
+`services/AIService.php` calls OpenAI `gpt-4` with eight fixed one-shot prompts:
+`analyze_error_log`, `detect_conflicts`, `security_analysis`, `performance_optimization`,
+`chat`, `explain_error`, `suggest_code`. No tool calling, no loop, no agency — it explains
+problems while the human performs every fix.
+
+There is therefore no code to port: different provider, different paradigm. But those eight
+endpoints are strong evidence of what users actually wanted, and they map almost one-to-one
+onto the Doctor blade in §8.2. **The leap from v1.1 to v2 is not "better AI" — it is an
+agent that can act, behind the safety contract in §6.** That framing belongs in the
+product copy as much as in the architecture.
+
+### 15.5 Tier W is where the sharpest edges live
+
+`services/AuthService.php` is not the login system; it is a WordPress magic-link
+auto-login (`generateMagicLink` → `getFirstAdmin` → `loginUser`) — a token that signs the
+bearer into wp-admin as the first administrator. That is Tier W by nature and it is the
+most dangerous capability in the codebase. Deciding Tier W is probe-only in v1 (§3.4)
+sidesteps it entirely.
+
+### 15.6 The services map onto our tool registry
+
+v1.1's 21 services correspond closely to the 21 tools in §8.2 — `WpConfigService`,
+`ErrorLogService`, `PluginService`, `ThemeService`, `DatabaseService`, `BackupService`,
+`SystemHealthService`, `PerformanceProfilerService`, `DatabaseOptimizerService`. They are
+not code to copy: no `strict_types`, and coupled to a `DashboardModel` we are not carrying
+forward. They *are* proven approaches to the fiddly parts, and each should be read before
+its M4 counterpart is written.
+
+### 15.7 Do not accumulate status documents
+
+The v1.1 root holds 21 markdown files — `REFACTORING_COMPLETE.md`, `MODULES_COMPLETE.md`,
+`ENHANCEMENTS_COMPLETE.md`, `COMPREHENSIVE_DEBUG_FIXES.md` and so on — roughly 4,500 lines
+of progress reports, the residue of several AI-assisted refactor passes that produced
+documentation instead of consolidation. v2 keeps design documents in
+`docs/superpowers/specs/` and lets git history carry the narrative.
+
+### 15.8 Unverified
+
+No `password_verify()` call was located anywhere in v1.1 during this review;
+`get_login()` / `set_login()` in `model/dashboard.model.php` are plain JSON I/O and the
+comparison path was not traced. Recorded as unchecked, not as a defect.
+
+---
+
+## 16. Known risks
 
 **The first-run funnel, not the rescue flow, is where users will be lost.** A site owner in
 a panic almost certainly does not have an Anthropic API key. This is a direct consequence

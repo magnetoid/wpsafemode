@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens from docs/design/2026-07-31-visual-language.md — values lifted
+ * from the round-1 mockups, not invented. Tailwind v4 derives the utilities
+ * from these variables, so `--color-ink` gives `text-ink`, `bg-ink` and so on.
+ */
+@theme {
+  --color-ink: #17252a;
+  --color-ink-muted: #5c6b6a;
+  --color-ink-faint: #8a9490;
+
+  --color-surface: #faf8f3;
+  --color-surface-sunken: #f4f1ea;
+  --color-surface-raised: #ece8dd;
+
+  --color-edge: #e5e0d5;
+  --color-edge-strong: #cfc9ba;
+
+  --color-green: #0e7a5c;
+  --color-green-hover: #0e6b4f;
+  --color-green-active: #0b644c;
+  --color-green-light: #178a5e;
+  --color-green-accent: #37c08f;
+  --color-green-soft: #7bd4b4;
+
+  --color-danger: #d64541;
+  --color-danger-deep: #a63528;
+  --color-warn: #c98a1b;
+  --color-warn-deep: #8f5f0d;
+
+  --radius-card: 14px;
+  --radius-panel: 10px;
+
+  --shadow-card: 0 10px 24px -14px rgb(23 37 42 / 0.25);
+  --shadow-raised: 0 14px 30px -18px rgb(23 37 42 / 0.25);
+
+  /*
+   * No @font-face and no CDN link on purpose. This UI is opened when a site is
+   * already down, so it must render with zero external requests (see the design
+   * doc, section 2). The named families are used when the machine happens to
+   * have them; otherwise the stack falls through to system faces. Self-hosted
+   * woff2 files get added here when they are bundled.
+   */
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}

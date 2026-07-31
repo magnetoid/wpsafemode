@@ -1,0 +1,24 @@
+# Excluded from the distributable plugin folder.
+# The repo root IS the plugin, so development files live alongside it and are
+# stripped when packaging.
+
+.git
+.github
+.gitignore
+.distignore
+.wp-env.json
+.wp-env.override.json
+composer.json
+composer.lock
+composer.phar
+package.json
+package-lock.json
+node_modules
+phpunit.xml
+phpcs.xml
+tests
+admin/src
+vendor/bin
+.phpunit.result.cache
+.phpcs.cache
+.DS_Store

@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<phpunit
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+	bootstrap="tests/bootstrap.php"
+	colors="true"
+	beStrictAboutTestsThatDoNotTestAnything="true"
+	failOnWarning="true"
+	failOnRisky="true"
+>
+	<testsuites>
+		<!--
+			Runs with nothing but PHP and PHPUnit: no database, no WordPress
+			install, no container. These cover path containment, syntax
+			checking and snapshot integrity — the parts where a bug is a
+			security bug rather than an inconvenience.
+		-->
+		<testsuite name="safety-chain">
+			<directory suffix="Test.php">tests</directory>
+		</testsuite>
+	</testsuites>
+
+	<coverage>
+		<include>
+			<directory suffix=".php">src/Files</directory>
+			<directory suffix=".php">src/Snapshots</directory>
+			<directory suffix=".php">src/Db</directory>
+		</include>
+	</coverage>
+</phpunit>

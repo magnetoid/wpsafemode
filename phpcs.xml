@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<ruleset name="WP Safe Mode AI Toolkit">
+	<description>WordPress coding standards, with the deviations this plugin actually needs.</description>
+
+	<file>.</file>
+
+	<exclude-pattern>/vendor/*</exclude-pattern>
+	<exclude-pattern>/node_modules/*</exclude-pattern>
+	<exclude-pattern>/admin/build/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="colors"/>
+	<arg value="ps"/>
+
+	<config name="minimum_supported_wp_version" value="6.0"/>
+	<config name="testVersion" value="8.1-"/>
+
+	<rule ref="WordPress">
+		<!--
+			Nonces are not the mechanism here. Every route authenticates via the
+			REST cookie nonce or an application password and then checks the
+			wpsm_manage capability, which the sniff cannot see.
+		-->
+		<exclude name="WordPress.Security.NonceVerification"/>
+
+		<!--
+			This plugin's whole job is direct filesystem and database work.
+			Writer goes through WP_Filesystem where the host allows it and falls
+			back deliberately; the drop-ins run before WordPress exists and have
+			no other option.
+		-->
+		<exclude name="WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents"/>
+		<exclude name="WordPress.WP.AlternativeFunctions.file_system_operations_fopen"/>
+		<exclude name="WordPress.WP.AlternativeFunctions.unlink_unlink"/>
+		<exclude name="WordPress.DB.DirectDatabaseQuery"/>
+
+		<!-- Short array syntax, deliberately. -->
+		<exclude name="Generic.Arrays.DisallowShortArraySyntax"/>
+	</rule>
+
+	<!--
+		The drop-ins are copied outside the plugin and load before anything else,
+		so they follow older conventions on purpose: array() syntax, no scalar
+		type hints, no namespaces.
+	-->
+	<rule ref="WordPress.Files.FileName">
+		<exclude-pattern>/mu-loader/*</exclude-pattern>
+	</rule>
+
+	<rule ref="WordPress.WP.GlobalVariablesOverride">
+		<exclude-pattern>/tests/*</exclude-pattern>
+	</rule>
+
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="wpsm"/>
+				<element value="WPSM"/>
+			</property>
+		</properties>
+	</rule>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="wp-safe-mode-ai"/>
+			</property>
+		</properties>
+	</rule>
+</ruleset>

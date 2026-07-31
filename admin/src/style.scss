@@ -1,0 +1,463 @@
+/**
+ * Toolkit admin styles.
+ *
+ * Sits inside wp-admin, so it borrows core's spacing and colour conventions
+ * rather than introducing a second visual language. The one place it deviates
+ * is the diff and the proposal card — those need to read like a code review,
+ * not like a settings form.
+ */
+
+.wpsm {
+	--wpsm-border: #dcdcde;
+	--wpsm-muted: #646970;
+	--wpsm-add: #00a32a;
+	--wpsm-del: #d63638;
+	--wpsm-warn: #dba617;
+
+	max-width: 1100px;
+	margin-top: 1rem;
+}
+
+.wpsm-loading,
+.wpsm-fatal {
+	padding: 2rem 0;
+	color: var(--wpsm-muted, #646970);
+
+	pre {
+		white-space: pre-wrap;
+		background: #f6f7f7;
+		padding: 1rem;
+		border-radius: 4px;
+	}
+}
+
+/* ---------------------------------------------------------------- Status */
+
+.wpsm-status {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1rem;
+	padding-bottom: 1rem;
+	border-bottom: 1px solid var(--wpsm-border);
+
+	h1 {
+		margin: 0;
+		font-size: 1.5rem;
+	}
+}
+
+.wpsm-status-site {
+	margin: 0.25rem 0 0;
+	color: var(--wpsm-muted);
+}
+
+.wpsm-status-flags {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.wpsm-pill {
+	display: inline-block;
+	padding: 0.15rem 0.6rem;
+	border-radius: 999px;
+	font-size: 0.8125rem;
+	line-height: 1.6;
+	background: #f0f0f1;
+	color: #1d2327;
+
+	&.wpsm-pill-safe {
+		background: #f0f6fc;
+		color: #0a4b78;
+		box-shadow: inset 0 0 0 1px #72aee6;
+	}
+
+	&.wpsm-pill-live {
+		background: #edfaef;
+		color: #00450c;
+	}
+
+	&.wpsm-pill-warn {
+		background: #fcf9e8;
+		color: #614200;
+		box-shadow: inset 0 0 0 1px var(--wpsm-warn);
+	}
+
+	&.wpsm-pill-ok {
+		background: #edfaef;
+		color: #00450c;
+	}
+
+	&.wpsm-pill-muted {
+		color: var(--wpsm-muted);
+	}
+}
+
+/* ------------------------------------------------------------------ Tabs */
+
+.wpsm-tabs {
+	display: flex;
+	gap: 0.25rem;
+	margin: 1rem 0 0;
+	border-bottom: 1px solid var(--wpsm-border);
+}
+
+.wpsm-tab {
+	appearance: none;
+	background: none;
+	border: 1px solid transparent;
+	border-bottom: none;
+	padding: 0.6rem 1rem;
+	cursor: pointer;
+	font-size: 0.9375rem;
+	color: var(--wpsm-muted);
+	border-radius: 4px 4px 0 0;
+
+	&.is-active {
+		background: #fff;
+		border-color: var(--wpsm-border);
+		color: #1d2327;
+		font-weight: 600;
+		margin-bottom: -1px;
+	}
+}
+
+.wpsm-badge {
+	display: inline-block;
+	margin-left: 0.4rem;
+	padding: 0 0.4rem;
+	border-radius: 999px;
+	background: #d63638;
+	color: #fff;
+	font-size: 0.75rem;
+}
+
+.wpsm-panel {
+	background: #fff;
+	border: 1px solid var(--wpsm-border);
+	border-top: none;
+	padding: 1.5rem;
+}
+
+/* ------------------------------------------------------------- Messaging */
+
+.wpsm-empty {
+	padding: 2rem 0;
+	max-width: 46rem;
+
+	h2 {
+		margin-top: 0;
+	}
+}
+
+.wpsm-hint {
+	color: var(--wpsm-muted);
+	font-size: 0.875rem;
+}
+
+.wpsm-error,
+.wpsm-notice {
+	padding: 0.75rem 1rem;
+	border-radius: 4px;
+	margin: 1rem 0;
+}
+
+.wpsm-error {
+	background: #fcf0f1;
+	border-left: 4px solid var(--wpsm-del);
+}
+
+.wpsm-notice {
+	background: #f0f6fc;
+	border-left: 4px solid #72aee6;
+}
+
+.wpsm-callout {
+	background: #f6f7f7;
+	border-left: 4px solid #72aee6;
+	padding: 0.75rem 1rem;
+	margin-bottom: 1.5rem;
+
+	p {
+		margin: 0;
+	}
+}
+
+.wpsm-ok {
+	color: var(--wpsm-add);
+}
+
+.wpsm-bad {
+	color: var(--wpsm-del);
+}
+
+/* ------------------------------------------------------------------ Chat */
+
+.wpsm-chat {
+	display: flex;
+	flex-direction: column;
+	min-height: 60vh;
+}
+
+.wpsm-transcript {
+	flex: 1;
+	overflow-y: auto;
+	max-height: 60vh;
+	padding-right: 0.5rem;
+}
+
+.wpsm-message {
+	margin-bottom: 1.25rem;
+
+	p {
+		margin: 0 0 0.75rem;
+	}
+}
+
+.wpsm-message-user {
+	background: #f6f7f7;
+	padding: 0.75rem 1rem;
+	border-radius: 6px;
+	white-space: pre-wrap;
+}
+
+.wpsm-message-tool details {
+	font-size: 0.8125rem;
+	color: var(--wpsm-muted);
+
+	summary {
+		cursor: pointer;
+	}
+
+	pre {
+		max-height: 18rem;
+		overflow: auto;
+		background: #f6f7f7;
+		padding: 0.75rem;
+		border-radius: 4px;
+	}
+
+	&.is-error summary {
+		color: var(--wpsm-del);
+	}
+}
+
+.wpsm-tool-use {
+	display: flex;
+	gap: 0.5rem;
+	align-items: baseline;
+	font-size: 0.8125rem;
+	color: var(--wpsm-muted);
+	margin: 0.25rem 0;
+
+	code {
+		background: #f0f0f1;
+	}
+}
+
+.wpsm-target {
+	font-family: Menlo, Consolas, monospace;
+}
+
+.wpsm-thinking {
+	color: var(--wpsm-muted);
+	font-style: italic;
+	padding: 0.5rem 0;
+}
+
+.wpsm-composer {
+	border-top: 1px solid var(--wpsm-border);
+	padding-top: 1rem;
+	margin-top: 1rem;
+
+	textarea {
+		width: 100%;
+		font-size: 0.9375rem;
+	}
+}
+
+.wpsm-composer-actions {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	margin-top: 0.5rem;
+}
+
+/* -------------------------------------------------------------- Proposal */
+
+.wpsm-proposal {
+	border: 2px solid #72aee6;
+	border-radius: 6px;
+	padding: 1rem 1.25rem;
+	margin: 1rem 0;
+	background: #fff;
+
+	&.is-blocked {
+		border-color: var(--wpsm-del);
+	}
+}
+
+.wpsm-proposal-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 1rem;
+
+	h3 {
+		margin: 0;
+	}
+}
+
+.wpsm-proposal-id {
+	font-size: 0.75rem;
+	color: var(--wpsm-muted);
+}
+
+.wpsm-proposal-reason {
+	font-style: italic;
+	color: #1d2327;
+}
+
+.wpsm-proposal-actions {
+	display: flex;
+	gap: 0.75rem;
+	margin-top: 1rem;
+}
+
+.wpsm-facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+	gap: 0.75rem 1.5rem;
+	margin: 1rem 0;
+
+	dt {
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		color: var(--wpsm-muted);
+	}
+
+	dd {
+		margin: 0.15rem 0 0;
+	}
+}
+
+.wpsm-file-list {
+	margin: 0.5rem 0 0 1.25rem;
+	list-style: disc;
+}
+
+/* ------------------------------------------------------------------ Diff */
+
+.wpsm-diff {
+	margin: 1rem 0;
+	border: 1px solid var(--wpsm-border);
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.wpsm-diff-summary {
+	display: flex;
+	gap: 1rem;
+	align-items: center;
+	padding: 0.5rem 0.75rem;
+	background: #f6f7f7;
+	border-bottom: 1px solid var(--wpsm-border);
+	font-size: 0.8125rem;
+}
+
+.wpsm-diff-added {
+	color: var(--wpsm-add);
+	font-weight: 600;
+}
+
+.wpsm-diff-removed {
+	color: var(--wpsm-del);
+	font-weight: 600;
+}
+
+.wpsm-diff-body {
+	margin: 0;
+	padding: 0;
+	max-height: 28rem;
+	overflow: auto;
+	font-family: Menlo, Consolas, monospace;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+}
+
+.wpsm-diff-line {
+	padding: 0 0.75rem;
+	white-space: pre;
+
+	&.is-add {
+		background: #eaf7ee;
+	}
+
+	&.is-del {
+		background: #fdeced;
+	}
+
+	&.is-hunk {
+		background: #f0f0f1;
+		color: var(--wpsm-muted);
+	}
+
+	&.is-meta {
+		color: var(--wpsm-muted);
+	}
+}
+
+/* -------------------------------------------------------------- Settings */
+
+.wpsm-settings section {
+	padding: 1.25rem 0;
+	border-bottom: 1px solid var(--wpsm-border);
+
+	&:last-child {
+		border-bottom: none;
+	}
+
+	h2 {
+		margin-top: 0;
+		font-size: 1.125rem;
+	}
+
+	textarea {
+		width: 100%;
+	}
+}
+
+.wpsm-toggle {
+	margin-bottom: 1rem;
+
+	.wpsm-hint {
+		margin: 0.25rem 0 0 1.75rem;
+	}
+}
+
+/* ------------------------------------------------------------- Safe mode */
+
+.wpsm-plugin-list {
+	columns: 2;
+	margin: 1rem 0;
+
+	li {
+		break-inside: avoid;
+		margin-bottom: 0.35rem;
+	}
+}
+
+.wpsm-preset-row {
+	display: flex;
+	gap: 0.5rem;
+}
+
+/* ------------------------------------------------------- Changes / table */
+
+.wpsm-changes table {
+	margin-top: 1rem;
+}

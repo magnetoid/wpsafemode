@@ -40,18 +40,13 @@ parameters:
 
     treatPhpDocTypesAsCertain: false
 
-    # TEMPORARY — expires when M0 Task 5 lands.
+    # No ignoreErrors. Tasks 3–5 needed a temporary pair of them, because
+    # Storage.php referenced SessionRepo and MessageLog before those interfaces
+    # existed — valid at runtime, since PHP resolves interface names lazily, but
+    # PHPStan resolves eagerly and disagreed.
     #
-    # Storage.php is created in Task 3 but returns SessionRepo and MessageLog,
-    # which Tasks 4 and 5 create. PHP resolves interface names lazily, so this
-    # is valid at runtime and the plan is correct to order it this way; PHPStan
-    # resolves eagerly and disagrees.
-    #
-    # reportUnmatchedIgnoredErrors defaults to true, so the moment those two
-    # interfaces exist these patterns stop matching and PHPStan fails on the
-    # stale ignore. The reminder to delete this block is therefore automatic
-    # rather than a note someone has to remember — and it worked: Task 4
-    # created SessionRepo, PHPStan failed on the now-unmatched sessions()
-    # pattern, and that line was deleted here. Task 5 retires what remains.
-    ignoreErrors:
-        - '#Method WPSafeMode\\Storage\\Contracts\\Storage::messages\(\) has invalid return type WPSafeMode\\Storage\\Contracts\\MessageLog\.#'
+    # Both were written to expire on their own: reportUnmatchedIgnoredErrors
+    # defaults to true, so each pattern stopped matching the moment its
+    # interface landed and failed the build until the line was deleted. Task 4
+    # retired the first, Task 5 the second. Keep it that way — an ignore here
+    # should always carry the condition that makes it fail once it is obsolete.

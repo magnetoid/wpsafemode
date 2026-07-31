@@ -6,8 +6,10 @@ namespace WPSafeMode\Tests\Storage;
 
 use PHPUnit\Framework\TestCase;
 use WPSafeMode\Storage\Contracts\ConfigStore;
+use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
+use WPSafeMode\Storage\Message;
 use WPSafeMode\Storage\Session;
 
 /**
@@ -22,6 +24,8 @@ abstract class StorageConformanceTest extends TestCase
     abstract protected function makeConfigStore(string $dataDir): ConfigStore;
 
     abstract protected function makeSessionRepo(string $dataDir): SessionRepo;
+
+    abstract protected function makeMessageLog(string $dataDir): MessageLog;
 
     protected function setUp(): void
     {
@@ -213,5 +217,58 @@ abstract class StorageConformanceTest extends TestCase
         $repo->delete('sesn_1');
 
         self::assertNull($repo->find('sesn_1'));
+    }
+
+    public function testAppendAssignsSequentialSeqStartingAtOne(): void
+    {
+        $log = $this->makeMessageLog($this->dataDir);
+
+        self::assertSame(1, $log->append('sesn_1', Message::ROLE_USER, [['type' => 'text', 'text' => 'hi']]));
+        self::assertSame(2, $log->append('sesn_1', Message::ROLE_ASSISTANT, [['type' => 'text', 'text' => 'hello']]));
+    }
+
+    public function testSeqIsPerSessionNotGlobal(): void
+    {
+        $log = $this->makeMessageLog($this->dataDir);
+        $log->append('sesn_a', Message::ROLE_USER, [['type' => 'text', 'text' => 'a']]);
+
+        self::assertSame(1, $log->append('sesn_b', Message::ROLE_USER, [['type' => 'text', 'text' => 'b']]));
+    }
+
+    public function testAllYieldsMessagesInSeqOrderWithContentIntact(): void
+    {
+        $log = $this->makeMessageLog($this->dataDir);
+
+        $toolUse = [[
+            'type'  => 'tool_use',
+            'id'    => 'toolu_01',
+            'name'  => 'read_debug_log',
+            'input' => ['lines' => 400, 'note' => "multi\nline \"quoted\""],
+        ]];
+
+        $log->append('sesn_1', Message::ROLE_USER, [['type' => 'text', 'text' => 'diagnose']]);
+        $log->append('sesn_1', Message::ROLE_ASSISTANT, $toolUse, 'msg_abc');
+
+        $messages = iterator_to_array($this->makeMessageLog($this->dataDir)->all('sesn_1'), false);
+
+        self::assertCount(2, $messages);
+        self::assertSame(1, $messages[0]->seq);
+        self::assertSame(2, $messages[1]->seq);
+        self::assertSame($toolUse, $messages[1]->content, 'Content blocks must round-trip verbatim');
+        self::assertSame('msg_abc', $messages[1]->apiMessageId);
+    }
+
+    public function testAllIsEmptyForUnknownSession(): void
+    {
+        self::assertSame([], iterator_to_array($this->makeMessageLog($this->dataDir)->all('ghost'), false));
+    }
+
+    public function testCountTracksAppends(): void
+    {
+        $log = $this->makeMessageLog($this->dataDir);
+        self::assertSame(0, $log->count('sesn_1'));
+
+        $log->append('sesn_1', Message::ROLE_USER, [['type' => 'text', 'text' => 'x']]);
+        self::assertSame(1, $log->count('sesn_1'));
     }
 }

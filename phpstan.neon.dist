@@ -50,7 +50,8 @@ parameters:
     # reportUnmatchedIgnoredErrors defaults to true, so the moment those two
     # interfaces exist these patterns stop matching and PHPStan fails on the
     # stale ignore. The reminder to delete this block is therefore automatic
-    # rather than a note someone has to remember.
+    # rather than a note someone has to remember — and it worked: Task 4
+    # created SessionRepo, PHPStan failed on the now-unmatched sessions()
+    # pattern, and that line was deleted here. Task 5 retires what remains.
     ignoreErrors:
-        - '#Method WPSafeMode\\Storage\\Contracts\\Storage::sessions\(\) has invalid return type WPSafeMode\\Storage\\Contracts\\SessionRepo\.#'
         - '#Method WPSafeMode\\Storage\\Contracts\\Storage::messages\(\) has invalid return type WPSafeMode\\Storage\\Contracts\\MessageLog\.#'

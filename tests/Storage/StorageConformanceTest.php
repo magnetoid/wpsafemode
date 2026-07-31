@@ -6,6 +6,9 @@ namespace WPSafeMode\Tests\Storage;
 
 use PHPUnit\Framework\TestCase;
 use WPSafeMode\Storage\Contracts\ConfigStore;
+use WPSafeMode\Storage\Contracts\SessionRepo;
+use WPSafeMode\Storage\Contracts\StorageException;
+use WPSafeMode\Storage\Session;
 
 /**
  * One suite, two backends. Every assertion here must hold identically for
@@ -17,6 +20,8 @@ abstract class StorageConformanceTest extends TestCase
     protected string $dataDir;
 
     abstract protected function makeConfigStore(string $dataDir): ConfigStore;
+
+    abstract protected function makeSessionRepo(string $dataDir): SessionRepo;
 
     protected function setUp(): void
     {
@@ -121,5 +126,92 @@ abstract class StorageConformanceTest extends TestCase
         $store->set('nasty', $nasty);
 
         self::assertSame($nasty, $this->makeConfigStore($this->dataDir)->get('nasty'));
+    }
+
+    private function sampleSession(string $id = 'sesn_1', int $createdAt = 1000): Session
+    {
+        return new Session(
+            id:        $id,
+            title:     'White screen on example.com',
+            blade:     Session::BLADE_RESCUE,
+            status:    Session::STATUS_IDLE,
+            model:     'claude-opus-4-8',
+            effort:    'high',
+            createdAt: $createdAt,
+            updatedAt: $createdAt,
+        );
+    }
+
+    public function testFindReturnsNullForUnknownSession(): void
+    {
+        self::assertNull($this->makeSessionRepo($this->dataDir)->find('nope'));
+    }
+
+    public function testCreateThenFindRoundTripsEveryField(): void
+    {
+        $repo = $this->makeSessionRepo($this->dataDir);
+        $repo->create($this->sampleSession());
+
+        $found = $this->makeSessionRepo($this->dataDir)->find('sesn_1');
+
+        self::assertNotNull($found);
+        self::assertSame($this->sampleSession()->toRow(), $found->toRow());
+    }
+
+    public function testCreateRejectsDuplicateId(): void
+    {
+        $repo = $this->makeSessionRepo($this->dataDir);
+        $repo->create($this->sampleSession());
+
+        $this->expectException(StorageException::class);
+        $repo->create($this->sampleSession());
+    }
+
+    public function testUpdatePersistsChangedFields(): void
+    {
+        $repo = $this->makeSessionRepo($this->dataDir);
+        $repo->create($this->sampleSession());
+
+        $changed = $this->sampleSession();
+        $changed->status = Session::STATUS_AWAITING_LLM;
+        $changed->inTokens = 4096;
+        $changed->lockToken = 'tok_abc';
+        $repo->update($changed);
+
+        $found = $this->makeSessionRepo($this->dataDir)->find('sesn_1');
+
+        self::assertNotNull($found);
+        self::assertSame(Session::STATUS_AWAITING_LLM, $found->status);
+        self::assertSame(4096, $found->inTokens);
+        self::assertSame('tok_abc', $found->lockToken);
+    }
+
+    public function testUpdateRejectsUnknownSession(): void
+    {
+        $this->expectException(StorageException::class);
+        $this->makeSessionRepo($this->dataDir)->update($this->sampleSession('ghost'));
+    }
+
+    public function testListReturnsNewestFirstAndHonoursLimit(): void
+    {
+        $repo = $this->makeSessionRepo($this->dataDir);
+        $repo->create($this->sampleSession('sesn_a', 1000));
+        $repo->create($this->sampleSession('sesn_b', 3000));
+        $repo->create($this->sampleSession('sesn_c', 2000));
+
+        $ids = array_map(static fn (Session $s): string => $s->id, $repo->list());
+        self::assertSame(['sesn_b', 'sesn_c', 'sesn_a'], $ids);
+
+        self::assertCount(2, $repo->list(2));
+    }
+
+    public function testDeleteRemovesSessionAndIsIdempotent(): void
+    {
+        $repo = $this->makeSessionRepo($this->dataDir);
+        $repo->create($this->sampleSession());
+        $repo->delete('sesn_1');
+        $repo->delete('sesn_1');
+
+        self::assertNull($repo->find('sesn_1'));
     }
 }

@@ -21,3 +21,9 @@ docker/playground/.wp-data/
 .idea/
 .vscode/
 *.swp
+
+# v2 dev tooling
+composer.phar
+.phpunit.result.cache
+phpstan.neon
+phpunit.xml

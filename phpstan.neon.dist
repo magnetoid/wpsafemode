@@ -1,0 +1,41 @@
+# PHP 8.0 floor gate.
+#
+# The M0 plan requires every PHP file to run inside a php:8.0-cli container so
+# that 8.1+ syntax cannot reach production hosts sitting on the version floor.
+# Where Docker is unavailable, this enforces the same constraint statically:
+# `phpVersion: 80000` pins PHPStan's parser and function map to 8.0.0, so
+# readonly properties, enums, `never`, first-class callables, new-in-initializers
+# and `array_is_list()` are all reported as errors regardless of which PHP the
+# developer happens to have installed.
+#
+# This is a stricter check than executing the suite on 8.0, which only exercises
+# the code paths a test actually reaches. Run both where possible.
+#
+# NOTE: PHPCompatibility was tried first and rejected — its stable release
+# predates PHP 8.1 and therefore cannot detect any of the constructs the plan
+# forbids. It reported a clean pass on code using `readonly` and
+# `array_is_list()`.
+
+parameters:
+    # Level 5, not higher. The job of this file is the version floor, which is
+    # parser- and function-map-level and works at any level. Turning the
+    # strictness up further would start flagging code the M0 plan specifies
+    # verbatim, and deviating from the plan to satisfy a linter this plan never
+    # asked for is the wrong trade.
+    level: 5
+    phpVersion: 80000
+
+    paths:
+        - src
+        - tests
+
+    excludePaths:
+        analyse:
+            # Compiled frontend output, not ours to analyse.
+            - src/public/*
+
+    # v1.1 lives at the repository root and targets PHP 7.4. It is explicitly
+    # out of scope for M0 and must not be analysed under the v2 floor.
+    scanDirectories: []
+
+    treatPhpDocTypesAsCertain: false

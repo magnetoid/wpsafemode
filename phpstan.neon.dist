@@ -39,3 +39,18 @@ parameters:
     scanDirectories: []
 
     treatPhpDocTypesAsCertain: false
+
+    # TEMPORARY — expires when M0 Task 5 lands.
+    #
+    # Storage.php is created in Task 3 but returns SessionRepo and MessageLog,
+    # which Tasks 4 and 5 create. PHP resolves interface names lazily, so this
+    # is valid at runtime and the plan is correct to order it this way; PHPStan
+    # resolves eagerly and disagrees.
+    #
+    # reportUnmatchedIgnoredErrors defaults to true, so the moment those two
+    # interfaces exist these patterns stop matching and PHPStan fails on the
+    # stale ignore. The reminder to delete this block is therefore automatic
+    # rather than a note someone has to remember.
+    ignoreErrors:
+        - '#Method WPSafeMode\\Storage\\Contracts\\Storage::sessions\(\) has invalid return type WPSafeMode\\Storage\\Contracts\\SessionRepo\.#'
+        - '#Method WPSafeMode\\Storage\\Contracts\\Storage::messages\(\) has invalid return type WPSafeMode\\Storage\\Contracts\\MessageLog\.#'

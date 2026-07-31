@@ -1,0 +1,17 @@
+<?php
+
+declare(strict_types=1);
+
+namespace WPSafeMode\Storage\Contracts;
+
+interface Storage
+{
+    public function config(): ConfigStore;
+
+    public function sessions(): SessionRepo;
+
+    public function messages(): MessageLog;
+
+    /** Either 'sqlite' or 'json'. */
+    public function backend(): string;
+}

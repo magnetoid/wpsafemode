@@ -18,6 +18,9 @@ Every task's requirements implicitly include this section.
 - **`data/` is never committed.** It is already in `.gitignore`.
 - **No absolute server path may reach the browser or the model** (spec §5.7). `EnvironmentReport::toArray()` already omits `wpRoot`; every new response follows the same rule.
 - **No file under `data/` may carry an extension a web server will serve as a static asset** (spec §15.1 corollary). This overrides the `.json`/`.jsonl` filenames drawn in spec §7.2 — see Task 1.
+- **Every `json_encode` whose output lands in a `.php` file sets `JSON_HEX_TAG`.** State files are named `.php` so the server executes them, which means payload bytes are code if they are ever reached. `json_encode` does not escape `<` or `?` by default, so model- and user-supplied content can carry a literal `<?php`. Found by review during Task 1, where it combined with a guard-placement bug into remote code execution.
+- **Fail closed on anything that classifies a file as safe.** `DataDir::isServableExtension()` returns false only for extensions the server *executes*; every unrecognised extension is treated as servable. A denylist of "risky" extensions silently blesses the next one nobody thought of.
+- **A guard decision is made from a locked file handle, never from a pre-`fopen()` snapshot.** `fopen(..., 'ab')` itself creates the file, and `ftell()` on an append stream returns 0 regardless of size, so "is this file new" is only answerable via `fstat()` under `LOCK_EX`.
 - **Commit after every task**, conventional commit messages, small commits.
 - **Run `vendor/bin/phpstan analyse --no-progress` and `vendor/bin/phpunit` before every commit.** Where Docker is available, `make test` is the reference; `make check-host` is the fallback.
 

@@ -1659,6 +1659,29 @@ final class RateLimitState
     {
         return $this->isLocked($now) ? (int) $this->lockedUntil - $now : 0;
     }
+
+    /**
+     * This state as it should be read at $now, with an elapsed window or a
+     * released lock already forgotten.
+     *
+     * It lives on the value object rather than in either backend so the two
+     * implementations cannot drift: the conformance suite would catch a
+     * divergence, but only after it had already shipped in one backend.
+     */
+    public function afterExpiry(int $now, int $windowSeconds): self
+    {
+        if ($this->isLocked($now)) {
+            return $this;
+        }
+
+        if ($now - $this->windowStart >= $windowSeconds) {
+            return new self(0, $now, null);
+        }
+
+        // The window is still open, but an expired lock must not keep counting
+        // against the user, or one lockout would become permanent.
+        return $this->lockedUntil !== null ? new self(0, $now, null) : $this;
+    }
 }
 ```
 
@@ -1890,24 +1913,7 @@ final class SqliteRateLimiter implements RateLimiter
             $row['locked_until'] === null ? null : (int) $row['locked_until']
         );
 
-        return self::expire($state, $now);
-    }
-
-    public static function expire(RateLimitState $state, int $now): RateLimitState
-    {
-        if ($state->isLocked($now)) {
-            return $state;
-        }
-
-        if ($now - $state->windowStart >= RateLimiter::WINDOW_SECONDS) {
-            return new RateLimitState(0, $now, null);
-        }
-
-        // The window is still open but an expired lock must not keep counting
-        // against the user, or one lockout would become permanent.
-        return $state->lockedUntil !== null
-            ? new RateLimitState(0, $now, null)
-            : $state;
+        return $state->afterExpiry($now, self::WINDOW_SECONDS);
     }
 }
 ```
@@ -1924,7 +1930,6 @@ namespace WPSafeMode\Storage\Json;
 use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\RateLimitState;
-use WPSafeMode\Storage\Sqlite\SqliteRateLimiter;
 
 final class JsonRateLimiter implements RateLimiter
 {
@@ -1967,10 +1972,7 @@ final class JsonRateLimiter implements RateLimiter
             isset($row['locked_until']) && $row['locked_until'] !== null ? (int) $row['locked_until'] : null
         );
 
-        // Shared with the SQLite implementation so the two cannot drift: the
-        // conformance suite would catch a divergence, but only after it shipped
-        // in one backend and not the other.
-        return SqliteRateLimiter::expire($state, $now);
+        return $state->afterExpiry($now, self::WINDOW_SECONDS);
     }
 
     public function clear(string $bucket): void

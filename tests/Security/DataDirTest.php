@@ -205,6 +205,32 @@ final class DataDirTest extends TestCase
         }
     }
 
+    // --- review round 2 (task 2 findings) ---
+
+    public function testEnsureSweepsStaleTempFilesButLeavesFreshOnesAlone(): void
+    {
+        // Task 2's IMPORTANT 4: a fatal, timeout, or OOM between
+        // GuardedJson::write()'s file_put_contents() and its rename()
+        // leaves a *.tmp.<hex> file holding a full, UNGUARDED copy of
+        // whatever was being written — for KeyVault, the master secret
+        // itself — at an extension isServableExtension() already
+        // classifies as servable. ensure() runs on every guarded write, so
+        // it is where this gets swept.
+        DataDir::ensure($this->dir);
+
+        $stale = $this->dir . '/keyvault.php.tmp.' . bin2hex(random_bytes(4));
+        file_put_contents($stale, 'leftover master secret payload');
+        touch($stale, time() - 301);
+
+        $fresh = $this->dir . '/keyvault.php.tmp.' . bin2hex(random_bytes(4));
+        file_put_contents($fresh, 'a concurrent write may still own this file');
+
+        DataDir::ensure($this->dir);
+
+        self::assertFileDoesNotExist($stale, 'a temp file older than the threshold must be swept');
+        self::assertFileExists($fresh, 'a temp file young enough to belong to an in-flight write must survive');
+    }
+
     /** @return list<string> */
     private function filesUnder(string $dir): array
     {

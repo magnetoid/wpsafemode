@@ -57,6 +57,13 @@ final class DataDir
      */
     private const EXECUTABLE = ['php', 'phtml', 'php4', 'php5', 'php7', 'php8'];
 
+    /**
+     * How long a *.tmp.* file (GuardedJson's atomic-write naming
+     * convention) is left alone before ensure() treats it as abandoned
+     * rather than belonging to a write still in flight.
+     */
+    private const STALE_TEMP_FILE_AGE_SECONDS = 300;
+
     public static function ensure(string $dir): void
     {
         if (!is_dir($dir) && !@mkdir($dir, 0700, true) && !is_dir($dir)) {
@@ -80,6 +87,48 @@ final class DataDir
                 }
 
                 @chmod($path, 0600);
+            }
+        }
+
+        self::sweepStaleTempFiles($dir);
+    }
+
+    /**
+     * Removes leftover *.tmp.* files older than a few minutes. A fatal,
+     * timeout, or OOM between GuardedJson::write()'s file_put_contents()
+     * and its rename() leaves one of these behind holding a full,
+     * UNGUARDED copy of whatever was being written — for KeyVault, the
+     * master secret itself, in plaintext base64 — at a filename extension
+     * isServableExtension() already classifies as servable, since it does
+     * not end in .php. That turns the "partial disclosure" threat model
+     * KeyVault's docblock names (a leaked backup, a directory listing, a
+     * misconfigured data/ on nginx) into total vault compromise on exactly
+     * that misconfigured host.
+     *
+     * Age-gated rather than swept on sight: a concurrent write's temp file
+     * is legitimately present for the brief window between its own
+     * creation and its rename, and removing it out from under that write
+     * would turn a healthy request into a failed one. Every genuine
+     * leftover was orphaned by a request that already ended, so it is
+     * still here minutes later — nothing real is lost by waiting.
+     */
+    private static function sweepStaleTempFiles(string $dir): void
+    {
+        $cutoff = time() - self::STALE_TEMP_FILE_AGE_SECONDS;
+
+        foreach (scandir($dir) ?: [] as $entry) {
+            // Matches GuardedJson::write()'s '.tmp.' . bin2hex(random_bytes(4))
+            // suffix precisely, so this cannot sweep a differently-named
+            // file that merely happens to contain the substring '.tmp.'.
+            if (!preg_match('/\.tmp\.[0-9a-f]{8}$/', $entry)) {
+                continue;
+            }
+
+            $path = $dir . '/' . $entry;
+            $modified = @filemtime($path);
+
+            if (is_file($path) && $modified !== false && $modified < $cutoff) {
+                @unlink($path);
             }
         }
     }

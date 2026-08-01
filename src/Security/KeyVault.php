@@ -112,14 +112,34 @@ final class KeyVault
             }
 
             if ($parts[1] === 'openssl' && count($parts) === 5) {
-                $plain = openssl_decrypt(
-                    self::decode($parts[4]),
-                    'aes-256-gcm',
-                    $key,
-                    OPENSSL_RAW_DATA,
-                    self::decode($parts[2]),
-                    self::decode($parts[3])
-                );
+                $iv = self::decode($parts[2]);
+                $tag = self::decode($parts[3]);
+
+                // openssl_decrypt() takes no tag-length parameter of its
+                // own: it trusts strlen($tag) and hands exactly that many
+                // bytes to EVP_CTRL_AEAD_SET_TAG, which OpenSSL accepts for
+                // any length from 1 to 16 and then verifies only that many
+                // bytes against the computed tag. Verified empirically: a
+                // GENUINE one-byte prefix of a real tag authenticates and
+                // returns the correct plaintext, so an envelope carrying a
+                // forged 1-byte tag succeeds with probability 1/256 per
+                // attempt instead of 2^-128 — the standard route to
+                // recovering the GHASH subkey via repeated short-tag
+                // forgery. Pinned here rather than left to the library.
+                //
+                // The IV is not a security boundary the same way — a
+                // wrong-length IV just makes the computed tag disagree with
+                // the caller's, so openssl_decrypt() returns false rather
+                // than silently authenticating — but a zero-length IV
+                // specifically makes it emit a raw E_WARNING ("Setting of
+                // IV length for AEAD mode failed") before returning false,
+                // and src/ never disables display_errors. Both lengths are
+                // pinned before either can reach openssl_decrypt().
+                if (strlen($tag) !== 16 || strlen($iv) !== 12) {
+                    throw new StorageException('Could not decrypt: wrong key or tampered value.');
+                }
+
+                $plain = openssl_decrypt(self::decode($parts[4]), 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
 
                 if ($plain === false) {
                     throw new StorageException('Could not decrypt: wrong key or tampered value.');
@@ -153,25 +173,64 @@ final class KeyVault
     private function masterSecret(): string
     {
         $path = $this->dataDir . '/' . self::SECRET_FILE;
-        $stored = GuardedJson::read($path);
 
-        if (isset($stored['secret']) && is_string($stored['secret'])) {
-            $secret = base64_decode($stored['secret'], true);
-
-            if ($secret !== false && strlen($secret) === self::SECRET_BYTES) {
-                return $secret;
-            }
-
-            throw new StorageException('The key vault is corrupt; the stored master secret is unusable.');
+        if (is_file($path)) {
+            return $this->readStoredSecret($path);
         }
 
         DataDir::ensure($this->dataDir);
 
-        $secret = random_bytes(self::SECRET_BYTES);
-        GuardedJson::write($path, ['secret' => base64_encode($secret), 'created_at' => time()]);
-        @chmod($path, 0600);
+        return $this->createMasterSecret($path);
+    }
 
-        return $secret;
+    /**
+     * The file already exists, so whatever is in it is the ONLY acceptable
+     * secret. GuardedJson::read() returns [] not just for a missing file
+     * but also for a zero-length file, a guard-only file with an empty
+     * payload, and a JSON document that decodes to a non-array — treating
+     * any of those the same as "missing" and minting a replacement would
+     * silently and permanently orphan an API key already encrypted under
+     * whatever this file used to hold, surfacing later as "wrong key or
+     * tampered value" — the message for an attack, not for "your master
+     * secret was regenerated". A file that exists but does not yield a
+     * usable secret is corruption, never an invitation to overwrite it.
+     */
+    private function readStoredSecret(string $path): string
+    {
+        $stored = GuardedJson::read($path);
+        $secret = isset($stored['secret']) && is_string($stored['secret'])
+            ? base64_decode($stored['secret'], true)
+            : false;
+
+        if ($secret !== false && strlen($secret) === self::SECRET_BYTES) {
+            return $secret;
+        }
+
+        throw new StorageException('The key vault is corrupt; the stored master secret is unusable.');
+    }
+
+    /**
+     * Mints a secret and persists it exclusively. GuardedJson::write() is
+     * atomic per write (temp + rename) but has no create-exclusive
+     * semantics, so two requests that both reach masterSecret() and both
+     * find no file yet — a double-submitted install form, a browser
+     * prefetch, two open tabs — would otherwise both rename over each
+     * other, and whichever lost would silently persist an envelope under a
+     * secret nothing on disk still holds. createExclusive()'s
+     * O_CREAT|O_EXCL means only one caller can ever win that; losing is not
+     * an error here, it means a concurrent request's secret, not this
+     * one's, is what every caller must converge on, so the loser just reads
+     * what the winner wrote.
+     */
+    private function createMasterSecret(string $path): string
+    {
+        $secret = random_bytes(self::SECRET_BYTES);
+
+        if (GuardedJson::createExclusive($path, ['secret' => base64_encode($secret), 'created_at' => time()])) {
+            return $secret;
+        }
+
+        return $this->readStoredSecret($path);
     }
 
     private static function decode(string $segment): string

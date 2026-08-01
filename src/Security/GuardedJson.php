@@ -54,18 +54,8 @@ final class GuardedJson
     {
         DataDir::ensure(dirname($path));
 
-        try {
-            $json = json_encode(
-                $data,
-                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-                    | JSON_THROW_ON_ERROR | JSON_HEX_TAG
-            );
-        } catch (JsonException $e) {
-            throw new StorageException('Cannot encode state file: ' . basename($path), 0, $e);
-        }
-
+        $payload = DataDir::GUARD . self::encode($path, $data);
         $tmp = $path . '.tmp.' . bin2hex(random_bytes(4));
-        $payload = DataDir::GUARD . $json;
 
         // Checked against strlen(), not just !== false: a disk-full write
         // returns a short byte count, not false, and that count would still
@@ -82,6 +72,59 @@ final class GuardedJson
         if (!rename($tmp, $path)) {
             @unlink($tmp);
             throw new StorageException('Cannot commit state file: ' . basename($path));
+        }
+    }
+
+    /**
+     * Like write(), but never overwrites an existing file: an atomic
+     * O_CREAT|O_EXCL create (fopen 'xb') rather than write()'s unconditional
+     * temp+rename, which has no create-exclusive semantics of its own —
+     * that is the right default for every OTHER caller (a config update
+     * should always win), so the exclusivity lives here instead of in
+     * write() itself.
+     *
+     * Returns false, rather than throwing, when the create loses that race:
+     * for a "first run" value like KeyVault's master secret, that means a
+     * concurrent request already minted one, and the caller should read
+     * what it wrote instead of treating the loss as a failure.
+     *
+     * @param array<string, mixed> $data
+     */
+    public static function createExclusive(string $path, array $data): bool
+    {
+        DataDir::ensure(dirname($path));
+
+        $payload = DataDir::GUARD . self::encode($path, $data);
+        $handle = @fopen($path, 'xb');
+
+        if ($handle === false) {
+            return false;
+        }
+
+        $written = fwrite($handle, $payload);
+        fclose($handle);
+
+        if ($written !== strlen($payload)) {
+            @unlink($path);
+            throw new StorageException('Cannot write state file: ' . basename($path));
+        }
+
+        @chmod($path, 0600);
+
+        return true;
+    }
+
+    /** @param array<string, mixed> $data */
+    private static function encode(string $path, array $data): string
+    {
+        try {
+            return (string) json_encode(
+                $data,
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                    | JSON_THROW_ON_ERROR | JSON_HEX_TAG
+            );
+        } catch (JsonException $e) {
+            throw new StorageException('Cannot encode state file: ' . basename($path), 0, $e);
         }
     }
 

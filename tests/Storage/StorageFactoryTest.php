@@ -167,4 +167,32 @@ final class StorageFactoryTest extends TestCase
         // question, for a value nothing has actually committed to using.
         self::assertNull(StorageFactory::sqliteFilename($this->makeTempDir()));
     }
+
+    // --- review round 2 -------------------------------------------------
+
+    public function testOpenGeneratesSqliteFilenameOnceWhenBackendIsPresentButSqliteFileIsAbsent(): void
+    {
+        $dir = $this->makeTempDir();
+        // The more dangerous mirror of
+        // testOpenDoesNotChangeSqliteFilenameWhenBackendKeyIsMissing above:
+        // an install.php that recorded a backend but never recorded a
+        // filename alongside it. The original, pre-round-1 code gated the
+        // entire "record it" block on the backend key alone, so this state
+        // made every single open() call mint and use a brand-new random
+        // filename — not just a one-time race between two concurrent first
+        // requests, but an ongoing, every-request one, since sqlite_file was
+        // never persisted at all.
+        GuardedJson::write($dir . '/install.php', ['backend' => 'sqlite']);
+
+        StorageFactory::open($dir, $this->makeEnv(true));
+        $first = GuardedJson::read($dir . '/install.php');
+
+        self::assertIsString($first['sqlite_file'] ?? null);
+        self::assertNotSame('', $first['sqlite_file']);
+
+        StorageFactory::open($dir, $this->makeEnv(true));
+        $second = GuardedJson::read($dir . '/install.php');
+
+        self::assertSame($first['sqlite_file'], $second['sqlite_file']);
+    }
 }

@@ -72,12 +72,13 @@ final class DataDirTest extends TestCase
 
     public function testExtensionsMissingFromAnyDenylistAreTreatedAsServable(): void
     {
-        // isServableExtension() must fail closed: a denylist of "known
+        // isServableExtension() must fail closed: a fixed list of "known
         // servable" extensions only has to miss one real hosting
         // configuration to wrongly declare a secret-bearing file safe. Every
         // one of these previously came back false (safe) under the old
-        // allowlist-of-known-dangerous-extensions implementation, even
-        // though a real web server would serve every one of them verbatim.
+        // implementation — a list of extensions it considered servable,
+        // returning true only for names on that list — even though a real
+        // web server would serve every one of them verbatim.
         $wronglyTrustedBefore = [
             'data/store.sqlite3',
             'data/store.db3',

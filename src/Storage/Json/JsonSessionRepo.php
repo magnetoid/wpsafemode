@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage\Json;
 
+use WPSafeMode\Security\DataDir;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Session;
@@ -88,9 +89,36 @@ final class JsonSessionRepo implements SessionRepo
 
         $dir = dirname($path);
 
-        if (is_dir($dir) && (scandir($dir) ?: []) === ['.', '..']) {
+        if (is_dir($dir) && $this->hasNothingButProtectionFiles($dir)) {
+            // rmdir() is a raw syscall: it does not know this directory's
+            // .htaccess/index.php are "ignorable" and refuses to remove a
+            // directory that still physically contains them. The check
+            // above only decided that nothing *else* is left; these two
+            // still have to be unlinked before the directory itself can go.
+            foreach (array_keys(DataDir::protectionFiles()) as $name) {
+                $blocker = $dir . '/' . $name;
+
+                if (is_file($blocker)) {
+                    unlink($blocker);
+                }
+            }
+
             rmdir($dir);
         }
+    }
+
+    /**
+     * True once only the directory's own .htaccess/index.php are left.
+     * DataDir::ensure() drops those into every directory a guarded writer
+     * touches, including this session's, so a literal
+     * scandir() === ['.', '..'] check never matches again — every deleted
+     * session would otherwise leave an orphan directory behind forever.
+     */
+    private function hasNothingButProtectionFiles(string $dir): bool
+    {
+        $ignored = array_merge(['.', '..'], array_keys(DataDir::protectionFiles()));
+
+        return array_diff(scandir($dir) ?: [], $ignored) === [];
     }
 
     private function fileFor(string $id): JsonFile

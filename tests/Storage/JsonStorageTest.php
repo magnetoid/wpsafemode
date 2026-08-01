@@ -27,4 +27,9 @@ final class JsonStorageTest extends StorageConformanceTest
     {
         return new JsonMessageLog($dataDir . '/sessions');
     }
+
+    protected function assertNoSessionStorageLeftBehind(string $dataDir, string $id): void
+    {
+        self::assertDirectoryDoesNotExist($dataDir . '/sessions/' . $id);
+    }
 }

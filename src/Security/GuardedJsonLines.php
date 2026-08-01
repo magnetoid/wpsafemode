@@ -32,7 +32,11 @@ final class GuardedJsonLines
             throw new StorageException('Cannot encode log line: ' . basename($path), 0, $e);
         }
 
-        $handle = fopen($path, 'ab');
+        // 'a+b', not 'ab': every write still lands at end-of-file regardless
+        // of where the read position below leaves the pointer (POSIX
+        // O_APPEND forces this on every fwrite()), but the '+' makes the
+        // handle readable, which the torn-tail repair below needs.
+        $handle = fopen($path, 'a+b');
 
         if ($handle === false) {
             throw new StorageException('Cannot open log: ' . basename($path));
@@ -44,7 +48,7 @@ final class GuardedJsonLines
             }
 
             // Decided from the locked handle, not a pre-fopen snapshot of
-            // is_file(): fopen(..., 'ab') itself can create the file, so
+            // is_file(): fopen(..., 'a+b') itself can create the file, so
             // whether it was "new" is only trustworthy once this process
             // holds the lock. fstat()'s size — unlike ftell() on an
             // O_APPEND stream, which reports 0 unconditionally regardless of
@@ -55,15 +59,51 @@ final class GuardedJsonLines
             $stat = fstat($handle);
             $size = $stat === false ? 0 : $stat['size'];
 
-            if ($size === 0 && fwrite($handle, DataDir::GUARD) === false) {
-                throw new StorageException('Cannot write log guard: ' . basename($path));
+            if ($size === 0) {
+                // Compared against strlen(), not just !== false: both this
+                // write and the line write below are well within PHP's
+                // stream buffer, so a short write is not a realistic way for
+                // fwrite() to fail here — but the check should mean what it
+                // says rather than only catching the case that cannot happen.
+                if (fwrite($handle, DataDir::GUARD) !== strlen(DataDir::GUARD)) {
+                    throw new StorageException('Cannot write log guard: ' . basename($path));
+                }
+            } else {
+                // Repair a torn tail before adding to it. A request that
+                // died mid-fwrite on a previous append can leave the last
+                // line without its trailing newline; writing straight onto
+                // that (the previous behaviour) concatenates this call's
+                // JSON onto the tail of the last one. That corrupts both,
+                // silently loses this message, and — because the merge
+                // collapses two log entries into one physical line —
+                // undercounts every count() call afterwards, so the very
+                // next append is issued the same seq again. Sealing the
+                // tail first keeps every entry, valid or not, on its own
+                // line, whatever comes after.
+                fseek($handle, -1, SEEK_END);
+                $lastByte = fgetc($handle);
+
+                if ($lastByte !== "\n" && fwrite($handle, "\n") !== 1) {
+                    throw new StorageException('Cannot repair log tail: ' . basename($path));
+                }
             }
 
-            if (fwrite($handle, $line . "\n") === false) {
+            if (fwrite($handle, $line . "\n") !== strlen($line) + 1) {
                 throw new StorageException('Cannot write log line: ' . basename($path));
             }
 
-            fflush($handle);
+            // fwrite() succeeding does not prove anything reached disk: the
+            // guard and a typical line both fit PHP's stream buffer, so
+            // fwrite() returns the full byte count regardless of whether the
+            // underlying write will ever succeed. A full disk or quota
+            // surfaces here, at flush — discarding this return (as an
+            // earlier version of this fix did) let append() report success,
+            // and JsonMessageLog::append() hand back a seq, for a message
+            // that was never actually stored.
+            if (fflush($handle) === false) {
+                throw new StorageException('Cannot flush log: ' . basename($path));
+            }
+
             flock($handle, LOCK_UN);
         } finally {
             fclose($handle);

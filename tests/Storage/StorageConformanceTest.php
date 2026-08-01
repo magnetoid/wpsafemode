@@ -27,6 +27,14 @@ abstract class StorageConformanceTest extends TestCase
 
     abstract protected function makeMessageLog(string $dataDir): MessageLog;
 
+    /**
+     * Backend-specific: the JSON backend keeps one directory per session and
+     * must leave none behind after delete() removes an otherwise-untouched
+     * session; SQLite has no per-session directory to check, so its
+     * implementation is a documented no-op.
+     */
+    abstract protected function assertNoSessionStorageLeftBehind(string $dataDir, string $id): void;
+
     protected function setUp(): void
     {
         $this->dataDir = sys_get_temp_dir() . '/wpsm-store-' . bin2hex(random_bytes(6));
@@ -217,6 +225,7 @@ abstract class StorageConformanceTest extends TestCase
         $repo->delete('sesn_1');
 
         self::assertNull($repo->find('sesn_1'));
+        $this->assertNoSessionStorageLeftBehind($this->dataDir, 'sesn_1');
     }
 
     public function testAppendAssignsSequentialSeqStartingAtOne(): void

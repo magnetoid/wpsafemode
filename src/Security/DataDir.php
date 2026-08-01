@@ -47,12 +47,13 @@ final class DataDir
 
     /**
      * Extensions a PHP-capable web server executes rather than serves
-     * verbatim. Deliberately the ONLY extensions this class trusts: a
-     * denylist here only has to miss one hosting configuration (.sqlite3,
-     * .bak, an atomic-write temp suffix, a bare filename with no extension
-     * at all, ...) to serve a secret in plaintext, so the safe direction is
-     * an allowlist of what we are sure is executed, not a denylist of what
-     * we happen to have thought of as "servable".
+     * verbatim. Deliberately the ONLY extensions this class trusts. The
+     * previous version instead listed extensions it considered servable and
+     * returned true only for names on that list — a list like that only has
+     * to miss one hosting configuration (.sqlite3, .bak, an atomic-write
+     * temp suffix, a bare filename with no extension at all, ...) to call a
+     * secret-bearing file safe. Listing what we are sure IS executed, and
+     * treating everything else as servable, is the fail-closed direction.
      */
     private const EXECUTABLE = ['php', 'phtml', 'php4', 'php5', 'php7', 'php8'];
 

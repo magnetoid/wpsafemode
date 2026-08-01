@@ -28,4 +28,10 @@ final class SqliteStorageTest extends StorageConformanceTest
     {
         return new SqliteMessageLog(new SqliteConnection($dataDir . '/wpsm.sqlite'));
     }
+
+    protected function assertNoSessionStorageLeftBehind(string $dataDir, string $id): void
+    {
+        // No-op: SQLite storage has no per-session directory. delete()
+        // removing the row is already covered by find() returning null.
+    }
 }

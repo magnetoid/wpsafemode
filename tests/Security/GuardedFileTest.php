@@ -22,20 +22,32 @@ final class GuardedFileTest extends TestCase
 
     protected function tearDown(): void
     {
+        $this->removeRecursively($this->dir);
+    }
+
+    private function removeRecursively(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+
         // scandir(), not glob('*'): every write in this suite now goes
         // through DataDir::ensure() (a directory is never touched without
         // its blockers), which drops a leading-dot .htaccess that glob('*')
-        // does not match. Left behind, it made the plain rmdir() below fail
-        // with "Directory not empty" on every test in this class.
-        foreach (scandir($this->dir) ?: [] as $entry) {
+        // does not match. Recursive, not a flat unlink() of every entry:
+        // a nested-directory test (a fresh subdirectory for a guarded
+        // write) leaves a directory entry, and unlink() on a directory
+        // fails ("Operation not permitted" / EISDIR depending on OS).
+        foreach (scandir($dir) ?: [] as $entry) {
             if ($entry === '.' || $entry === '..') {
                 continue;
             }
 
-            unlink($this->dir . '/' . $entry);
+            $full = $dir . '/' . $entry;
+            is_dir($full) ? $this->removeRecursively($full) : unlink($full);
         }
 
-        rmdir($this->dir);
+        rmdir($dir);
     }
 
     public function testJsonRoundTripsThroughTheGuard(): void
@@ -180,6 +192,13 @@ final class GuardedFileTest extends TestCase
     {
         $path = $this->dir . '/audit.php';
         GuardedJsonLines::append($path, ['a' => 1]);
+        // Widen the permissions on the already-existing file before a
+        // second append: the old code only chmod'd on the branch that
+        // decided the file was newly created, so a chmod applied between
+        // two appends to an existing file would never have been reasserted.
+        chmod($path, 0666);
+
+        GuardedJsonLines::append($path, ['a' => 2]);
 
         self::assertSame('0600', substr(sprintf('%o', fileperms($path)), -4));
     }
@@ -236,5 +255,63 @@ final class GuardedFileTest extends TestCase
 
         $this->expectException(StorageException::class);
         iterator_to_array(GuardedJsonLines::stream($path), false);
+    }
+
+    // --- review round 2 -----------------------------------------------
+
+    public function testAppendRepairsATornTailInsteadOfMergingIntoIt(): void
+    {
+        $path = $this->dir . '/audit.php';
+        // Exactly the torn tail traced in the review: a guard, one complete
+        // line, then a line with NO trailing newline at all — precisely
+        // what a request killed mid-fwrite (before the closing "\n") on a
+        // previous append leaves behind.
+        file_put_contents($path, DataDir::GUARD . '{"seq":1}' . "\n" . '{"seq":2,"trunc');
+
+        GuardedJsonLines::append($path, ['seq' => 3]);
+
+        $raw = (string) file_get_contents($path);
+        $lines = explode("\n", rtrim($raw, "\n"));
+
+        // Writing straight onto the torn tail (the pre-fix behaviour)
+        // produces one merged, permanently unparseable line —
+        // '{"seq":2,"trunc{"seq":3}' — and silently loses this message.
+        // The fix must seal the tail with its own newline first, so the
+        // newly appended line is independently parseable.
+        self::assertSame(
+            ['seq' => 3],
+            json_decode((string) end($lines), true),
+            'the appended message must be readable and carry the seq it was issued'
+        );
+
+        // The seq-duplication half of the same bug: merging collapsed two
+        // physical lines into one, so count() stayed one line short forever
+        // and the next append reissued the same seq. Sealed, count() sees
+        // all three lines and a following append gets a fresh one.
+        self::assertSame(3, GuardedJsonLines::count($path));
+
+        GuardedJsonLines::append($path, ['seq' => 'next']);
+        $lines2 = explode("\n", rtrim((string) file_get_contents($path), "\n"));
+
+        self::assertSame(['seq' => 'next'], json_decode((string) end($lines2), true));
+        self::assertSame(4, GuardedJsonLines::count($path));
+    }
+
+    public function testJsonLinesAppendCreatesAFreshNestedDirectoryWithBothBlockers(): void
+    {
+        $nested = $this->dir . '/nested-lines/audit.php';
+        GuardedJsonLines::append($nested, ['event' => 'install']);
+
+        self::assertFileExists(dirname($nested) . '/.htaccess');
+        self::assertFileExists(dirname($nested) . '/index.php');
+    }
+
+    public function testJsonWriteCreatesAFreshNestedDirectoryWithBothBlockers(): void
+    {
+        $nested = $this->dir . '/nested-json/config.php';
+        GuardedJson::write($nested, ['a' => 1]);
+
+        self::assertFileExists(dirname($nested) . '/.htaccess');
+        self::assertFileExists(dirname($nested) . '/index.php');
     }
 }

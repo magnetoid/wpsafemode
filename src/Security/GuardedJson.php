@@ -185,17 +185,18 @@ final class GuardedJson
      * an O_CREAT|O_EXCL create via fopen($path, 'xb'), needing no
      * hard-link support at all. This trades away the narrow crash-safety
      * property createExclusive()'s preferred path has: a process that dies
-     * between this fopen() and its fwrite() below leaves a permanent
-     * zero-length file at $path, which is exactly why KeyVault treats a
-     * zero-length keyvault.php as absent and safe to replace, rather than
-     * corrupt, when deciding whether to mint a new secret.
+     * between openExclusiveAndSecure() and this method's fwrite() below
+     * leaves a permanent zero-length file at $path, which is exactly why
+     * KeyVault treats a zero-length keyvault.php as absent and safe to
+     * replace, rather than corrupt, when deciding whether to mint a new
+     * secret.
      *
      * @param array<string, mixed> $data
      */
     private static function createExclusiveWithoutHardLinks(string $path, array $data): bool
     {
         $payload = DataDir::GUARD . self::encode($path, $data);
-        $handle = @fopen($path, 'xb');
+        $handle = self::openExclusiveAndSecure($path);
 
         if ($handle === false) {
             return false;
@@ -209,9 +210,41 @@ final class GuardedJson
             throw new StorageException('Cannot write state file: ' . basename($path));
         }
 
+        return true;
+    }
+
+    /**
+     * Opens $path exclusively (O_CREAT|O_EXCL) and tightens its
+     * permissions immediately — before the caller writes a single byte of
+     * content, not after. Review round 4: an earlier version of this
+     * fallback wrote the full payload first and chmod'd 0600 only
+     * afterwards, so on every fallback call the complete master secret sat
+     * briefly at umask permissions (typically 0644) on the entirely
+     * predictable filename keyvault.php — and if the process died between
+     * the write and that later chmod(), it stayed that way permanently,
+     * since nothing re-chmods an existing file later. Reordering leaves a
+     * window that contains only an EMPTY file at 0600 instead: by
+     * KeyVault's own reasoning (round 3), a file that holds no content
+     * holds no secret and is not sensitive.
+     *
+     * Split out from createExclusiveWithoutHardLinks() so a test can
+     * observe this exact moment — file open, already 0600, zero bytes
+     * written — directly, rather than only arguing it must be true from
+     * the surrounding method's control flow.
+     *
+     * @return resource|false
+     */
+    private static function openExclusiveAndSecure(string $path)
+    {
+        $handle = @fopen($path, 'xb');
+
+        if ($handle === false) {
+            return false;
+        }
+
         @chmod($path, 0600);
 
-        return true;
+        return $handle;
     }
 
     /** @param array<string, mixed> $data */

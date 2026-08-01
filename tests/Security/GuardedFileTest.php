@@ -426,4 +426,53 @@ final class GuardedFileTest extends TestCase
         self::assertSame(['secret' => 'value'], GuardedJson::read($path));
         self::assertSame('0600', substr(sprintf('%o', fileperms($path)), -4));
     }
+
+    // --- task 2 review round 4: OPEN 1 — the fallback must chmod before writing, not after ---
+
+    public function testOpenExclusiveAndSecureTightensPermissionsBeforeAnyContentIsWritten(): void
+    {
+        // A genuinely behavioural test, not a control-flow-order proxy: the
+        // seam this fix needed (see openExclusiveAndSecure()'s own
+        // docblock) makes it possible to invoke "open and chmod" WITHOUT
+        // ever calling fwrite(), so the file's actual, observable state —
+        // exists, already 0600, holds zero bytes — can be asserted
+        // directly, at the exact moment createExclusiveWithoutHardLinks()
+        // would otherwise start writing the secret. On the pre-fix
+        // ordering (write the full secret, chmod only afterwards) this
+        // moment does not exist at all as an isolated step: the write and
+        // the chmod were two statements in the same method with no seam
+        // between them, which is exactly why this decomposition was the
+        // fix, not just its test.
+        $path = $this->dir . '/exclusive.php';
+
+        $method = new ReflectionMethod(GuardedJson::class, 'openExclusiveAndSecure');
+
+        if (PHP_VERSION_ID < 80100) {
+            $method->setAccessible(true);
+        }
+
+        $handle = $method->invoke(null, $path);
+
+        try {
+            self::assertNotFalse($handle, 'fopen($path, \'xb\') must succeed for a fresh path');
+            self::assertFileExists($path);
+            self::assertSame(
+                '0600',
+                substr(sprintf('%o', fileperms($path)), -4),
+                'permissions must already be tightened before a single content byte is written'
+            );
+            self::assertSame(
+                0,
+                filesize($path),
+                'no content may exist yet at the moment permissions are already tightened — otherwise this is ' .
+                'observing the write, not the window before it'
+            );
+        } finally {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+
+            unlink($path);
+        }
+    }
 }

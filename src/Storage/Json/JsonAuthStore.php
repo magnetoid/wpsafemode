@@ -11,6 +11,19 @@ use WPSafeMode\Storage\Credential;
 
 final class JsonAuthStore implements AuthStore
 {
+    /**
+     * Every key Credential::fromRow() reads. Checked as a set, not just
+     * password_hash: a row with the hash present but, say, created_at
+     * missing still parses "successfully" — fromRow() reads the missing
+     * key as null and casts it to 0 — and would hand back a Credential
+     * with a valid hash and silently wrong metadata instead of the loud
+     * failure current()'s docblock promises. Wrong metadata doesn't forge
+     * a login (verify() only looks at hash, and password_verify()
+     * self-identifies its own algorithm from the hash string), but it is
+     * still corruption, not a value this store should ever hand a caller.
+     */
+    private const REQUIRED_KEYS = ['password_hash', 'hash_algo', 'created_at', 'password_changed_at'];
+
     public function __construct(private string $path)
     {
     }
@@ -19,7 +32,7 @@ final class JsonAuthStore implements AuthStore
      * is_file(), not current() !== null: GuardedJson::read() returns []
      * both for a file that was never written and for one that exists but
      * cannot be parsed into a credential (empty payload, or valid JSON that
-     * decodes to something with no password_hash key). Deriving
+     * decodes to something missing one of REQUIRED_KEYS). Deriving
      * isConfigured() from current() would conflate those two states, and
      * "corrupted" would read as "fresh install" — precisely the state a
      * first-run flow (Task 8) checks this method to rule out before it lets
@@ -50,11 +63,12 @@ final class JsonAuthStore implements AuthStore
 
     /**
      * @throws StorageException if the file exists but does not decode to a
-     *     row with a password_hash — see isConfigured()'s docblock. Silently
-     *     returning null here would be the same conflation one level up:
-     *     a caller using current() directly, rather than isConfigured(),
-     *     to decide whether a credential already exists must not be able to
-     *     mistake "corrupt" for "never configured" either.
+     *     row carrying every one of REQUIRED_KEYS — see isConfigured()'s
+     *     docblock. Silently returning null here would be the same
+     *     conflation one level up: a caller using current() directly, rather
+     *     than isConfigured(), to decide whether a credential already exists
+     *     must not be able to mistake "corrupt" for "never configured"
+     *     either.
      */
     public function current(): ?Credential
     {
@@ -64,8 +78,10 @@ final class JsonAuthStore implements AuthStore
 
         $row = GuardedJson::read($this->path);
 
-        if (!isset($row['password_hash'])) {
-            throw new StorageException('Corrupt credential file: ' . basename($this->path));
+        foreach (self::REQUIRED_KEYS as $key) {
+            if (!isset($row[$key])) {
+                throw new StorageException('Corrupt credential file: ' . basename($this->path));
+            }
         }
 
         return Credential::fromRow($row);

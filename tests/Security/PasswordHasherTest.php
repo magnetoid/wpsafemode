@@ -59,8 +59,24 @@ final class PasswordHasherTest extends TestCase
 
     public function testWeakPasswordsAreRejectedBeforeHashing(): void
     {
-        self::assertNotSame([], PasswordHasher::weaknesses('short'));
-        self::assertNotSame([], PasswordHasher::weaknesses('password123'));
+        self::assertNotSame([], PasswordHasher::weaknesses('short'), 'too short must be rejected');
+        self::assertNotSame([], PasswordHasher::weaknesses('password123'), 'too short must be rejected');
+
+        // 12+ characters so length alone cannot explain a rejection here —
+        // these two isolate the forbidden-substring rule and the
+        // repeated-character rule respectively. Without them, deleting
+        // either rule from PasswordHasher leaves this test green.
+        self::assertNotSame(
+            [],
+            PasswordHasher::weaknesses('wordpress-admin-1'),
+            'a 12+ character password containing a forbidden substring must still be rejected'
+        );
+        self::assertNotSame(
+            [],
+            PasswordHasher::weaknesses(str_repeat('a', 12)),
+            'a 12+ character single-repeated-character password must still be rejected'
+        );
+
         self::assertSame([], PasswordHasher::weaknesses('correct horse battery staple'));
     }
 }

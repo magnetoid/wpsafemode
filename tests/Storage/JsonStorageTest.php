@@ -71,4 +71,30 @@ final class JsonStorageTest extends StorageConformanceTest
         $this->expectException(StorageException::class);
         $store->current();
     }
+
+    /**
+     * A row with password_hash present but one of the other three fields
+     * missing still has isset($row['password_hash']) === true, so a check
+     * that only looked at that one key would parse this "successfully" —
+     * Credential::fromRow() would read the missing key as null and hand
+     * back a Credential with a real hash and a bogus (0 or '') timestamp,
+     * silently, instead of throwing. current() must require every field the
+     * row is supposed to carry, not just the one isConfigured() cares about.
+     */
+    public function testCorruptCredentialFileMissingAnyFieldStillThrows(): void
+    {
+        $path = $this->dataDir . '/auth.php';
+        GuardedJson::write($path, [
+            'password_hash' => '$argon2id$hash',
+            'hash_algo'     => 'argon2id',
+            // created_at and password_changed_at deliberately omitted.
+        ]);
+
+        $store = $this->makeAuthStore($this->dataDir);
+
+        self::assertTrue($store->isConfigured());
+
+        $this->expectException(StorageException::class);
+        $store->current();
+    }
 }

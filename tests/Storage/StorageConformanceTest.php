@@ -309,12 +309,17 @@ abstract class StorageConformanceTest extends TestCase
     {
         $store = $this->makeAuthStore($this->dataDir);
         $store->store(new Credential('$2y$first', 'bcrypt', 1000, 1000));
-        $store->store(new Credential('$argon2id$second', 'argon2id', 1000, 3000));
+        // The second credential asks for a DIFFERENT createdAt (9000) than the
+        // first (1000). If the store preserved created_at, $found->createdAt
+        // is 1000; if it overwrote it, $found->createdAt is 9000 — a single
+        // shared value for both calls could never tell those apart.
+        $store->store(new Credential('$argon2id$second', 'argon2id', 9000, 3000));
 
         $found = $this->makeAuthStore($this->dataDir)->current();
 
         self::assertNotNull($found);
         self::assertSame('$argon2id$second', $found->hash);
+        self::assertSame(1000, $found->createdAt, 'created_at must survive a password change unchanged');
         self::assertSame(3000, $found->changedAt);
     }
 }

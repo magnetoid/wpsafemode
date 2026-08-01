@@ -42,6 +42,22 @@ abstract class StorageConformanceTest extends TestCase
      */
     abstract protected function assertNoSessionStorageLeftBehind(string $dataDir, string $id): void;
 
+    /**
+     * Backend-specific, added in review round 1 (IMPORTANT 2): writes a
+     * value for $bucket that cannot have been produced by this backend's own
+     * hit() — directly through the backend's own storage (raw SQL for
+     * SQLite, a raw GuardedJson::write() for JSON) rather than through
+     * RateLimiter at all, since going through the interface could never
+     * produce a malformed row in the first place. The two backends' storage
+     * shapes are different enough (a typed SQL row vs. a JSON sub-array)
+     * that there is no way to express "a malformed value" once, generically,
+     * the way the other hooks do — the conformance test that uses this
+     * (testMalformedStoredValueFailsClosedIdenticallyInBothBackends) is what
+     * actually pins the two backends to one shared, fail-closed
+     * interpretation; this hook only gets the bad data onto disk.
+     */
+    abstract protected function writeMalformedRateLimitEntry(string $dataDir, string $bucket): void;
+
     protected function setUp(): void
     {
         $this->dataDir = sys_get_temp_dir() . '/wpsm-store-' . bin2hex(random_bytes(6));
@@ -68,6 +84,70 @@ abstract class StorageConformanceTest extends TestCase
         }
 
         rmdir($path);
+    }
+
+    /**
+     * Spawns $workers independent PHP processes, each performing exactly one
+     * hit() against $bucket, and returns each process's raw stdout
+     * ("OK:<attempts>" or "ERR:<message>").
+     *
+     * Added in review round 1 (CRITICAL 1), to prove the concurrent
+     * lost-update fix against the real hit() method rather than against a
+     * hand-rolled stand-in for it. That requires genuine OS-level
+     * concurrency, not a simulated interleaving: hit() is one atomic PHP
+     * method call with no seam that would let a single test process pause
+     * it mid-way to interleave it with itself, so the only way to make two
+     * "logical" callers' read and write steps actually overlap is to run
+     * hit() in two real, independent processes and let the OS schedule
+     * them. This is a concrete helper, not a new abstract factory hook: the
+     * only backend-specific part is the constructor expression each test
+     * passes in as a string, evaluated inside the worker script.
+     *
+     * @return list<string>
+     */
+    protected function hitConcurrently(string $limiterExpr, string $bucket, int $now, int $workers): array
+    {
+        $bootstrap = dirname(__DIR__, 2) . '/src/autoload.php';
+        $script = $this->dataDir . '/_concurrent_hit_worker.php';
+
+        file_put_contents(
+            $script,
+            '<?php' . "\n"
+            . 'require ' . var_export($bootstrap, true) . ';' . "\n"
+            . '$dataDir = ' . var_export($this->dataDir, true) . ';' . "\n"
+            . '$limiter = ' . $limiterExpr . ';' . "\n"
+            . 'try {' . "\n"
+            . '    $state = $limiter->hit(' . var_export($bucket, true) . ', ' . $now . ');' . "\n"
+            . '    fwrite(STDOUT, \'OK:\' . $state->attempts);' . "\n"
+            . '} catch (\Throwable $e) {' . "\n"
+            . '    fwrite(STDOUT, \'ERR:\' . $e->getMessage());' . "\n"
+            . '}' . "\n"
+        );
+
+        $handles = [];
+        for ($i = 0; $i < $workers; $i++) {
+            $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+            $proc = proc_open([PHP_BINARY, $script], $descriptors, $pipes);
+            self::assertTrue(is_resource($proc), 'proc_open() must succeed for this test to run');
+            $handles[] = ['proc' => $proc, 'pipes' => $pipes];
+        }
+
+        $outputs = [];
+        $stderrs = [];
+
+        foreach ($handles as $h) {
+            $outputs[] = (string) stream_get_contents($h['pipes'][1]);
+            $stderrs[] = (string) stream_get_contents($h['pipes'][2]);
+            fclose($h['pipes'][1]);
+            fclose($h['pipes'][2]);
+            proc_close($h['proc']);
+        }
+
+        foreach ($stderrs as $stderr) {
+            self::assertSame('', $stderr, 'a worker process wrote to stderr: ' . $stderr);
+        }
+
+        return $outputs;
     }
 
     public function testGetReturnsDefaultWhenKeyIsAbsent(): void
@@ -402,5 +482,30 @@ abstract class StorageConformanceTest extends TestCase
         $limiter->clear('ip:1.2.3.4');
 
         self::assertSame(0, $this->makeRateLimiter($this->dataDir)->peek('ip:1.2.3.4', 1000)->attempts);
+    }
+
+    /**
+     * Review round 1, IMPORTANT 2: before this test, nothing wrote a
+     * malformed row/entry directly, so the conformance suite could not see
+     * that the two backends disagreed on what a corrupt stored value means —
+     * SQLite blindly (int)-cast garbage (an arbitrary result depending on
+     * the garbage), while JSON collapsed a shape it did not recognise to a
+     * clean, unlocked slate (the most permissive reading possible for a
+     * security counter). Both must now fail closed the same way: a value
+     * that cannot be trusted to mean anything else reads as already at the
+     * limit, not as a fresh bucket.
+     */
+    public function testMalformedStoredValueFailsClosedIdenticallyInBothBackends(): void
+    {
+        $this->writeMalformedRateLimitEntry($this->dataDir, 'ip:9.9.9.9');
+
+        $state = $this->makeRateLimiter($this->dataDir)->peek('ip:9.9.9.9', 1000);
+
+        self::assertTrue(
+            $state->isLocked(1000),
+            'a stored value that cannot be trusted to mean anything else must fail closed (locked), never silently read as a fresh, unlocked bucket'
+        );
+        self::assertSame(RateLimiter::MAX_ATTEMPTS, $state->attempts);
+        self::assertSame(RateLimiter::LOCKOUT_SECONDS, $state->retryAfter(1000));
     }
 }

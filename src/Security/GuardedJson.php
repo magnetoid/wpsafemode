@@ -76,6 +76,70 @@ final class GuardedJson
     }
 
     /**
+     * Runs $fn with an exclusive lock held for its entire duration, so a
+     * caller's read-modify-write sequence cannot interleave with another
+     * request's.
+     *
+     * read() and write() alone do not provide this: write()'s LOCK_EX is
+     * taken on a freshly-named temp file, never on $path itself, so two
+     * overlapping read-modify-write sequences (two concurrent requests each
+     * doing read() then, some PHP later, write()) can both read the same
+     * content, both compute independently, and both call write() — the later
+     * rename() wins outright, and the earlier caller's update is discarded
+     * with no error of any kind. A rate limiter is exactly this shape (read
+     * the attempt count, add one, write it back), and this specific gap is
+     * how two concurrent login attempts can increment the same counter only
+     * once between them, silently doubling the number of guesses a lockout
+     * actually allows.
+     *
+     * The lock lives on a fixed sidecar file next to $path, not $path
+     * itself, so plain read()/write() calls that are not participating in a
+     * guarded sequence are unaffected. It is a blocking lock — a caller that
+     * cannot get in waits for whoever is ahead of it, rather than failing —
+     * because the callers of this method (a rate-limit hit, a session
+     * update) are short and must all eventually succeed, not race to fail
+     * fast.
+     *
+     * General-purpose rather than folded into the rate limiter: any store
+     * with the same "read some JSON, decide, write it back" shape needs the
+     * identical guard, and a second, subtly different copy of this logic
+     * would be exactly the kind of drift afterExpiry() (RateLimitState) was
+     * written to prevent for the value object — this is the same principle
+     * applied to locking.
+     *
+     * @template T
+     * @param callable(): T $fn
+     * @return T
+     */
+    public static function withExclusiveLock(string $path, callable $fn)
+    {
+        DataDir::ensure(dirname($path));
+
+        $lockPath = $path . '.lock';
+        $handle = @fopen($lockPath, 'c');
+
+        if ($handle === false) {
+            throw new StorageException('Cannot open lock file: ' . basename($lockPath));
+        }
+
+        @chmod($lockPath, 0600);
+
+        try {
+            if (!flock($handle, LOCK_EX)) {
+                throw new StorageException('Cannot acquire lock: ' . basename($lockPath));
+            }
+
+            try {
+                return $fn();
+            } finally {
+                flock($handle, LOCK_UN);
+            }
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    /**
      * Like write(), but never overwrites an existing file: an atomic
      * O_CREAT|O_EXCL create rather than write()'s unconditional temp+rename,
      * which has no create-exclusive semantics of its own — that is the

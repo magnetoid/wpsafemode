@@ -16,7 +16,22 @@ final class SqliteRateLimiter implements RateLimiter
     public function hit(string $bucket, int $now): RateLimitState
     {
         $pdo = $this->connection->pdo();
-        $pdo->beginTransaction();
+
+        // BEGIN IMMEDIATE, not $pdo->beginTransaction() (a plain, DEFERRED
+        // BEGIN): a deferred transaction takes no lock until its first
+        // statement runs, and that first statement here is a SELECT, which
+        // only takes a SHARED lock — one several connections hold at once
+        // without conflict. Two concurrent hit() calls would both pass that
+        // SELECT having read the same attempt count, both compute the same
+        // "+1", and only the later of the two writes/commits would stick —
+        // exactly the silent lost-update review round 1 found, for the one
+        // component whose entire job is counting attempts correctly.
+        // IMMEDIATE takes the write lock up front, before the read, so a
+        // second concurrent call cannot get past its own BEGIN until the
+        // first has committed and released it; PDO's own commit()/rollBack()
+        // still work correctly afterwards, since PDO tracks the transaction
+        // as active regardless of which SQL started it.
+        $pdo->exec('BEGIN IMMEDIATE');
 
         try {
             $state = $this->read($bucket, $now);
@@ -70,12 +85,13 @@ final class SqliteRateLimiter implements RateLimiter
             return new RateLimitState(0, $now, null);
         }
 
-        $state = new RateLimitState(
-            (int) $row['attempts'],
-            (int) $row['window_start'],
-            $row['locked_until'] === null ? null : (int) $row['locked_until']
-        );
-
-        return $state->afterExpiry($now, self::WINDOW_SECONDS);
+        // fromRawRow(), not a bare (int) cast of whatever the columns hold:
+        // review round 1 (IMPORTANT 2) found that blindly casting garbage
+        // (e.g. a hand-edited or migration-corrupted locked_until that is
+        // not actually numeric) produced an arbitrary state that read as
+        // locked or unlocked depending on the garbage. A row that cannot be
+        // trusted to mean what it looks like it means must fail closed.
+        return RateLimitState::fromRawRow($row, $now, self::MAX_ATTEMPTS, self::LOCKOUT_SECONDS)
+            ->afterExpiry($now, self::WINDOW_SECONDS);
     }
 }

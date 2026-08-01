@@ -50,6 +50,80 @@ final class JsonStorageTest extends StorageConformanceTest
     }
 
     /**
+     * Bypasses JsonRateLimiter entirely: hit() can never write a
+     * non-numeric locked_until, so the only way to get one into the file is
+     * a raw GuardedJson::write(), exactly as a hand-edited file would.
+     */
+    protected function writeMalformedRateLimitEntry(string $dataDir, string $bucket): void
+    {
+        $path = $dataDir . '/rate_limit.php';
+        $all = GuardedJson::read($path);
+        $all[$bucket] = ['window_start' => 1000, 'attempts' => 2, 'locked_until' => 'not-a-number'];
+        GuardedJson::write($path, $all);
+    }
+
+    /**
+     * Review round 1, CRITICAL 1: GuardedJson::write()'s LOCK_EX is taken on
+     * a freshly-named temp file, never on the shared rate_limit.php itself,
+     * so two concurrent hit() calls had no exclusion at all across their
+     * read-modify-write — both could read the same stale count and the
+     * later rename() would win outright. Proven empirically before the fix
+     * (ten concurrent processes against the old code consistently returned
+     * "OK" from every worker while the persisted count reflected only 2-5 of
+     * the 10 increments - silent, total data loss, no exceptions at all) and
+     * confirmed absent after wrapping hit()/clear() in
+     * GuardedJson::withExclusiveLock() (five repeats, zero errors, zero
+     * undercounts every time).
+     *
+     * This exercises the real hit() method under genuine OS-level
+     * concurrency (see hitConcurrently()'s docblock for why a single PHP
+     * process cannot simulate this interleaving on its own).
+     */
+    public function testConcurrentHitsDoNotLoseAnUpdateUnderRealConcurrency(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+        $limiter->hit('race', 1000); // primes attempts=1, and creates the file up front
+
+        $limiterExpr = 'new \WPSafeMode\Storage\Json\JsonRateLimiter($dataDir . \'/rate_limit.php\')';
+
+        $outputs = $this->hitConcurrently($limiterExpr, 'race', 1000, 10);
+
+        foreach ($outputs as $output) {
+            self::assertStringStartsWith(
+                'OK:',
+                $output,
+                'every concurrent hit() must succeed: ' . $output
+            );
+        }
+
+        self::assertSame(
+            11,
+            $limiter->peek('race', 1000)->attempts,
+            'ten real, concurrent hit() calls plus the priming one must all be counted - none silently lost to a stale write'
+        );
+    }
+
+    /**
+     * IMPORTANT 1: SQLite has no equivalent state - a row either exists with
+     * its declared columns or it does not; there is no "the row is a scalar
+     * instead of a row" for a typed SQL table. Only the JSON backend's
+     * per-bucket entry can be something other than an array at all, so this
+     * is JSON-only, not part of the shared conformance suite.
+     */
+    public function testNonArrayBucketEntryFailsClosedNotFresh(): void
+    {
+        $path = $this->dataDir . '/rate_limit.php';
+        GuardedJson::write($path, ['ip:9.9.9.9' => 'not-an-array']);
+
+        $state = $this->makeRateLimiter($this->dataDir)->peek('ip:9.9.9.9', 1000);
+
+        self::assertTrue(
+            $state->isLocked(1000),
+            'a bucket entry that is not even an array must fail closed, not read as "0 attempts, unlocked" - the most permissive reading possible for a security counter'
+        );
+    }
+
+    /**
      * JSON-backend-specific, not part of the shared conformance suite: SQLite
      * has no equivalent state, since a NOT NULL column makes a row that
      * exists-but-lacks-a-password_hash impossible.

@@ -45,11 +45,16 @@ final class DataDir
 
     private const INDEX = '<?php http_response_code(404); die("Not found");' . "\n";
 
-    /** Extensions a web server will hand back verbatim without invoking PHP. */
-    private const SERVABLE = [
-        'json', 'jsonl', 'txt', 'log', 'sqlite', 'db', 'sql', 'bak',
-        'md', 'yml', 'yaml', 'ini', 'conf', 'xml', 'csv', 'zip', 'gz',
-    ];
+    /**
+     * Extensions a PHP-capable web server executes rather than serves
+     * verbatim. Deliberately the ONLY extensions this class trusts: a
+     * denylist here only has to miss one hosting configuration (.sqlite3,
+     * .bak, an atomic-write temp suffix, a bare filename with no extension
+     * at all, ...) to serve a secret in plaintext, so the safe direction is
+     * an allowlist of what we are sure is executed, not a denylist of what
+     * we happen to have thought of as "servable".
+     */
+    private const EXECUTABLE = ['php', 'phtml', 'php4', 'php5', 'php7', 'php8'];
 
     public static function ensure(string $dir): void
     {
@@ -65,7 +70,14 @@ final class DataDir
             // Written every time rather than only when absent: a host migration
             // or a control-panel "fix permissions" can silently remove them.
             if (!is_file($path) || file_get_contents($path) !== $contents) {
-                file_put_contents($path, $contents, LOCK_EX);
+                // Checked against strlen(), not just !== false: a disk-full or
+                // quota-limited write can return a short byte count rather than
+                // false, and a caller that only checked for outright failure
+                // would believe the directory was protected when it was not.
+                if (@file_put_contents($path, $contents, LOCK_EX) !== strlen($contents)) {
+                    throw new StorageException('Cannot write data directory blocker: ' . $path);
+                }
+
                 @chmod($path, 0600);
             }
         }
@@ -81,17 +93,16 @@ final class DataDir
     }
 
     /**
-     * True when a web server would serve this path as a static asset. Files
-     * with no extension count: nginx serves them as application/octet-stream.
+     * True when a web server would serve this path as a static asset rather
+     * than executing it as PHP. Fails closed: anything other than the small,
+     * precise set of extensions PHP is configured to execute — including an
+     * empty extension, which nginx serves as application/octet-stream — is
+     * treated as servable.
      */
     public static function isServableExtension(string $path): bool
     {
         $extension = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
 
-        if ($extension === '') {
-            return true;
-        }
-
-        return in_array($extension, self::SERVABLE, true);
+        return !in_array($extension, self::EXECUTABLE, true);
     }
 }

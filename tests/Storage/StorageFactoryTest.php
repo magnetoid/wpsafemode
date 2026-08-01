@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Storage;
 
 use PHPUnit\Framework\TestCase;
+use WPSafeMode\Core\EnvironmentReport;
+use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\StorageFactory;
 
@@ -48,6 +50,21 @@ final class StorageFactoryTest extends TestCase
         rmdir($path);
     }
 
+    private function makeEnv(bool $hasPdoSqlite): EnvironmentReport
+    {
+        return new EnvironmentReport(
+            phpVersion:    '8.5.9',
+            phpSatisfied:  true,
+            hasPdoSqlite:  $hasPdoSqlite,
+            hasMysqli:     false,
+            hasOpenssl:    true,
+            hasSodium:     true,
+            hasExec:       false,
+            freeDiskBytes: 1_000_000_000,
+            wpRoot:        null,
+        );
+    }
+
     public function testPrefersSqliteWhenAvailableAndNothingRecorded(): void
     {
         self::assertSame('sqlite', StorageFactory::chooseBackend(true, null));
@@ -86,5 +103,68 @@ final class StorageFactoryTest extends TestCase
     {
         $this->expectException(StorageException::class);
         StorageFactory::create(sys_get_temp_dir(), 'postgres');
+    }
+
+    // --- review round 1: StorageFactory::open() -----------------------
+
+    public function testOpenRecordsBackendAndSqliteFilenameOnFirstCall(): void
+    {
+        $dir = $this->makeTempDir();
+
+        $storage = StorageFactory::open($dir, $this->makeEnv(true));
+
+        self::assertSame('sqlite', $storage->backend());
+
+        $record = GuardedJson::read($dir . '/install.php');
+        self::assertSame('sqlite', $record['backend']);
+        self::assertIsString($record['sqlite_file'] ?? null);
+        self::assertNotSame('', $record['sqlite_file']);
+    }
+
+    public function testOpenReusesRecordedBackendAndSqliteFilenameOnSecondCall(): void
+    {
+        $dir = $this->makeTempDir();
+        $env = $this->makeEnv(true);
+
+        StorageFactory::open($dir, $env);
+        $first = GuardedJson::read($dir . '/install.php');
+
+        // A second call must not re-decide either fact: using
+        // self::sqliteFilename($dataDir) here (a fresh re-read from disk)
+        // instead of the value the first call already recorded was the
+        // defect — it opened a window for a second, concurrent first
+        // request's write to land in between, so a process could end up
+        // opening a *different* SQLite file than the one it just recorded.
+        StorageFactory::open($dir, $env);
+        $second = GuardedJson::read($dir . '/install.php');
+
+        self::assertSame($first['backend'], $second['backend']);
+        self::assertSame($first['sqlite_file'], $second['sqlite_file']);
+    }
+
+    public function testOpenDoesNotChangeSqliteFilenameWhenBackendKeyIsMissing(): void
+    {
+        $dir = $this->makeTempDir();
+        // Simulates install.php having been created by something other than
+        // open() — a future writer that never sets 'backend'. Regenerating
+        // sqlite_file whenever 'backend' is merely absent (rather than
+        // checking whether sqlite_file itself is absent) would silently
+        // abandon this already-recorded database.
+        GuardedJson::write($dir . '/install.php', ['sqlite_file' => 'store-existing-name.db']);
+
+        StorageFactory::open($dir, $this->makeEnv(true));
+
+        $record = GuardedJson::read($dir . '/install.php');
+        self::assertSame('store-existing-name.db', $record['sqlite_file']);
+        self::assertSame('sqlite', $record['backend']);
+    }
+
+    public function testSqliteFilenameIsNullWhenNothingIsRecordedYet(): void
+    {
+        // Must be honest: it used to fabricate a fresh random filename on
+        // every call once nothing was recorded — a public accessor that
+        // returns a different answer each time it is asked the same
+        // question, for a value nothing has actually committed to using.
+        self::assertNull(StorageFactory::sqliteFilename($this->makeTempDir()));
     }
 }

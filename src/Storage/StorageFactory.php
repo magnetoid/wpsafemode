@@ -62,30 +62,55 @@ final class StorageFactory
 
         $backend = self::chooseBackend($env->hasPdoSqlite, $recorded === '' ? null : $recorded);
 
+        $sqliteFile = isset($record['sqlite_file']) && is_string($record['sqlite_file']) && $record['sqlite_file'] !== ''
+            ? $record['sqlite_file']
+            : null;
+
+        $dirty = false;
+
         if ($recorded === null || $recorded === '') {
             $record['backend'] = $backend;
+            $dirty = true;
+        }
 
+        // Guarded on sqlite_file being absent, not on backend being absent:
+        // those are two different facts, and a future writer that creates
+        // install.php for some other reason without a backend key must not
+        // make this branch mint a second random filename and abandon the
+        // database (and the encrypted API key inside it) the first one
+        // already recorded.
+        if ($backend === self::BACKEND_SQLITE && $sqliteFile === null) {
             // The SQLite file cannot carry the die() guard: a .php-named
             // database is handed to PHP, which finds no opening tag and echoes
             // the binary verbatim. An unguessable name is the part of its
             // defence that does not depend on server configuration.
-            $record['sqlite_file'] = 'store-' . bin2hex(random_bytes(16)) . '.db';
+            $sqliteFile = 'store-' . bin2hex(random_bytes(16)) . '.db';
+            $record['sqlite_file'] = $sqliteFile;
+            $dirty = true;
+        }
 
+        if ($dirty) {
             GuardedJson::write($dataDir . '/install.php', $record);
         }
 
+        // Uses the value just decided above, not a fresh re-read of
+        // install.php: re-reading here would trust whatever a concurrent
+        // request wrote in the gap between this request's own write and its
+        // next read, so two requests racing to open the same fresh install
+        // could each end up constructing a SqliteStorage over a *different*
+        // filename than the one they themselves just recorded.
         return $backend === self::BACKEND_SQLITE
-            ? new SqliteStorage($dataDir, self::sqliteFilename($dataDir))
+            ? new SqliteStorage($dataDir, (string) $sqliteFile)
             : new JsonStorage($dataDir);
     }
 
-    /** The recorded SQLite filename, or a deterministic default for a fresh directory. */
-    public static function sqliteFilename(string $dataDir): string
+    /** The recorded SQLite filename, or null when this install has not recorded one yet. */
+    public static function sqliteFilename(string $dataDir): ?string
     {
         $record = GuardedJson::read($dataDir . '/install.php');
 
         return isset($record['sqlite_file']) && is_string($record['sqlite_file']) && $record['sqlite_file'] !== ''
             ? $record['sqlite_file']
-            : 'store-' . bin2hex(random_bytes(16)) . '.db';
+            : null;
     }
 }

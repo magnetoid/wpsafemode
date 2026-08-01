@@ -52,24 +52,28 @@ final class GuardedJson
     /** @param array<string, mixed> $data */
     public static function write(string $path, array $data): void
     {
-        $dir = dirname($path);
-
-        if (!is_dir($dir) && !@mkdir($dir, 0700, true) && !is_dir($dir)) {
-            throw new StorageException('Cannot create data directory: ' . $dir);
-        }
+        DataDir::ensure(dirname($path));
 
         try {
             $json = json_encode(
                 $data,
-                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                    | JSON_THROW_ON_ERROR | JSON_HEX_TAG
             );
         } catch (JsonException $e) {
             throw new StorageException('Cannot encode state file: ' . basename($path), 0, $e);
         }
 
         $tmp = $path . '.tmp.' . bin2hex(random_bytes(4));
+        $payload = DataDir::GUARD . $json;
 
-        if (file_put_contents($tmp, DataDir::GUARD . $json, LOCK_EX) === false) {
+        // Checked against strlen(), not just !== false: a disk-full write
+        // returns a short byte count, not false, and that count would still
+        // pass an === false test, get renamed over the previous good file,
+        // and (see stripGuard()) read back as an empty store on the next
+        // request — silently erasing everything that was there before.
+        if (@file_put_contents($tmp, $payload, LOCK_EX) !== strlen($payload)) {
+            @unlink($tmp);
             throw new StorageException('Cannot write state file: ' . basename($path));
         }
 
@@ -94,6 +98,12 @@ final class GuardedJson
 
         $newline = strpos($raw, "\n");
 
-        return $newline === false ? '' : substr($raw, $newline + 1);
+        // No newline means the write was cut off before the payload
+        // separator ever landed — truncated, not empty. Returning the raw
+        // (still-guarded) bytes here sends them into the JSON decode below,
+        // which is guaranteed to reject them loudly. The alternative, '',
+        // reads back as an empty store and lets a caller's read-modify-write
+        // persist that emptiness as the new truth.
+        return $newline === false ? $raw : substr($raw, $newline + 1);
     }
 }

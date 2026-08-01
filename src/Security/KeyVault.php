@@ -174,8 +174,25 @@ final class KeyVault
     {
         $path = $this->dataDir . '/' . self::SECRET_FILE;
 
-        if (is_file($path)) {
+        if (is_file($path) && (int) @filesize($path) > 0) {
             return $this->readStoredSecret($path);
+        }
+
+        if (is_file($path)) {
+            // Review round 3: a TRULY zero-length file is the crash window
+            // of GuardedJson::createExclusive()'s fopen('xb') fallback
+            // (used when hard links are unavailable) — claimed, but the
+            // process died before a single content byte landed. Unlike
+            // round 1's IMPORTANT 2 concern (an existing-but-unusable file
+            // might be a corrupted, previously-working secret, and
+            // replacing it would destroy an API key already encrypted
+            // under it), an empty file provably never held a secret: there
+            // is nothing here that replacing it could destroy. It is
+            // removed and treated the same as a genuinely missing file,
+            // restoring the self-healing behaviour the O_CREAT|O_EXCL
+            // round removed, without reintroducing the silent re-key of a
+            // corrupt-but-non-empty vault (that still throws above).
+            @unlink($path);
         }
 
         DataDir::ensure($this->dataDir);
@@ -228,6 +245,17 @@ final class KeyVault
 
         if (GuardedJson::createExclusive($path, ['secret' => base64_encode($secret), 'created_at' => time()])) {
             return $secret;
+        }
+
+        if (!is_file($path)) {
+            // Review round 3: createExclusive() returning false here means
+            // neither this call nor any concurrent one ever actually
+            // created $path — a genuine write failure (both the hard-link
+            // publish and its O_CREAT|O_EXCL fallback failed), not a lost
+            // race. readStoredSecret() would find nothing and throw "the
+            // vault is corrupt" — the wording for tampering with data that
+            // exists; nothing here ever existed to tamper with.
+            throw new StorageException('Cannot create the key vault master secret.');
         }
 
         return $this->readStoredSecret($path);

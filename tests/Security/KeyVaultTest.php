@@ -401,4 +401,60 @@ final class KeyVaultTest extends TestCase
         $this->expectException(StorageException::class);
         $vault->decrypt($envelope);
     }
+
+    // --- task 2 review round 3: OPEN 1 (iii) — a zero-length keyvault.php must self-heal ---
+
+    public function testZeroLengthKeyVaultFileIsTreatedAsAbsentAndReplaced(): void
+    {
+        // The crash window of createExclusive()'s fopen('xb') fallback
+        // (used when hard links are unavailable): $path is claimed, 0
+        // bytes, then the process dies before a single content byte
+        // lands. Unlike a guard-only-but-empty-payload file (still
+        // corrupt — see testExistingButEmptyKeyVaultFileThrowsRatherThan
+        // BeingSilentlyReplaced, which is not zero-length at the raw byte
+        // level and must keep throwing), a TRULY empty file provably never
+        // held a secret, so there is nothing here that replacing it could
+        // destroy — the exact property that made round 1's IMPORTANT 2
+        // dangerous does not apply to this specific case.
+        touch($this->dir . '/keyvault.php');
+        self::assertSame(0, filesize($this->dir . '/keyvault.php'));
+
+        $vault = new KeyVault($this->dir);
+        $envelope = $vault->encrypt('sk-ant-secret');
+
+        self::assertSame('sk-ant-secret', $vault->decrypt($envelope));
+        self::assertGreaterThan(0, filesize($this->dir . '/keyvault.php'));
+    }
+
+    public function testCreateMasterSecretNamesTheRealCauseWhenNeitherMechanismCanCreateTheFile(): void
+    {
+        // A directory at the exact target path forces BOTH createExclusive()
+        // mechanisms to genuinely fail, deterministically: link() fails
+        // (something already occupies that name) and is_file() is false
+        // (it is a directory, not a regular file) — exactly "link failed,
+        // $path does not exist" — and the fopen('xb') fallback fails for
+        // the same underlying reason (a directory cannot be opened as a
+        // writable file). Verified empirically that all three hold before
+        // writing this test. Neither this call nor any concurrent one ever
+        // created $path, so throwing "the vault is corrupt" — the wording
+        // for tampering with data that exists — would misdiagnose a plain
+        // write failure as an attack.
+        $path = $this->dir . '/keyvault.php';
+        mkdir($path);
+
+        $method = new ReflectionMethod(KeyVault::class, 'createMasterSecret');
+
+        if (PHP_VERSION_ID < 80100) {
+            $method->setAccessible(true);
+        }
+
+        $this->expectException(StorageException::class);
+        $this->expectExceptionMessage('Cannot create the key vault master secret.');
+
+        try {
+            $method->invoke(new KeyVault($this->dir), $path);
+        } finally {
+            rmdir($path);
+        }
+    }
 }

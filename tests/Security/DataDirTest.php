@@ -294,11 +294,18 @@ final class DataDirTest extends TestCase
         $decoy = $this->dir . "/keyvault.php.tmp.deadbeef\n";
         touch($decoy, time() - 301);
 
-        DataDir::ensure($this->dir);
+        try {
+            DataDir::ensure($this->dir);
 
-        self::assertFileExists($decoy, 'a trailing newline after the hex suffix must not match the sweep pattern');
-
-        unlink($decoy);
+            self::assertFileExists($decoy, 'a trailing newline after the hex suffix must not match the sweep pattern');
+        } finally {
+            // finally, not a trailing statement: if the regex ever
+            // regresses — the exact thing this test exists to catch — the
+            // assertion above throws, and a trailing unlink() would never
+            // run, leaving the decoy behind for every later test in this
+            // file to trip over.
+            @unlink($decoy);
+        }
     }
 
     /** @return list<string> */

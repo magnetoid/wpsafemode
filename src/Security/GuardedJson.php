@@ -96,30 +96,64 @@ final class GuardedJson
      * ships into, which are already fataling, timing out, or OOMing) left a
      * permanent zero-length file at $path. That is silent, permanent
      * poisoning for a caller like KeyVault: a file that exists but yields
-     * no usable secret is never treated as "missing" (by design — see
-     * readStoredSecret()), so every later request throws "corrupt" forever,
-     * with no self-healing. Pre-fix (write()'s temp+rename), the same crash
-     * left NO file at all and the next request minted cleanly — so the
-     * exclusivity fix above had introduced a regression, not a pre-existing
-     * risk. Writing the full, chmod'd content to a uniquely-named temp file
-     * FIRST, then publishing it with a single link() call — which fails
-     * with EEXIST if $path already exists, preserving the exact same
-     * exclusivity — means $path is only ever observable as either absent or
-     * completely written; there is no partial state left for a crash to
-     * freeze. A crash before the link() leaves only a stray *.tmp.* file,
-     * which DataDir::ensure()'s sweep already collects.
+     * no usable secret is never treated as "missing" by readStoredSecret()
+     * — except that KeyVault now special-cases a genuinely zero-length
+     * file as safe to replace (review round 3), precisely because this
+     * fallback can produce one. Writing the full, chmod'd content to a
+     * uniquely-named temp file FIRST, then publishing it with a single
+     * link() call — which fails with EEXIST if $path already exists,
+     * preserving the exact same exclusivity — means the PREFERRED path
+     * exposes $path only as either absent or completely written; there is
+     * no partial state for a crash to freeze on that path. A crash before
+     * the link() leaves only a stray *.tmp.* file, which DataDir::ensure()'s
+     * sweep already collects.
+     *
+     * $useHardLinks exists for two real hosting profiles this ships into,
+     * not just for tests: some network- or object-storage-backed mounts
+     * support fopen('xb') but not hard links at all, and 'link' is a
+     * plausible disable_functions entry on shared hosting (a real
+     * hardening measure). function_exists('link') is checked BEFORE ever
+     * calling it, not discovered by catching a failure from it — on PHP
+     * 8+, calling a disabled function raises "Error: Call to undefined
+     * function", which @ does not suppress and nothing here catches, so
+     * simply attempting link() and reacting to failure would let the
+     * request die outright on such a host. When link() IS available but
+     * still fails, link() returns false for two structurally different
+     * reasons: $path already exists (a real race — the winner is done and
+     * readable, and is_file() is a reliable signal here precisely because
+     * $path is never observable torn on this path), or link() itself did
+     * not work for a reason unrelated to $path existing (no hard-link
+     * support on this filesystem). Only the first is a genuine race loss;
+     * the second falls back to createExclusiveWithoutHardLinks() exactly
+     * as if hard links were unavailable outright — a slightly weaker
+     * exclusivity guarantee that works beats a stronger one that leaves
+     * the vault permanently unusable.
      *
      * @param array<string, mixed> $data
      */
-    public static function createExclusive(string $path, array $data): bool
+    public static function createExclusive(string $path, array $data, bool $useHardLinks = true): bool
     {
         DataDir::ensure(dirname($path));
 
-        $tmp = self::writeTemp($path, $data);
-        $linked = @link($tmp, $path);
-        @unlink($tmp);
+        if ($useHardLinks && function_exists('link')) {
+            $tmp = self::writeTemp($path, $data);
+            $linked = @link($tmp, $path);
+            @unlink($tmp);
 
-        return $linked;
+            if ($linked) {
+                return true;
+            }
+
+            if (is_file($path)) {
+                return false;
+            }
+
+            // link() itself did not work, for a reason unrelated to $path
+            // existing: fall through below exactly as if hard links were
+            // unavailable to begin with.
+        }
+
+        return self::createExclusiveWithoutHardLinks($path, $data);
     }
 
     /**
@@ -144,6 +178,40 @@ final class GuardedJson
         @chmod($tmp, 0600);
 
         return $tmp;
+    }
+
+    /**
+     * The fallback used when hard links are unavailable or did not work:
+     * an O_CREAT|O_EXCL create via fopen($path, 'xb'), needing no
+     * hard-link support at all. This trades away the narrow crash-safety
+     * property createExclusive()'s preferred path has: a process that dies
+     * between this fopen() and its fwrite() below leaves a permanent
+     * zero-length file at $path, which is exactly why KeyVault treats a
+     * zero-length keyvault.php as absent and safe to replace, rather than
+     * corrupt, when deciding whether to mint a new secret.
+     *
+     * @param array<string, mixed> $data
+     */
+    private static function createExclusiveWithoutHardLinks(string $path, array $data): bool
+    {
+        $payload = DataDir::GUARD . self::encode($path, $data);
+        $handle = @fopen($path, 'xb');
+
+        if ($handle === false) {
+            return false;
+        }
+
+        $written = fwrite($handle, $payload);
+        fclose($handle);
+
+        if ($written !== strlen($payload)) {
+            @unlink($path);
+            throw new StorageException('Cannot write state file: ' . basename($path));
+        }
+
+        @chmod($path, 0600);
+
+        return true;
     }
 
     /** @param array<string, mixed> $data */

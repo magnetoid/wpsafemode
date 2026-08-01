@@ -371,4 +371,59 @@ final class GuardedFileTest extends TestCase
 
         unlink($tmp);
     }
+
+    // --- task 2 review round 3: OPEN 1 — link() failure must not be mistaken for a lost race ---
+
+    public function testCreateExclusiveWithoutHardLinksProducesAWorkingFile(): void
+    {
+        // link() returns false for two structurally different reasons this
+        // code must not conflate: $path already exists (a real race), or
+        // link() itself did not work — no hard-link support on this
+        // filesystem, or 'link' disabled outright (a real shared-hosting
+        // hardening measure; on PHP 8+ calling a disabled function raises
+        // an uncaught Error that @ does not suppress, so function_exists()
+        // must be checked BEFORE ever calling it, not discovered by
+        // catching a failure from it). Either way, createExclusive() falls
+        // back to this fopen('xb')-then-write path, which needs no
+        // hard-link support at all — a slightly weaker exclusivity
+        // mechanism that works beats a stronger one that leaves those
+        // hosts with no working vault. Reflection invokes the fallback
+        // directly: the seam this test needs did not exist before this
+        // fix (there was no fallback to invoke), so reverting src/ fails
+        // this structurally, the same way round 1's and round 2's
+        // analogous seam-based tests did.
+        $path = $this->dir . '/exclusive.php';
+
+        $method = new ReflectionMethod(GuardedJson::class, 'createExclusiveWithoutHardLinks');
+
+        if (PHP_VERSION_ID < 80100) {
+            $method->setAccessible(true);
+        }
+
+        self::assertTrue($method->invoke(null, $path, ['secret' => 'value']));
+        self::assertSame(['secret' => 'value'], GuardedJson::read($path));
+        self::assertSame('0600', substr(sprintf('%o', fileperms($path)), -4));
+    }
+
+    public function testCreateExclusiveEndToEndFallsBackWhenHardLinksAreDisabled(): void
+    {
+        // End-to-end coverage of the actual public entry point (as opposed
+        // to the sibling test above, which reflects into the fallback
+        // directly): $useHardLinks = false is the injectable seam the
+        // finding asked for, standing in for a host where 'link' is
+        // disabled or unsupported, without depending on this host's own
+        // filesystem or php.ini. Note for whoever reviews this: PHP
+        // silently ignores an extra positional argument to a function that
+        // does not declare it, so calling this 3-argument form against
+        // round 2's 2-parameter createExclusive() would not error — it
+        // would just run the normal, ignored-third-argument path, which
+        // still succeeds via link() on this host. This test therefore does
+        // not by itself discriminate pre/post-fix; the sibling test above
+        // does, via a seam with no round-2 equivalent at all.
+        $path = $this->dir . '/exclusive.php';
+
+        self::assertTrue(GuardedJson::createExclusive($path, ['secret' => 'value'], false));
+        self::assertSame(['secret' => 'value'], GuardedJson::read($path));
+        self::assertSame('0600', substr(sprintf('%o', fileperms($path)), -4));
+    }
 }

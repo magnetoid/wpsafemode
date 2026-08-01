@@ -10,7 +10,7 @@ use WPSafeMode\Storage\Session;
 
 /**
  * One directory per session (spec 7.2). The session record itself lives in
- * session.json; Task 5 adds messages.jsonl beside it.
+ * session.php; Task 5 adds messages.php beside it.
  */
 final class JsonSessionRepo implements SessionRepo
 {
@@ -109,6 +109,6 @@ final class JsonSessionRepo implements SessionRepo
             throw new StorageException('Illegal session id: ' . $id);
         }
 
-        return $this->baseDir . '/' . $id . '/session.json';
+        return $this->baseDir . '/' . $id . '/session.php';
     }
 }

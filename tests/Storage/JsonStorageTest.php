@@ -15,7 +15,7 @@ final class JsonStorageTest extends StorageConformanceTest
 {
     protected function makeConfigStore(string $dataDir): ConfigStore
     {
-        return new JsonConfigStore($dataDir . '/config.json');
+        return new JsonConfigStore($dataDir . '/config.php');
     }
 
     protected function makeSessionRepo(string $dataDir): SessionRepo

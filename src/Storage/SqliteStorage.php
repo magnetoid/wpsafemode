@@ -17,9 +17,9 @@ final class SqliteStorage implements Storage
 {
     private SqliteConnection $connection;
 
-    public function __construct(string $dataDir)
+    public function __construct(string $dataDir, string $filename = 'wpsm.sqlite')
     {
-        $this->connection = new SqliteConnection($dataDir . '/wpsm.sqlite');
+        $this->connection = new SqliteConnection($dataDir . '/' . $filename);
     }
 
     public function config(): ConfigStore

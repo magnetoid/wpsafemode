@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace WPSafeMode\Storage;
 
 use WPSafeMode\Core\EnvironmentReport;
+use WPSafeMode\Security\DataDir;
+use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Storage\Contracts\Storage;
 use WPSafeMode\Storage\Contracts\StorageException;
 
@@ -48,25 +50,42 @@ final class StorageFactory
     }
 
     /**
-     * Opens storage for a live install, recording the chosen backend the
-     * first time so later requests stay on it.
+     * Opens storage for a live install, recording the chosen backend and the
+     * SQLite filename the first time so later requests stay on both.
      */
     public static function open(string $dataDir, EnvironmentReport $env): Storage
     {
-        $marker = $dataDir . '/backend';
-        $recorded = is_file($marker) ? trim((string) file_get_contents($marker)) : null;
+        DataDir::ensure($dataDir);
+
+        $record = GuardedJson::read($dataDir . '/install.php');
+        $recorded = isset($record['backend']) ? (string) $record['backend'] : null;
 
         $backend = self::chooseBackend($env->hasPdoSqlite, $recorded === '' ? null : $recorded);
 
         if ($recorded === null || $recorded === '') {
-            if (!is_dir($dataDir) && !@mkdir($dataDir, 0700, true) && !is_dir($dataDir)) {
-                throw new StorageException('Cannot create data directory: ' . $dataDir);
-            }
+            $record['backend'] = $backend;
 
-            file_put_contents($marker, $backend, LOCK_EX);
-            @chmod($marker, 0600);
+            // The SQLite file cannot carry the die() guard: a .php-named
+            // database is handed to PHP, which finds no opening tag and echoes
+            // the binary verbatim. An unguessable name is the part of its
+            // defence that does not depend on server configuration.
+            $record['sqlite_file'] = 'store-' . bin2hex(random_bytes(16)) . '.db';
+
+            GuardedJson::write($dataDir . '/install.php', $record);
         }
 
-        return self::create($dataDir, $backend);
+        return $backend === self::BACKEND_SQLITE
+            ? new SqliteStorage($dataDir, self::sqliteFilename($dataDir))
+            : new JsonStorage($dataDir);
+    }
+
+    /** The recorded SQLite filename, or a deterministic default for a fresh directory. */
+    public static function sqliteFilename(string $dataDir): string
+    {
+        $record = GuardedJson::read($dataDir . '/install.php');
+
+        return isset($record['sqlite_file']) && is_string($record['sqlite_file']) && $record['sqlite_file'] !== ''
+            ? $record['sqlite_file']
+            : 'store-' . bin2hex(random_bytes(16)) . '.db';
     }
 }

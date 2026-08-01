@@ -20,7 +20,7 @@ final class JsonStorage implements Storage
 
     public function config(): ConfigStore
     {
-        return new JsonConfigStore($this->dataDir . '/config.json');
+        return new JsonConfigStore($this->dataDir . '/config.php');
     }
 
     public function sessions(): SessionRepo

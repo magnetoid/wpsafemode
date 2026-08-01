@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Security;
 
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use WPSafeMode\Security\DataDir;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Message;
@@ -229,6 +230,75 @@ final class DataDirTest extends TestCase
 
         self::assertFileDoesNotExist($stale, 'a temp file older than the threshold must be swept');
         self::assertFileExists($fresh, 'a temp file young enough to belong to an in-flight write must survive');
+    }
+
+    // --- review round 3 (task 2 findings r2) ---
+
+    public function testSweepToleratesAnUnreadableOrAbsentDirectoryWithoutEmittingAWarning(): void
+    {
+        // Task 2 review round 2, item (c): scandir() in the sweep was
+        // unsuppressed, so on a data directory whose mode or ownership got
+        // mangled — the exact misconfiguration this class exists to defend
+        // against — it leaked a raw "scandir(): failed to open dir"
+        // E_WARNING straight into the HTTP response. A non-existent
+        // directory triggers the identical failure mode (scandir()
+        // returning false with a warning) portably, without needing
+        // fragile permission/ownership tricks that ensure()'s own
+        // @chmod($dir, 0700) would undo before the sweep ever ran anyway.
+        $method = new ReflectionMethod(DataDir::class, 'sweepStaleTempFiles');
+
+        if (PHP_VERSION_ID < 80100) {
+            $method->setAccessible(true);
+        }
+
+        $warnings = [];
+        set_error_handler(
+            // error_reporting() & $errno, not a literal 0 comparison: since
+            // PHP 8, @ no longer zeroes error_reporting() for the duration
+            // of the call — it reduces the mask to only the levels @
+            // cannot silence (fatal-ish ones), verified empirically at
+            // 4437 with E_WARNING absent from it. Checking the bit for
+            // this specific $errno is the correct, version-accurate way to
+            // tell "silenced by @" apart from "genuinely unsuppressed".
+            static function (int $errno, string $errstr) use (&$warnings): bool {
+                if (!(error_reporting() & $errno)) {
+                    return true;
+                }
+
+                $warnings[] = $errstr;
+
+                return true;
+            },
+            E_WARNING
+        );
+
+        try {
+            $method->invoke(null, $this->dir . '/does-not-exist-' . bin2hex(random_bytes(4)));
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([], $warnings, 'an unreadable or absent directory must not leak a raw scandir() warning');
+    }
+
+    public function testSweepRegexDoesNotTreatATrailingNewlineAsPartOfTheHexSuffix(): void
+    {
+        // Task 2 review round 2, item (e): PCRE's $ matches "end of
+        // subject" OR "immediately before a single trailing newline at the
+        // end of the subject" unless \z is used instead. bin2hex() never
+        // emits "\n", so a filename ending "...deadbeef\n" is not one
+        // GuardedJson::write() could ever have produced, and must never be
+        // treated as a sweepable temp file.
+        DataDir::ensure($this->dir);
+
+        $decoy = $this->dir . "/keyvault.php.tmp.deadbeef\n";
+        touch($decoy, time() - 301);
+
+        DataDir::ensure($this->dir);
+
+        self::assertFileExists($decoy, 'a trailing newline after the hex suffix must not match the sweep pattern');
+
+        unlink($decoy);
     }
 
     /** @return list<string> */

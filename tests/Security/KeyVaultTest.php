@@ -163,10 +163,27 @@ final class KeyVaultTest extends TestCase
         (new KeyVault($this->dir))->decrypt('not-an-envelope');
     }
 
+    /**
+     * Task 2 review round 2, item (d): this test and two others below call
+     * openssl_encrypt()/openssl_decrypt() directly to construct a specific
+     * envelope, with no guard. On a sodium-present/openssl-absent host —
+     * which KeyVault::encrypt() and isAvailable() both explicitly support —
+     * they previously fataled with "Call to undefined function" instead of
+     * skipping.
+     */
+    private function skipUnlessOpensslIsAvailable(): void
+    {
+        if (!extension_loaded('openssl')) {
+            self::markTestSkipped('This test requires the openssl extension.');
+        }
+    }
+
     // --- review round 1: IMPORTANT 1 — the GCM tag/IV length is never pinned ---
 
     public function testGenuineShortGcmTagPrefixIsRejectedRatherThanAuthenticating(): void
     {
+        $this->skipUnlessOpensslIsAvailable();
+
         $vault = new KeyVault($this->dir);
         $key = self::derivedKey($vault);
 
@@ -200,6 +217,8 @@ final class KeyVaultTest extends TestCase
 
     public function testZeroLengthIvIsRejectedWithoutEmittingAPhpWarning(): void
     {
+        $this->skipUnlessOpensslIsAvailable();
+
         $vault = new KeyVault($this->dir);
         $key = self::derivedKey($vault);
 
@@ -322,6 +341,13 @@ final class KeyVaultTest extends TestCase
 
     public function testAnOpensslEnvelopeProducedElsewhereDecryptsOnThisHostRegardlessOfLocalAlgorithm(): void
     {
+        // Not one of the two tests item (d) named, but the same underlying
+        // issue: this envelope is 'openssl'-tagged, so decrypt() reaches its
+        // openssl branch — and calls the real openssl_decrypt() — regardless
+        // of which algorithm THIS host would have picked for encrypt(). On a
+        // sodium-present/openssl-absent host that would fatal too.
+        $this->skipUnlessOpensslIsAvailable();
+
         // Fixed fixture, generated once (see task-2-report.md): a 32-byte
         // master secret and a genuine OpenSSL envelope produced from it
         // under a sodium-disabled interpreter. The class docblock's whole

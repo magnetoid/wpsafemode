@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Security;
 
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use WPSafeMode\Security\DataDir;
 use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Security\GuardedJsonLines;
@@ -313,5 +314,61 @@ final class GuardedFileTest extends TestCase
 
         self::assertFileExists(dirname($nested) . '/.htaccess');
         self::assertFileExists(dirname($nested) . '/index.php');
+    }
+
+    // --- task 2 review round 2: OPEN 1 — createExclusive() must never expose a partial file ---
+
+    public function testCreateExclusiveOnlyEverPublishesOneWritersContent(): void
+    {
+        $path = $this->dir . '/exclusive.php';
+
+        self::assertTrue(GuardedJson::createExclusive($path, ['secret' => 'first']));
+        self::assertFalse(GuardedJson::createExclusive($path, ['secret' => 'second']));
+
+        self::assertSame(['secret' => 'first'], GuardedJson::read($path));
+    }
+
+    public function testCreateExclusiveNeverExposesAPartiallyWrittenFileAtTheFinalPath(): void
+    {
+        $path = $this->dir . '/exclusive.php';
+
+        // Round 1's createExclusive() used fopen($path, 'xb') directly: that
+        // call alone creates $path, empty, before a single byte of content
+        // exists. A crash between that fopen() and the fwrite() that follows
+        // it — max_execution_time, OOM, a php-fpm restart, SIGKILL — left a
+        // permanent zero-length keyvault.php, and IMPORTANT 2 (this same
+        // task, round 1) means such a file is never treated as "missing":
+        // readStoredSecret() throws "the vault is corrupt" forever, with no
+        // self-healing. Pre-fix, GuardedJson::write()'s temp+rename meant the
+        // same crash left NO file at all and the next request minted
+        // cleanly — so this was a regression, not a pre-existing risk.
+        //
+        // The fix writes and chmods a TEMPORARILY-named file first and only
+        // ever touches $path via a single link() call, so $path is only ever
+        // observable as either absent or fully written. Reflection invokes
+        // that "write the content" step in isolation — exactly what is on
+        // disk if the process dies immediately afterwards, before link() is
+        // ever reached — and the true end-to-end behaviour (this method's
+        // sibling test above, and KeyVault's own race test) confirms the
+        // full call still publishes correctly when nothing crashes.
+        $writeTemp = new ReflectionMethod(GuardedJson::class, 'writeTemp');
+
+        if (PHP_VERSION_ID < 80100) {
+            $writeTemp->setAccessible(true);
+        }
+
+        /** @var string $tmp */
+        $tmp = $writeTemp->invoke(null, $path, ['secret' => 'value']);
+
+        self::assertFileDoesNotExist($path, 'a crash before publish must leave no trace at the final path');
+        self::assertFileExists($tmp);
+        self::assertGreaterThan(0, filesize($tmp), 'the temp file itself must hold the full content, not a partial write');
+        self::assertSame(
+            '0600',
+            substr(sprintf('%o', fileperms($tmp)), -4),
+            'permissions must already be tightened before $path could ever become visible via link()'
+        );
+
+        unlink($tmp);
     }
 }

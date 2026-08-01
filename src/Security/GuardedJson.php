@@ -77,16 +77,37 @@ final class GuardedJson
 
     /**
      * Like write(), but never overwrites an existing file: an atomic
-     * O_CREAT|O_EXCL create (fopen 'xb') rather than write()'s unconditional
-     * temp+rename, which has no create-exclusive semantics of its own —
-     * that is the right default for every OTHER caller (a config update
-     * should always win), so the exclusivity lives here instead of in
-     * write() itself.
+     * O_CREAT|O_EXCL create rather than write()'s unconditional temp+rename,
+     * which has no create-exclusive semantics of its own — that is the
+     * right default for every OTHER caller (a config update should always
+     * win), so the exclusivity lives here instead of in write() itself.
      *
      * Returns false, rather than throwing, when the create loses that race:
      * for a "first run" value like KeyVault's master secret, that means a
      * concurrent request already minted one, and the caller should read
      * what it wrote instead of treating the loss as a failure.
+     *
+     * link(), not a direct fopen($path, 'xb'): an earlier version of this
+     * method opened $path itself in 'xb' mode and wrote the content into
+     * that handle. fopen($path, 'xb') alone creates $path — empty — before
+     * a single content byte exists, so a crash between that call and the
+     * fwrite() that followed it (max_execution_time, OOM, a php-fpm
+     * restart, SIGKILL — not hypothetical on the WordPress installs this
+     * ships into, which are already fataling, timing out, or OOMing) left a
+     * permanent zero-length file at $path. That is silent, permanent
+     * poisoning for a caller like KeyVault: a file that exists but yields
+     * no usable secret is never treated as "missing" (by design — see
+     * readStoredSecret()), so every later request throws "corrupt" forever,
+     * with no self-healing. Pre-fix (write()'s temp+rename), the same crash
+     * left NO file at all and the next request minted cleanly — so the
+     * exclusivity fix above had introduced a regression, not a pre-existing
+     * risk. Writing the full, chmod'd content to a uniquely-named temp file
+     * FIRST, then publishing it with a single link() call — which fails
+     * with EEXIST if $path already exists, preserving the exact same
+     * exclusivity — means $path is only ever observable as either absent or
+     * completely written; there is no partial state left for a crash to
+     * freeze. A crash before the link() leaves only a stray *.tmp.* file,
+     * which DataDir::ensure()'s sweep already collects.
      *
      * @param array<string, mixed> $data
      */
@@ -94,24 +115,35 @@ final class GuardedJson
     {
         DataDir::ensure(dirname($path));
 
+        $tmp = self::writeTemp($path, $data);
+        $linked = @link($tmp, $path);
+        @unlink($tmp);
+
+        return $linked;
+    }
+
+    /**
+     * Writes the full, guarded, chmod'd payload to a freshly-named
+     * temporary file and returns its path, touching $path itself not at
+     * all. Split out of createExclusive() so "the process died before
+     * $path was ever touched" is a state a test can produce directly,
+     * rather than something only true by argument.
+     *
+     * @param array<string, mixed> $data
+     */
+    private static function writeTemp(string $path, array $data): string
+    {
         $payload = DataDir::GUARD . self::encode($path, $data);
-        $handle = @fopen($path, 'xb');
+        $tmp = $path . '.tmp.' . bin2hex(random_bytes(4));
 
-        if ($handle === false) {
-            return false;
-        }
-
-        $written = fwrite($handle, $payload);
-        fclose($handle);
-
-        if ($written !== strlen($payload)) {
-            @unlink($path);
+        if (@file_put_contents($tmp, $payload, LOCK_EX) !== strlen($payload)) {
+            @unlink($tmp);
             throw new StorageException('Cannot write state file: ' . basename($path));
         }
 
-        @chmod($path, 0600);
+        @chmod($tmp, 0600);
 
-        return true;
+        return $tmp;
     }
 
     /** @param array<string, mixed> $data */

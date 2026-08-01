@@ -116,11 +116,22 @@ final class DataDir
     {
         $cutoff = time() - self::STALE_TEMP_FILE_AGE_SECONDS;
 
-        foreach (scandir($dir) ?: [] as $entry) {
+        // @-suppressed and a false return treated as "nothing to sweep",
+        // matching every other filesystem call in ensure(): this now runs
+        // on every guarded write, and a data directory whose mode or
+        // ownership got mangled — the exact misconfiguration this class
+        // exists to defend against — is exactly when scandir() fails.
+        // Unsuppressed, that is a raw E_WARNING leaking into whatever the
+        // request is producing, not a caught, reported error.
+        foreach (@scandir($dir) ?: [] as $entry) {
             // Matches GuardedJson::write()'s '.tmp.' . bin2hex(random_bytes(4))
             // suffix precisely, so this cannot sweep a differently-named
             // file that merely happens to contain the substring '.tmp.'.
-            if (!preg_match('/\.tmp\.[0-9a-f]{8}$/', $entry)) {
+            // \z, not $: PCRE's $ also matches immediately before a single
+            // trailing newline at the end of the subject, so a filename
+            // ending "...deadbeef\n" — not something bin2hex() can ever
+            // produce — would otherwise be swept as if it were one of ours.
+            if (!preg_match('/\.tmp\.[0-9a-f]{8}\z/', $entry)) {
                 continue;
             }
 

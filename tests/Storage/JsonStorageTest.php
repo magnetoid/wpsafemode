@@ -8,11 +8,13 @@ use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Storage\Contracts\AuthStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
+use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Json\JsonAuthStore;
 use WPSafeMode\Storage\Json\JsonConfigStore;
 use WPSafeMode\Storage\Json\JsonMessageLog;
+use WPSafeMode\Storage\Json\JsonRateLimiter;
 use WPSafeMode\Storage\Json\JsonSessionRepo;
 
 final class JsonStorageTest extends StorageConformanceTest
@@ -35,6 +37,11 @@ final class JsonStorageTest extends StorageConformanceTest
     protected function makeAuthStore(string $dataDir): AuthStore
     {
         return new JsonAuthStore($dataDir . '/auth.php');
+    }
+
+    protected function makeRateLimiter(string $dataDir): RateLimiter
+    {
+        return new JsonRateLimiter($dataDir . '/rate_limit.php');
     }
 
     protected function assertNoSessionStorageLeftBehind(string $dataDir, string $id): void

@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use WPSafeMode\Storage\Contracts\AuthStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
+use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Credential;
@@ -30,6 +31,8 @@ abstract class StorageConformanceTest extends TestCase
     abstract protected function makeMessageLog(string $dataDir): MessageLog;
 
     abstract protected function makeAuthStore(string $dataDir): AuthStore;
+
+    abstract protected function makeRateLimiter(string $dataDir): RateLimiter;
 
     /**
      * Backend-specific: the JSON backend keeps one directory per session and
@@ -321,5 +324,83 @@ abstract class StorageConformanceTest extends TestCase
         self::assertSame('$argon2id$second', $found->hash);
         self::assertSame(1000, $found->createdAt, 'created_at must survive a password change unchanged');
         self::assertSame(3000, $found->changedAt);
+    }
+
+    public function testAnUnknownBucketIsUnlockedWithNoAttempts(): void
+    {
+        $state = $this->makeRateLimiter($this->dataDir)->peek('ip:1.2.3.4', 1000);
+
+        self::assertSame(0, $state->attempts);
+        self::assertFalse($state->isLocked(1000));
+    }
+
+    public function testAttemptsAccumulateWithinTheWindow(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+
+        self::assertSame(1, $limiter->hit('ip:1.2.3.4', 1000)->attempts);
+        self::assertSame(2, $limiter->hit('ip:1.2.3.4', 1010)->attempts);
+        self::assertSame(2, $this->makeRateLimiter($this->dataDir)->peek('ip:1.2.3.4', 1010)->attempts);
+    }
+
+    public function testExceedingTheLimitLocksTheBucket(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+        $state = new \WPSafeMode\Storage\RateLimitState(0, 0, null);
+
+        for ($i = 0; $i < RateLimiter::MAX_ATTEMPTS; $i++) {
+            $state = $limiter->hit('ip:1.2.3.4', 1000);
+        }
+
+        self::assertTrue($state->isLocked(1000));
+        self::assertSame(RateLimiter::LOCKOUT_SECONDS, $state->retryAfter(1000));
+    }
+
+    public function testTheLockExpires(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+
+        for ($i = 0; $i < RateLimiter::MAX_ATTEMPTS; $i++) {
+            $limiter->hit('ip:1.2.3.4', 1000);
+        }
+
+        $after = 1000 + RateLimiter::LOCKOUT_SECONDS + 1;
+
+        self::assertFalse($limiter->peek('ip:1.2.3.4', $after)->isLocked($after));
+    }
+
+    public function testTheWindowResetsAfterItElapses(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+        $limiter->hit('ip:1.2.3.4', 1000);
+        $limiter->hit('ip:1.2.3.4', 1000);
+
+        $later = 1000 + RateLimiter::WINDOW_SECONDS + 1;
+
+        self::assertSame(1, $limiter->hit('ip:1.2.3.4', $later)->attempts);
+    }
+
+    public function testBucketsAreIndependent(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+
+        for ($i = 0; $i < RateLimiter::MAX_ATTEMPTS; $i++) {
+            $limiter->hit('ip:1.2.3.4', 1000);
+        }
+
+        self::assertFalse($limiter->peek('ip:5.6.7.8', 1000)->isLocked(1000));
+    }
+
+    public function testClearForgetsTheBucket(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+
+        for ($i = 0; $i < RateLimiter::MAX_ATTEMPTS; $i++) {
+            $limiter->hit('ip:1.2.3.4', 1000);
+        }
+
+        $limiter->clear('ip:1.2.3.4');
+
+        self::assertSame(0, $this->makeRateLimiter($this->dataDir)->peek('ip:1.2.3.4', 1000)->attempts);
     }
 }

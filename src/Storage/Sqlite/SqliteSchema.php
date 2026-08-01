@@ -68,6 +68,15 @@ final class SqliteSchema
             )'
         );
 
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS rate_limit (
+                bucket TEXT PRIMARY KEY,
+                window_start INTEGER NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                locked_until INTEGER
+            )'
+        );
+
         $stmt = $pdo->prepare('INSERT OR IGNORE INTO meta (key, value) VALUES (:k, :v)');
         $stmt->execute([':k' => 'schema_version', ':v' => (string) Version::SCHEMA]);
     }

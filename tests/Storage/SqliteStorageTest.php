@@ -76,6 +76,27 @@ final class SqliteStorageTest extends StorageConformanceTest
      * BEGIN IMMEDIATE (thirty-plus runs at 3, 10 and 20 concurrent workers,
      * zero errors, zero undercounts).
      *
+     * Review round 2, CRITICAL A: BEGIN IMMEDIATE via exec() must be paired
+     * with exec('COMMIT')/exec('ROLLBACK'), not $pdo->commit()/rollBack() —
+     * see SqliteRateLimiter::hit()'s own docblock. That specific pairing bug
+     * cannot be produced on this host (PHP 8.5): it depends on pdo_sqlite's
+     * in_transaction driver hook being NULL, which is only true on PHP
+     * 8.0–8.3 (verified directly against php-src for this task; PHP 8.4 adds
+     * a real pdo_sqlite_in_transaction()). So this test — like every other
+     * empirical result in this file — confirms the fix behaves correctly on
+     * 8.5. It cannot and does not confirm the exec()/exec() pairing was
+     * necessary or sufficient on 8.0–8.3; that rests on the sourced
+     * php-src analysis in the round 2 findings and report, not on anything
+     * this suite executes.
+     *
+     * Review round 2, IMPORTANT D: my own honest number after round 1 was
+     * 2/3 red pre-fix at 10 workers in a single burst — meaning a future
+     * regression back to beginTransaction() had roughly a one-in-three
+     * chance of passing this test undetected. Repeating a larger burst
+     * three times in the same test, each checked independently, drives that
+     * false-pass probability down sharply: even at the same per-burst red
+     * rate, three independent bursts would all have to pass by chance.
+     *
      * This exercises the real hit() method under genuine OS-level
      * concurrency (see hitConcurrently()'s docblock for why a single PHP
      * process cannot simulate this interleaving on its own).
@@ -88,20 +109,28 @@ final class SqliteStorageTest extends StorageConformanceTest
         $limiterExpr = 'new \WPSafeMode\Storage\Sqlite\SqliteRateLimiter('
             . 'new \WPSafeMode\Storage\Sqlite\SqliteConnection($dataDir . \'/wpsm.sqlite\'))';
 
-        $outputs = $this->hitConcurrently($limiterExpr, 'race', 1000, 10);
+        $expected = 1;
+        $workersPerBurst = 15;
+        $bursts = 3;
 
-        foreach ($outputs as $output) {
-            self::assertStringStartsWith(
-                'OK:',
-                $output,
-                'every concurrent hit() must succeed, not fail under lock contention: ' . $output
+        for ($burst = 1; $burst <= $bursts; $burst++) {
+            $outputs = $this->hitConcurrently($limiterExpr, 'race', 1000, $workersPerBurst);
+
+            foreach ($outputs as $output) {
+                self::assertStringStartsWith(
+                    'OK:',
+                    $output,
+                    "burst $burst: every concurrent hit() must succeed, not fail under lock contention: " . $output
+                );
+            }
+
+            $expected += $workersPerBurst;
+
+            self::assertSame(
+                $expected,
+                $limiter->peek('race', 1000)->attempts,
+                "burst $burst: every concurrent hit() call so far must be counted - none silently lost to a stale read"
             );
         }
-
-        self::assertSame(
-            11,
-            $limiter->peek('race', 1000)->attempts,
-            'ten real, concurrent hit() calls plus the priming one must all be counted - none silently lost to a stale read'
-        );
     }
 }

@@ -133,18 +133,22 @@ abstract class StorageConformanceTest extends TestCase
         }
 
         $outputs = [];
-        $stderrs = [];
 
         foreach ($handles as $h) {
-            $outputs[] = (string) stream_get_contents($h['pipes'][1]);
-            $stderrs[] = (string) stream_get_contents($h['pipes'][2]);
+            $stdout = (string) stream_get_contents($h['pipes'][1]);
+            // Drained, but not asserted empty (review round 2, "also fix" b):
+            // workers run under whatever default php.ini this machine has,
+            // so a benign startup notice on some environment would fail this
+            // helper on output that has nothing to do with the code under
+            // test. The worker's own OK:/ERR: protocol on stdout is the
+            // signal that matters; stderr is folded in only as context for
+            // whichever assertion the caller makes against $stdout.
+            $stderr = (string) stream_get_contents($h['pipes'][2]);
             fclose($h['pipes'][1]);
             fclose($h['pipes'][2]);
             proc_close($h['proc']);
-        }
 
-        foreach ($stderrs as $stderr) {
-            self::assertSame('', $stderr, 'a worker process wrote to stderr: ' . $stderr);
+            $outputs[] = $stderr === '' ? $stdout : $stdout . ' [stderr: ' . $stderr . ']';
         }
 
         return $outputs;

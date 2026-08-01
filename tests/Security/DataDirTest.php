@@ -117,6 +117,14 @@ final class DataDirTest extends TestCase
             'data/auth.php',
             'data/auth_sessions.php',
             'data/rate_limit.php',
+            // GuardedJson::withExclusiveLock()'s sidecar lock file (review
+            // round 2, IMPORTANT B): it escaped every other guard here,
+            // since nothing previously pinned it, and a review found it
+            // shipped as data/rate_limit.php.lock — a statically-servable
+            // extension none of the JsonRateLimiter/GuardedJson tests
+            // caught, because they never checked isServableExtension() on
+            // it at all.
+            'data/rate_limit.php.lock.php',
             'data/audit_log.php',
             'data/keyvault.php',
             'data/sessions/sesn_1/session.php',

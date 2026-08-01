@@ -107,6 +107,15 @@ final class GuardedJson
      * written to prevent for the value object — this is the same principle
      * applied to locking.
      *
+     * NOT reentrant: flock() contends against itself across two separate
+     * fopen() handles in the same process, even for the same path, so a
+     * nested call to this method for the SAME $path — from inside $fn()
+     * itself — self-deadlocks forever; flock() has no timeout to break out
+     * of that. The likeliest place to write this bug by accident is a
+     * future caller with its own read-modify-write methods that call one
+     * another (Task 5's session store: an update() that already holds the
+     * lock calling a save() that tries to acquire it again).
+     *
      * @template T
      * @param callable(): T $fn
      * @return T
@@ -115,7 +124,15 @@ final class GuardedJson
     {
         DataDir::ensure(dirname($path));
 
-        $lockPath = $path . '.lock';
+        // .lock.php, not .lock (review round 2, IMPORTANT B):
+        // DataDir::isServableExtension() is deliberately fail-closed — only
+        // php/phtml/php4/php5/php7/php8 come back "not servable" — so a
+        // bare .lock suffix under data/ is exactly the kind of statically-
+        // servable filename this codebase spent four review rounds
+        // eliminating. The file is never written to (existence is the only
+        // thing that matters for flock()), so a .php extension that is
+        // executed rather than served costs nothing and closes the gap.
+        $lockPath = $path . '.lock.php';
         $handle = @fopen($lockPath, 'c');
 
         if ($handle === false) {

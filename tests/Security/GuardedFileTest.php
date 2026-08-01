@@ -475,4 +475,70 @@ final class GuardedFileTest extends TestCase
             unlink($path);
         }
     }
+
+    // --- task 4 review round 2: IMPORTANT C — withExclusiveLock() had no direct test ---
+
+    public function testWithExclusiveLockReleasesTheLockEvenWhenTheCallbackThrows(): void
+    {
+        $path = $this->dir . '/rate_limit.php';
+
+        try {
+            // expectException(), not a manual try/catch/self::fail(): the
+            // callback below always throws, so PHPStan's flow analysis
+            // correctly sees withExclusiveLock() as never returning here,
+            // and flags anything sequenced after it in the SAME block as
+            // unreachable. expectException() needs no such statement — the
+            // recovery check that matters lives in finally below, a
+            // genuinely separate control path that always runs.
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessage('boom');
+
+            GuardedJson::withExclusiveLock($path, function (): void {
+                throw new \RuntimeException('boom');
+            });
+        } finally {
+            // If the lock were not released when $fn() threw, this second
+            // call would hang forever waiting on flock() (which has no
+            // timeout) rather than fail loudly — so this call returning at
+            // all, quickly, is what proves the lock was released.
+            $ran = false;
+            GuardedJson::withExclusiveLock($path, function () use (&$ran): void {
+                $ran = true;
+            });
+
+            self::assertTrue($ran, 'a lock held by a callback that threw must still be released');
+        }
+    }
+
+    public function testWithExclusiveLockReturnsTheCallbacksValue(): void
+    {
+        $path = $this->dir . '/rate_limit.php';
+
+        $result = GuardedJson::withExclusiveLock($path, static fn (): string => 'the value');
+
+        self::assertSame('the value', $result);
+    }
+
+    public function testWithExclusiveLockThrowsAndNeverRunsTheCallbackWhenTheLockFileCannotBeOpened(): void
+    {
+        $path = $this->dir . '/rate_limit.php';
+        $lockPath = $path . '.lock.php';
+
+        // A directory can never be fopen()'d for writing — a portable,
+        // deterministic way to force the open itself to fail, even running
+        // as root, which bypasses permission bits entirely.
+        mkdir($lockPath);
+
+        $ran = false;
+
+        try {
+            $this->expectException(StorageException::class);
+            GuardedJson::withExclusiveLock($path, function () use (&$ran): void {
+                $ran = true;
+            });
+        } finally {
+            self::assertFalse($ran, 'the callback must never run when the lock itself could not be acquired');
+            @rmdir($lockPath);
+        }
+    }
 }

@@ -124,6 +124,71 @@ final class JsonStorageTest extends StorageConformanceTest
     }
 
     /**
+     * Review round 2, IMPORTANT E: JSON-only, since it is JsonRateLimiter's
+     * read-whole-file/write-whole-file/single-lock shape that turns
+     * unbounded bucket growth into a DoS amplifier on the login path;
+     * SQLite's per-row storage does not pay a whole-file cost for every
+     * other bucket that has ever existed, so it was not asked for there.
+     */
+    public function testExpiredBucketsAreEvictedOnASubsequentHit(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+        $path = $this->dataDir . '/rate_limit.php';
+
+        $limiter->hit('ip:1.2.3.4', 1000); // this bucket is left to fully expire
+
+        $later = 1000 + RateLimiter::WINDOW_SECONDS + 1;
+        $limiter->hit('ip:5.6.7.8', $later); // an unrelated, later hit should sweep the first
+
+        $stored = GuardedJson::read($path);
+
+        self::assertArrayNotHasKey(
+            'ip:1.2.3.4',
+            $stored,
+            'a bucket whose window and lock have both elapsed must be evicted, not left to grow the file forever'
+        );
+        self::assertArrayHasKey('ip:5.6.7.8', $stored);
+    }
+
+    /**
+     * A still-locked bucket must survive the sweep even once its WINDOW has
+     * elapsed: pruning on window-elapsed alone, without also checking the
+     * lock, would let a hit() during someone else's active lockout quietly
+     * erase the evidence of it - the opposite of fail closed.
+     *
+     * Hand-crafted row, not five real hit() calls: with the real
+     * WINDOW_SECONDS === LOCKOUT_SECONDS, a lock produced by hit() itself
+     * always expires at the exact same instant its window does (never
+     * later), so there is no $now at which a real hit()-produced row is
+     * "window elapsed but still locked" — the same structural point noted
+     * against afterExpiry()'s third branch in review round 1. The sweep is
+     * a generic, defensive check that must get this right regardless, so it
+     * is tested directly against a row shaped the way it would be on a
+     * config where the lockout outlives the window, without needing to
+     * change the shipped constants to do it.
+     */
+    public function testALockedBucketSurvivesTheSweepEvenAfterItsWindowElapses(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+        $path = $this->dataDir . '/rate_limit.php';
+
+        GuardedJson::write($path, [
+            'ip:1.2.3.4' => ['window_start' => 1000, 'attempts' => 5, 'locked_until' => 5000],
+        ]);
+
+        // The window (1000..1900) has elapsed by 2000; the lock (until 5000) has not.
+        $limiter->hit('ip:5.6.7.8', 2000);
+
+        $stored = GuardedJson::read($path);
+
+        self::assertArrayHasKey(
+            'ip:1.2.3.4',
+            $stored,
+            'a bucket that is still locked must not be evicted merely because its window has elapsed'
+        );
+    }
+
+    /**
      * JSON-backend-specific, not part of the shared conformance suite: SQLite
      * has no equivalent state, since a NOT NULL column makes a row that
      * exists-but-lacks-a-password_hash impossible.

@@ -37,11 +37,49 @@ final class JsonRateLimiter implements RateLimiter
             }
 
             $all = GuardedJson::read($this->path);
+            $all = $this->pruneExpiredBuckets($all, $now);
             $all[$bucket] = ['window_start' => $windowStart, 'attempts' => $attempts, 'locked_until' => $lockedUntil];
             GuardedJson::write($this->path, $all);
 
             return new RateLimitState($attempts, $windowStart, $lockedUntil);
         });
+    }
+
+    /**
+     * Drops buckets whose window AND lock have both fully elapsed (review
+     * round 2, IMPORTANT E), so rate_limit.php does not grow without bound
+     * under a flood across many distinct buckets — exactly the load this
+     * limiter exists to survive. clear() only runs on a SUCCESSFUL login, so
+     * a bucket that is simply never revisited (an attacker moving on, or
+     * scanning many IPs/usernames once each) would otherwise sit here
+     * forever, and every later hit()'s read-whole-file/write-whole-file
+     * critical section — now serialised behind one lock for every bucket —
+     * pays the cost of all of them.
+     *
+     * A row this cannot confidently parse is left alone, not dropped:
+     * fromRawRow()'s fail-closed alreadyAtLimit() reports such a row as
+     * locked, so it never satisfies the "not locked" half of the condition
+     * below and survives the sweep — the same fail-closed direction as
+     * reading it (review round 1, IMPORTANT 1/2).
+     *
+     * @param array<string, mixed> $all
+     * @return array<string, mixed>
+     */
+    private function pruneExpiredBuckets(array $all, int $now): array
+    {
+        foreach ($all as $candidateBucket => $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $state = RateLimitState::fromRawRow($row, $now, self::MAX_ATTEMPTS, self::LOCKOUT_SECONDS);
+
+            if (!$state->isLocked($now) && $now - $state->windowStart >= self::WINDOW_SECONDS) {
+                unset($all[$candidateBucket]);
+            }
+        }
+
+        return $all;
     }
 
     public function peek(string $bucket, int $now): RateLimitState

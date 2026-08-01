@@ -28,9 +28,26 @@ final class SqliteRateLimiter implements RateLimiter
         // component whose entire job is counting attempts correctly.
         // IMMEDIATE takes the write lock up front, before the read, so a
         // second concurrent call cannot get past its own BEGIN until the
-        // first has committed and released it; PDO's own commit()/rollBack()
-        // still work correctly afterwards, since PDO tracks the transaction
-        // as active regardless of which SQL started it.
+        // first has committed and released it.
+        //
+        // Ended with exec('COMMIT')/exec('ROLLBACK') below, NOT
+        // $pdo->commit()/$pdo->rollBack() (review round 2, CRITICAL A):
+        // PDO's own commit()/rollBack() are gated on an internal in_txn
+        // flag that ONLY $pdo->beginTransaction() sets — never a raw
+        // exec('BEGIN ...') — whenever the driver itself supplies no
+        // in_transaction hook to consult instead. pdo_sqlite's hook is a
+        // NULL entry in the driver's method table on PHP 8.0 through 8.3
+        // (confirmed directly against php-src for both branches); a real
+        // pdo_sqlite_in_transaction() first appears in 8.4. So on the whole
+        // 8.0–8.3 floor this project declares, beginTransaction() this
+        // BEGIN IMMEDIATE did NOT call would make $pdo->commit() throw
+        // "There is no active transaction" on every single hit() — and the
+        // catch block's $pdo->rollBack() would throw the identical
+        // exception for the identical reason, masking the original error
+        // AND leaving the transaction open, holding the write lock, for the
+        // rest of the request. exec('COMMIT')/exec('ROLLBACK') are plain
+        // SQL sent straight through; neither one consults in_txn, so they
+        // pair correctly with exec('BEGIN IMMEDIATE') on every version.
         $pdo->exec('BEGIN IMMEDIATE');
 
         try {
@@ -54,11 +71,21 @@ final class SqliteRateLimiter implements RateLimiter
             );
             $stmt->execute([':b' => $bucket, ':ws' => $windowStart, ':a' => $attempts, ':lu' => $lockedUntil]);
 
-            $pdo->commit();
+            $pdo->exec('COMMIT');
 
             return new RateLimitState($attempts, $windowStart, $lockedUntil);
         } catch (\Throwable $e) {
-            $pdo->rollBack();
+            try {
+                $pdo->exec('ROLLBACK');
+            } catch (\Throwable $ignored) {
+                // A failed ROLLBACK must not replace $e: whatever the
+                // SELECT/INSERT/COMMIT above actually threw is the error
+                // the caller needs to see. If ROLLBACK itself cannot run,
+                // the transaction ends when this connection closes at the
+                // end of the request either way; there is nothing further
+                // this method can do about it.
+            }
+
             throw $e;
         }
     }

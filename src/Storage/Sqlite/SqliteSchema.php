@@ -20,6 +20,19 @@ final class SqliteSchema
         $pdo->exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
         $pdo->exec('CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
 
+        // CHECK(id = 1) is the single-row constraint from spec 7.1: there is one
+        // operator, not a user table, and the schema should make a second row
+        // impossible rather than rely on the application never inserting one.
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS auth (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                password_hash TEXT NOT NULL,
+                hash_algo TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                password_changed_at INTEGER NOT NULL
+            )'
+        );
+
         $pdo->exec(
             'CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,

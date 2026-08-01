@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Storage;
 
 use PHPUnit\Framework\TestCase;
+use WPSafeMode\Storage\Contracts\AuthStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
+use WPSafeMode\Storage\Credential;
 use WPSafeMode\Storage\Message;
 use WPSafeMode\Storage\Session;
 
@@ -26,6 +28,8 @@ abstract class StorageConformanceTest extends TestCase
     abstract protected function makeSessionRepo(string $dataDir): SessionRepo;
 
     abstract protected function makeMessageLog(string $dataDir): MessageLog;
+
+    abstract protected function makeAuthStore(string $dataDir): AuthStore;
 
     /**
      * Backend-specific: the JSON backend keeps one directory per session and
@@ -279,5 +283,38 @@ abstract class StorageConformanceTest extends TestCase
 
         $log->append('sesn_1', Message::ROLE_USER, [['type' => 'text', 'text' => 'x']]);
         self::assertSame(1, $log->count('sesn_1'));
+    }
+
+    public function testAuthStoreStartsUnconfigured(): void
+    {
+        $store = $this->makeAuthStore($this->dataDir);
+
+        self::assertFalse($store->isConfigured());
+        self::assertNull($store->current());
+    }
+
+    public function testCredentialRoundTripsEveryField(): void
+    {
+        $credential = new Credential('$argon2id$hash', 'argon2id', 1000, 2000);
+        $this->makeAuthStore($this->dataDir)->store($credential);
+
+        $found = $this->makeAuthStore($this->dataDir)->current();
+
+        self::assertNotNull($found);
+        self::assertSame($credential->toRow(), $found->toRow());
+        self::assertTrue($this->makeAuthStore($this->dataDir)->isConfigured());
+    }
+
+    public function testStoringASecondCredentialReplacesTheFirst(): void
+    {
+        $store = $this->makeAuthStore($this->dataDir);
+        $store->store(new Credential('$2y$first', 'bcrypt', 1000, 1000));
+        $store->store(new Credential('$argon2id$second', 'argon2id', 1000, 3000));
+
+        $found = $this->makeAuthStore($this->dataDir)->current();
+
+        self::assertNotNull($found);
+        self::assertSame('$argon2id$second', $found->hash);
+        self::assertSame(3000, $found->changedAt);
     }
 }

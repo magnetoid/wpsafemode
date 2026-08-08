@@ -1,0 +1,24 @@
+{
+    "name": "wpsafemode/dev",
+    "description": "Development tooling only. The shipped ZIP has no dependencies.",
+    "type": "project",
+    "license": "proprietary",
+    "require-dev": {
+        "phpunit/phpunit": "^9.6",
+        "phpstan/phpstan": "^2.1"
+    },
+    "config": {
+        "platform": {
+            "php": "8.0.0"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "compat": "phpstan analyse",
+        "check": [
+            "@compat",
+            "@test"
+        ]
+    },
+    "_comment_compat": "phpstan is not in the original M0 plan. It stands in for the php:8.0-cli container where Docker is unavailable: phpstan.neon.dist pins phpVersion to 80000, so readonly properties, enums, never, first-class callables and array_is_list() are reported regardless of the developer's local PHP. Verified against a probe file: readonly is a parse error at 80000 and clean at 80100, and array_is_list() reports 'Function not found'. Run it in CI whether or not the container is available. PHPCompatibility was tried first and removed — its stable release predates 8.1 and passed code using both of the above."
+}

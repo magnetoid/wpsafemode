@@ -489,3 +489,42 @@ Special thanks to all contributors and the WordPress community for their support
 **Best Regards,**
 
 **Cloud Industry Team**
+
+---
+
+# WP Safe Mode v2 (in development)
+
+v2 is a ground-up rewrite: an AI agent that diagnoses and repairs WordPress from
+outside it, with every mutating action snapshotted, approved, verified, and
+reversible. Design: `docs/superpowers/specs/2026-07-24-wp-safe-mode-design.md`.
+
+v1.1 remains in this repository at the root (`controller/`, `model/`, `view/`, …)
+and is untouched by v2 work. v2 lives in `src/`, `frontend/`, `docker/`, `tests/`.
+
+## Requirements
+
+Docker and Node. The canonical setup runs all PHP in the `php:8.0-cli` dev
+container, which pins every test to the real version floor.
+
+Where Docker is unavailable, PHP on the host works too, but on its own it does
+**not** enforce the floor — a host running 8.3 will happily execute 8.1+ syntax
+that breaks on a real 8.0 server. `phpstan.neon.dist` closes that gap by pinning
+`phpVersion` to 80000, so `readonly`, enums, `never`, first-class callables and
+`array_is_list()` are reported regardless of the local PHP. Run `make check-host`
+rather than `make test-host`; the container remains the reference.
+
+## Getting started
+
+    make install    # composer install (in container) + npm install
+    make test       # phpunit
+    make build      # compile the frontend into src/public
+    make up         # start WordPress + MariaDB playground
+
+Then open http://localhost:8080/wpsafemode/ — the application is mounted beside
+`wp-admin`, exactly as in a real install.
+
+Without Docker:
+
+    composer install
+    make check-host    # phpstan 8.0 gate, then phpunit
+    make build

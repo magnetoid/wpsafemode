@@ -3,6 +3,8 @@
 **Date:** 2026-07-24
 **Status:** Approved, pre-implementation
 **Scope:** v1 (Rescue + Doctor blades), milestones M0–M6
+**Amended by:** `2026-11-25-full-ai-control-design.md`. Where the two disagree, the
+amendment wins; its §17 lists every section of this document that changes.
 
 This document is the design for the whole of v1. It is deliberately larger than a single
 implementation plan: each milestone in §14 gets its own plan, and the first of those covers

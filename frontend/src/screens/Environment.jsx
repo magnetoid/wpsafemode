@@ -3,6 +3,7 @@ import { get, post, addressFor } from '../api.js'
 import { Card } from '../components/Card.jsx'
 import { Pill } from '../components/Pill.jsx'
 import { Button } from '../components/Button.jsx'
+import { Notice } from '../components/Notice.jsx'
 import { MoveForm } from '../components/MoveForm.jsx'
 import { ExposureNotice } from '../components/ExposureNotice.jsx'
 
@@ -29,12 +30,16 @@ function MoveCard() {
 
   return (
     <Card title="Move this tool">
-      <MoveForm onMove={move} label="Move this tool" />
+      <MoveForm
+        onMove={move}
+        label="Move this tool"
+        lead="Move this tool to a new random address. You will sign in again there."
+      />
     </Card>
   )
 }
 
-export function Environment({ me, selfTest, onSignOut }) {
+export function Environment({ me, selfTest, notice, onSignOut }) {
   const [env, setEnv] = useState(null)
   const [error, setError] = useState(null)
 
@@ -59,6 +64,8 @@ export function Environment({ me, selfTest, onSignOut }) {
             Sign out
           </Button>
         </header>
+
+        {notice && <Notice tone="danger">{notice}</Notice>}
 
         {selfTest?.reachable && <ExposureNotice detail={selfTest.detail} />}
 

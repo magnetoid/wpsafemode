@@ -36,7 +36,7 @@ export function Install({ initialState, onInstalled }) {
 
         {phase === 'token' && <TokenStep hasWordPress={state.has_wordpress} onVerified={verified} />}
         {phase === 'owner' && <OwnerStep token={token} onCreated={() => setPhase('key')} />}
-        {phase === 'key' && <KeyStep token={token} onStored={() => setPhase('move')} onSkip={() => setPhase('move')} />}
+        {phase === 'key' && <KeyStep token={token} onStored={() => setPhase('move')} />}
         {phase === 'move' && <MoveStep token={token} onFinished={onInstalled} />}
       </div>
     </main>

@@ -9,6 +9,7 @@ import { Environment } from './screens/Environment.jsx'
 // api/env before sign-in.
 export function App() {
   const [view, setView] = useState({ name: 'loading' })
+  const [signOutError, setSignOutError] = useState(null)
 
   useEffect(() => {
     async function route() {
@@ -40,12 +41,18 @@ export function App() {
   }, [])
 
   async function signOut() {
+    setSignOutError(null)
+
     try {
       await post('auth/logout', {})
-    } finally {
-      setCsrf(null)
-      setView({ name: 'login' })
+    } catch (e) {
+      // Still signed in as far as the server is concerned: say so, stay here.
+      setSignOutError("Sign out didn't work, so you are still signed in. " + e.message)
+      return
     }
+
+    setCsrf(null)
+    setView({ name: 'login' })
   }
 
   if (view.name === 'install') {
@@ -63,7 +70,7 @@ export function App() {
   }
 
   if (view.name === 'panel') {
-    return <Environment me={view.me} selfTest={view.selfTest} onSignOut={signOut} />
+    return <Environment me={view.me} selfTest={view.selfTest} notice={signOutError} onSignOut={signOut} />
   }
 
   if (view.name === 'error') {

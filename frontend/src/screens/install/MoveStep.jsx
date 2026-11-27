@@ -43,7 +43,11 @@ export function MoveStep({ token, onFinished }) {
   return (
     <Card title="Move this tool">
       <div class="space-y-4">
-        <MoveForm onMove={moveAndFinish} label="Move and finish">
+        <MoveForm
+          onMove={moveAndFinish}
+          label="Move and finish"
+          lead="Right now this tool sits at a name anyone can guess. Move it somewhere they can't."
+        >
           <Button tone="quiet" busy={busy} onClick={finishHere}>
             Finish without moving
           </Button>

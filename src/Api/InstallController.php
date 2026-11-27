@@ -26,9 +26,10 @@ final class InstallController
     {
         $state = $this->installer->state();
 
-        // A fresh copy has no token until someone asks for the installer, so
-        // the first visit writes it (idempotent). Re-read: the step depends on it.
-        if (!$state->installed && !$state->hasOwner) {
+        // A copy that is not installed has no token until someone asks for
+        // the installer, or after the file was lost, so the visit writes it
+        // (idempotent). Re-read: the step depends on it.
+        if (!$state->installed) {
             $this->installer->issueToken();
             $state = $this->installer->state();
         }

@@ -9,6 +9,7 @@ use WPSafeMode\Api\InstallController;
 use WPSafeMode\Core\Environment;
 use WPSafeMode\Core\Request;
 use WPSafeMode\Installer\Installer;
+use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Security\KeyVault;
 use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Storage\Contracts\Storage;
@@ -151,11 +152,11 @@ final class InstallControllerTest extends TestCase
 
         self::assertSame('token', $first['step']);
         self::assertFileExists($file);
-        $issued = \WPSafeMode\Security\GuardedJson::read($file)['token'] ?? null;
+        $issued = GuardedJson::read($file)['token'] ?? null;
         self::assertIsString($issued);
 
         $this->controller->state($this->request([]));
-        self::assertSame($issued, \WPSafeMode\Security\GuardedJson::read($file)['token'] ?? null);
+        self::assertSame($issued, GuardedJson::read($file)['token'] ?? null);
 
         $this->installer->createOwner('owner', self::STRONG);
         $this->installer->finalize('203.0.113.9');
@@ -163,6 +164,19 @@ final class InstallControllerTest extends TestCase
 
         $this->controller->state($this->request([]));
         self::assertFileDoesNotExist($file);
+    }
+
+    public function testALostTokenIsIssuedAgainWhileAnOwnerExists(): void
+    {
+        $file = $this->dir . '/install-token.php';
+        $this->installer->createOwner('owner', self::STRONG);
+        unlink($file);
+
+        $body = $this->decode($this->controller->state($this->request([])));
+
+        self::assertFileExists($file);
+        self::assertSame('api_key', $body['step']);
+        self::assertTrue($this->installer->verifyToken((string) (GuardedJson::read($file)['token'] ?? '')));
     }
 
     public function testAWeakPasswordListsEveryWeakness(): void

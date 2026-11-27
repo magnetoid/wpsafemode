@@ -136,18 +136,23 @@ final class WebAccessibilitySelfTest
                 'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false],
             ]);
 
-            $body = @file_get_contents($url, false, $context);
-            $status = 0;
+            // The stream's own metadata carries the response headers. The magic
+            // local variable is not used: PHP 8.4+ warns about every mention of
+            // it, and that warning would be printed into the JSON answer.
+            $stream = @fopen($url, 'r', false, $context);
 
-            // PHP 8.4+ deprecates the magic local variable; 8.0 has only the variable.
-            if (function_exists('http_get_last_response_headers')) {
-                $headers = http_get_last_response_headers() ?? [];
-            } else {
-                // @phpstan-ignore-next-line set by file_get_contents in this scope
-                $headers = isset($http_response_header) ? $http_response_header : [];
+            if ($stream === false) {
+                return ['status' => 0, 'body' => ''];
             }
 
-            if ($headers !== [] && preg_match('~^HTTP/\S+\s+(\d{3})~', (string) $headers[0], $m) === 1) {
+            $body = @stream_get_contents($stream);
+            $meta = stream_get_meta_data($stream);
+            fclose($stream);
+
+            $headers = isset($meta['wrapper_data']) && is_array($meta['wrapper_data']) ? $meta['wrapper_data'] : [];
+            $status = 0;
+
+            if ($headers !== [] && preg_match('~^HTTP/\S+\s+(\d{3})~', (string) reset($headers), $m) === 1) {
                 $status = (int) $m[1];
             }
 

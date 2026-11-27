@@ -16,7 +16,7 @@ function suggestName() {
 // Shared by the installer's move step and the owner's "Move this tool" card.
 // `onMove(name)` does the work and throws on failure; the parent decides what
 // happens next, because the installer and the signed-in panel differ there.
-export function MoveForm({ onMove, label, children }) {
+export function MoveForm({ onMove, label, lead, children }) {
   const [name, setName] = useState(suggestName)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -37,9 +37,7 @@ export function MoveForm({ onMove, label, children }) {
 
   return (
     <div class="space-y-4">
-      <p class="text-sm leading-relaxed text-ink">
-        Right now this tool sits at a name anyone can guess. Move it somewhere they can't.
-      </p>
+      <p class="text-sm leading-relaxed text-ink">{lead}</p>
 
       <Field
         label="New folder name"

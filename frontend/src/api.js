@@ -29,6 +29,21 @@ export function addressFor(redirect, query = '') {
   return { root, href: location.origin + root + 'index.php/' + query }
 }
 
+// Plain sentences for every code the server can send. A code is never copy.
+const MESSAGES = {
+  bad_csrf: 'Your sign-in changed in another tab. Reload the page to carry on.',
+  already_installed: 'This copy is already set up. Reload the page to sign in.',
+  no_base_url: "The check could not work out this site's address.",
+  bad_token: "That token doesn't match. Copy it again from data/install-token.php.",
+  storage_unavailable: "The tool could not open its own storage. Check that its data folder is writable, then reload the page.",
+  unauthenticated: 'You are signed out. Reload the page and sign in again.',
+  forbidden: 'Your account is not allowed to do that.',
+  not_installed: 'Setup is not finished yet. Reload the page to carry on with it.',
+  corrupt_install: "This copy's settings could not be read. Restore its data folder, or set it up again.",
+  channel_not_allowed: 'That action is only available from the browser.',
+}
+const FALLBACK = 'Something went wrong on the server. Reload the page and try again.'
+
 async function request(path, options = {}) {
   const response = await fetch(installRoot + 'index.php/api/' + path, {
     credentials: 'same-origin',
@@ -53,14 +68,14 @@ async function request(path, options = {}) {
     body = {}
 
     if (response.ok) {
-      const error = new Error('The server sent an answer this page could not read.')
+      const error = new Error(FALLBACK)
       error.status = response.status
       throw error
     }
   }
 
   if (!response.ok) {
-    const error = new Error(body.message || body.error || `HTTP ${response.status}`)
+    const error = new Error(body.message || MESSAGES[body.error] || FALLBACK)
     error.code = body.error
     error.status = response.status
     error.retryAfter = body.retry_after ?? 0

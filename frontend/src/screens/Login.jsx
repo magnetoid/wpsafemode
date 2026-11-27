@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks'
-import { post, setCsrf } from '../api.js'
+import { get, post, setCsrf } from '../api.js'
 import { Card } from '../components/Card.jsx'
 import { Field } from '../components/Field.jsx'
 import { Button } from '../components/Button.jsx'
@@ -48,6 +48,17 @@ export function Login({ onSignedIn }) {
       if (e.code === 'locked_out') {
         setUntil(Date.now() + e.retryAfter * 1000)
         setNow(Date.now())
+      } else if (e.code === 'bad_csrf') {
+        // A session already exists (another tab, or an answer this page lost):
+        // the server knows who this is, so ask it instead of showing a code.
+        try {
+          const me = await get('auth/me')
+          setCsrf(me.csrf)
+          onSignedIn({ user: me.user, csrf: me.csrf, self_test: null })
+          return
+        } catch (inner) {
+          setError(e.message)
+        }
       } else if (e.code === 'bad_credentials') {
         setError("That name and password don't match. Check both and try again.")
       } else {

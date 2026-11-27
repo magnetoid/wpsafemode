@@ -6,7 +6,7 @@ import { Button } from '../../components/Button.jsx'
 import { Notice } from '../../components/Notice.jsx'
 import { ExposureNotice } from '../../components/ExposureNotice.jsx'
 
-export function KeyStep({ token, onStored, onSkip }) {
+export function KeyStep({ token, onStored }) {
   const [test, setTest] = useState(null)
   const [testError, setTestError] = useState(null)
   const [acknowledged, setAcknowledged] = useState(false)
@@ -97,9 +97,6 @@ export function KeyStep({ token, onStored, onSkip }) {
           <div class="flex flex-wrap gap-3">
             <Button type="submit" busy={busy} disabled={key.trim() === '' || locked}>
               {busy ? 'Saving…' : 'Save key'}
-            </Button>
-            <Button tone="quiet" onClick={onSkip}>
-              Skip for now
             </Button>
           </div>
         </form>

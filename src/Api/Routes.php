@@ -43,5 +43,7 @@ final class Routes
         $router->add('GET', '/api/env', new EnvController($storage), Permission::READ);
 
         $router->add('POST', '/api/admin/rename', [$admin, 'rename'], Permission::OWN);
+
+        $router->add('POST', '/api/uninstall', new UninstallController($storage, $appDir, $dataDir), Permission::OWN);
     }
 }

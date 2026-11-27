@@ -66,6 +66,7 @@ final class RoutesTest extends TestCase
             ['GET',  '/api/auth/me',           'read', ['browser'], false],
             ['GET',  '/api/env',               'read', ['browser'], false],
             ['POST', '/api/admin/rename',      'own',  ['browser'], false],
+            ['POST', '/api/uninstall',         'own',  ['browser'], false],
         ], $actual);
     }
 }

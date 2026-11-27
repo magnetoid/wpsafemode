@@ -33,40 +33,12 @@ final class RenameFromShippedCopyTest extends TestCase
         $this->parent = sys_get_temp_dir() . '/wpsm-shipped-' . bin2hex(random_bytes(6));
         mkdir($this->parent, 0700, true);
         $this->runner = $this->parent . '/run.php';
-        $this->copy(dirname(__DIR__, 2) . '/src', $this->parent . '/wpsafemode');
-        file_put_contents($this->runner, self::RUNNER);
+        ShippedCopy::copySrc($this->parent . '/wpsafemode');
     }
 
     protected function tearDown(): void
     {
-        $this->remove($this->parent);
-    }
-
-    private function copy(string $from, string $to): void
-    {
-        mkdir($to, 0755, true);
-        foreach (scandir($from) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..' || ($entry === 'data' && $from === dirname(__DIR__, 2) . '/src')) {
-                continue;
-            }
-            is_dir($from . '/' . $entry)
-                ? $this->copy($from . '/' . $entry, $to . '/' . $entry)
-                : copy($from . '/' . $entry, $to . '/' . $entry);
-        }
-    }
-
-    private function remove(string $path): void
-    {
-        if (!is_dir($path)) {
-            return;
-        }
-        foreach (scandir($path) ?: [] as $entry) {
-            if ($entry !== '.' && $entry !== '..') {
-                $full = $path . '/' . $entry;
-                is_dir($full) && !is_link($full) ? $this->remove($full) : unlink($full);
-            }
-        }
-        rmdir($path);
+        ShippedCopy::remove($this->parent);
     }
 
     /** @return array{0: \WPSafeMode\Storage\Contracts\Storage, 1: Installer, 2: AuthSessions} */
@@ -91,18 +63,7 @@ final class RenameFromShippedCopyTest extends TestCase
      */
     private function runCopy(string $uri, array $body, array $server): array
     {
-        $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($this->runner) . ' '
-            . escapeshellarg($this->parent . '/wpsafemode') . ' ' . escapeshellarg($uri) . ' '
-            . escapeshellarg((string) json_encode($body)) . ' ' . escapeshellarg((string) json_encode($server))
-            . ' 2>&1';
-        $output = (string) shell_exec($cmd);
-        $decoded = json_decode($output, true);
-
-        self::assertIsArray($decoded, 'The subprocess did not answer with JSON: ' . $output);
-        $inner = json_decode((string) $decoded['body'], true);
-        self::assertIsArray($inner);
-
-        return ['status' => (int) $decoded['status'], 'body' => $inner];
+        return ShippedCopy::run($this->runner, $this->parent . '/wpsafemode', $uri, $body, $server);
     }
 
     private function assertMoved(string $redirect): void
@@ -145,25 +106,4 @@ final class RenameFromShippedCopyTest extends TestCase
         self::assertTrue($result['body']['sign_in_again']);
         $this->assertMoved((string) $result['body']['redirect']);
     }
-
-    // The wrapper deliberately names no WPSafeMode\Core\Response and builds
-    // nothing the handler needs before handle(), as src/index.php does.
-    private const RUNNER = <<<'PHP'
-<?php
-declare(strict_types=1);
-$app = $argv[1];
-require $app . '/bootstrap.php';
-
-$dataDir = $app . '/data';
-$env = \WPSafeMode\Core\Environment::probe();
-$storage = \WPSafeMode\Storage\StorageFactory::open($dataDir, $env);
-$hasher = new \WPSafeMode\Security\PasswordHasher();
-$installer = new \WPSafeMode\Installer\Installer($storage, new \WPSafeMode\Security\KeyVault($dataDir), $hasher, $dataDir, $env);
-$sessions = new \WPSafeMode\Security\AuthSessions($storage, $hasher);
-$router = new \WPSafeMode\Core\Router();
-\WPSafeMode\Api\Routes::register($router, $storage, $sessions, $installer, $app, $dataDir);
-$request = new \WPSafeMode\Core\Request('POST', $argv[2], '/index.php', $argv[3], json_decode($argv[4], true));
-$response = (new \WPSafeMode\Api\Kernel($router, $storage, $sessions, $installer))->handle($request, time());
-echo json_encode(['status' => $response->status, 'body' => $response->body]);
-PHP;
 }

@@ -2,11 +2,21 @@
 
 declare(strict_types=1);
 
+// Before anything else can fail: nothing PHP prints may reach the browser.
+// A trace names absolute paths and, without exception_ignore_args, the
+// arguments of every frame, which on the login route is the password.
+ini_set('display_errors', '0');
+ini_set('html_errors', '0');
+ini_set('zend.exception_ignore_args', '1');
+ini_set('log_errors', '1');
+
 require __DIR__ . '/bootstrap.php';
 
 use WPSafeMode\Api\Kernel;
 use WPSafeMode\Api\Routes;
 use WPSafeMode\Core\Environment;
+use WPSafeMode\Core\ErrorLog;
+use WPSafeMode\Core\PublicFile;
 use WPSafeMode\Core\Request;
 use WPSafeMode\Core\Response;
 use WPSafeMode\Core\Router;
@@ -17,11 +27,17 @@ use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\StorageFactory;
 
+// The data directory lives inside the install directory: <install-dir>/data/.
+$dataDir = __DIR__ . '/data';
+
+// PHP's own log goes into the data directory, behind the die guard, never to
+// a web-readable error_log beside this script.
+ErrorLog::prepare($dataDir);
+
 $request = Request::fromGlobals();
 $path = $request->path();
 
-// Static assets and the SPA shell are served directly. Everything the browser
-// loads lives under public/; nothing else in src/ is web-reachable by design.
+// Static assets and the SPA shell are served directly from public/.
 if (strpos($path, '/api/') !== 0) {
     // A drop-in ZIP ships no rewrite rules, so the only address that reliably
     // reaches PHP is <install-dir>/index.php/... The document must live under
@@ -33,11 +49,18 @@ if (strpos($path, '/api/') !== 0) {
     $viaScript = strpos($urlPath, $script . '/') === 0;
     $isShell = $path === '/';
 
-    $toShell = static function () use ($request): void {
+    $sendSecurityHeaders = static function (): void {
+        foreach (Response::SECURITY_HEADERS as $name => $value) {
+            header($name . ': ' . $value);
+        }
+    };
+
+    $toShell = static function () use ($request, $sendSecurityHeaders): void {
         // Keep the query: the owner's move lands here with ?moved=1.
         $query = (string) parse_url($request->uri, PHP_URL_QUERY);
         header('Location: ' . $request->basePath() . '/index.php/' . ($query !== '' ? '?' . $query : ''), true, 302);
         header('Cache-Control: no-store');
+        $sendSecurityHeaders();
         exit;
     };
 
@@ -45,11 +68,9 @@ if (strpos($path, '/api/') !== 0) {
         $toShell();
     }
 
-    $file = __DIR__ . '/public' . ($isShell ? '/index.html' : $path);
-    $real = realpath($file);
-    $root = realpath(__DIR__ . '/public');
+    $real = PublicFile::resolve(__DIR__ . '/public', $isShell ? '/index.html' : $path);
 
-    if ($real !== false && $root !== false && strpos($real, $root) === 0 && is_file($real)) {
+    if ($real !== null) {
         $types = [
             'html' => 'text/html; charset=utf-8',
             'js'   => 'text/javascript; charset=utf-8',
@@ -62,7 +83,7 @@ if (strpos($path, '/api/') !== 0) {
         $extension = strtolower((string) pathinfo($real, PATHINFO_EXTENSION));
 
         header('Content-Type: ' . ($types[$extension] ?? 'application/octet-stream'));
-        header('X-Content-Type-Options: nosniff');
+        $sendSecurityHeaders();
         readfile($real);
         exit;
     }
@@ -76,6 +97,7 @@ if (strpos($path, '/api/') !== 0) {
         }
 
         header('Content-Type: text/html; charset=utf-8');
+        $sendSecurityHeaders();
         readfile($shell);
         exit;
     }
@@ -83,9 +105,6 @@ if (strpos($path, '/api/') !== 0) {
     (new Response(404, 'Not found'))->send();
     exit;
 }
-
-// The data directory lives inside the install directory: <install-dir>/data/.
-$dataDir = __DIR__ . '/data';
 
 try {
     $env = Environment::probe();
@@ -99,8 +118,9 @@ try {
     Routes::register($router, $storage, $sessions, $installer, __DIR__, $dataDir);
 
     (new Kernel($router, $storage, $sessions, $installer))->handle($request, time())->send();
-} catch (StorageException $e) {
-    // The message can carry an absolute server path: log it, never send it.
-    error_log('WP Safe Mode storage unavailable: ' . $e->getMessage());
-    Response::json(['error' => 'storage_unavailable'], 500)->send();
+} catch (\Throwable $e) {
+    // Every failure gets the same two answers. The message can carry an
+    // absolute server path: it goes to the guarded log, never to the browser.
+    ErrorLog::record($e);
+    Response::json(['error' => $e instanceof StorageException ? 'storage_unavailable' : 'server_error'], 500)->send();
 }

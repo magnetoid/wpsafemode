@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage\Json;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Storage\AuthSessionRow;
 use WPSafeMode\Storage\Contracts\AuthSessionStore;

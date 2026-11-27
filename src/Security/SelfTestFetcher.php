@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Security;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * The self-test's HTTP transport: one GET that never follows a redirect.
  * A seam, so the outcome mapping can be tested without a network.

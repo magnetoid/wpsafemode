@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Installer;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * Whether a folder is one the tool owns outright (R41, sharing the guards of
  * R3, R28 and R30).

@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Core;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 final class Response
 {
     /**

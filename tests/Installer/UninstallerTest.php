@@ -276,6 +276,7 @@ final class UninstallerTest extends TestCase
         file_put_contents($app . '/data/keyvault.php', '<?php');
         $runner = $base . '/runner/run.php';
         file_put_contents($runner, '<?php
+define("WPSM_ENTRY", true);
 require $argv[1] . "/autoload.php";
 \\WPSafeMode\\Installer\\Uninstaller::run($argv[2], $argv[2] . "/data");
 echo "finished";

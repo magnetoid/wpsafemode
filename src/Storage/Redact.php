@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * Key-name redaction for anything written to a log.
  *

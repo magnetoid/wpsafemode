@@ -144,6 +144,7 @@ abstract class StorageConformanceTest extends TestCase
         file_put_contents(
             $script,
             '<?php' . "\n"
+            . "define('WPSM_ENTRY', true);" . "\n"
             . 'require ' . var_export($bootstrap, true) . ';' . "\n"
             . '$dataDir = ' . var_export($this->dataDir, true) . ';' . "\n"
             . '$limiter = ' . $limiterExpr . ';' . "\n"

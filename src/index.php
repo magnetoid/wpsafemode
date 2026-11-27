@@ -10,6 +10,12 @@ ini_set('html_errors', '0');
 ini_set('zend.exception_ignore_args', '1');
 ini_set('log_errors', '1');
 
+// A drop-in ZIP ships no rewrite rules, so every .php file under this folder
+// can be requested by URL. This is the only one meant to run that way: every
+// other file stops with an empty 404 unless this constant is defined, before
+// it declares or loads anything that could fail and print a path.
+define('WPSM_ENTRY', true);
+
 require __DIR__ . '/bootstrap.php';
 
 use WPSafeMode\Api\Kernel;

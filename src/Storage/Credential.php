@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * The single operator credential. Records which algorithm produced the hash so
  * a later login can transparently rehash when the host gains libargon2

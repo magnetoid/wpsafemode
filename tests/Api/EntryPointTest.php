@@ -140,6 +140,27 @@ final class EntryPointTest extends TestCase
         }
     }
 
+    public function testFetchingAnyOtherPhpFileDirectlyPrintsNothingAndAnswers404(): void
+    {
+        $copy = $this->serve();
+
+        foreach ([
+            'a class with a missing interface' => 'Storage/JsonStorage.php',
+            'a class with a parent'            => 'Api/Kernel.php',
+            'a class with no dependencies'     => 'Core/Version.php',
+            'the bootstrap'                    => 'bootstrap.php',
+            'the autoloader'                   => 'autoload.php',
+        ] as $name => $file) {
+            $response = $copy->request('GET', $copy->target($file));
+
+            self::assertSame(404, $response['status'], $name . ': ' . $response['body']);
+            self::assertSame('', $response['body'], $name);
+        }
+
+        // The served copy logs nothing either: no "not found" fatal behind the scenes.
+        self::assertStringNotContainsString('Fatal error', $copy->serverLog());
+    }
+
     /** @return array<string, array{0: string}> */
     public static function foldersThatNeedEncoding(): array
     {

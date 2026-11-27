@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 use WPSafeMode\Core\EnvironmentReport;
 use WPSafeMode\Security\DataDir;
 use WPSafeMode\Security\GuardedJson;

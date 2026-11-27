@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Security;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * A CSRF token derived from the login session rather than stored alongside it.
  *

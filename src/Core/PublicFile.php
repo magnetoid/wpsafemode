@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Core;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /** Resolves a request path to a file inside public/, and to nothing outside it. */
 final class PublicFile
 {

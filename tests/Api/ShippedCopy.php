@@ -101,6 +101,7 @@ final class ShippedCopy
 <?php
 declare(strict_types=1);
 $app = $argv[1];
+define('WPSM_ENTRY', true);
 require $app . '/bootstrap.php';
 
 $dataDir = $app . '/data';

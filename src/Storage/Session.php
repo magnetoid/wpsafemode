@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * Full field set per spec 7.1, defined now even though M0 only exercises a
  * few fields — defining it up front avoids a schema migration in M5.

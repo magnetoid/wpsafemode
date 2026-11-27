@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Security;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * The closed set of roles, lowest to highest. A closed set of constants
  * rather than an enum: PHP 8.0 has none.

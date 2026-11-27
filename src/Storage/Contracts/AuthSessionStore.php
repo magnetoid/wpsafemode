@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage\Contracts;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * Login session records, keyed by the SHA-256 of the token. The raw token
  * exists only in the user's cookie: a stolen data directory must not yield

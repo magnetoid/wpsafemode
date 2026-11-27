@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage\Sqlite;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 use PDOException;
 use WPSafeMode\Security\Role;
 use WPSafeMode\Storage\Contracts\StorageException;

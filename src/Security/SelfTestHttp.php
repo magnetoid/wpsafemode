@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Security;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * The real transport: cURL when it exists, PHP's http stream otherwise.
  * Both send the same generic User-Agent (some WAFs reject a request with

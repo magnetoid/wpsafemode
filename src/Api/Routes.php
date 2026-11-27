@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Api;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 use WPSafeMode\Core\Router;
 use WPSafeMode\Installer\Installer;
 use WPSafeMode\Security\AuthSessions;

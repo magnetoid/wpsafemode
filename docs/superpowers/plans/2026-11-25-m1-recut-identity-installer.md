@@ -1043,6 +1043,7 @@ Deliberately left to later milestones of Phase 1, so nobody builds them early:
 - The pack format and built-in rescue playbooks (M5).
 - Team screens, second factor, the dormant lock, and the rule that the last enabled owner cannot be removed (Phase 2 and Phase 7).
 - The Claude API refresh in amendment §13.4 (M5).
+- The uninstall screen (spec §5.8). M1 ships the `/api/uninstall` endpoint but no screen for it, so the only way to remove the tool from the browser is missing. It is the first task of M2, and the 2.0.0 release is blocked until it exists (R42).
 
 ## Self-review
 

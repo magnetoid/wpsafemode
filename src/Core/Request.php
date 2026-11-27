@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Core;
 
+use WPSafeMode\Security\Principal;
+
 final class Request
 {
     public function __construct(
@@ -11,8 +13,16 @@ final class Request
         public string $uri,
         public string $scriptName = '/index.php',
         public string $rawBody = '',
+        /** @var array<string, mixed> */
+        public array $server = [],
     ) {
     }
+
+    /** Set by the Kernel once it has resolved who is calling. */
+    public ?Principal $principal = null;
+
+    /** @var array<string, string> Route placeholders, set by the Kernel. */
+    public array $params = [];
 
     public static function fromGlobals(): self
     {
@@ -21,6 +31,7 @@ final class Request
             uri:        (string) ($_SERVER['REQUEST_URI'] ?? '/'),
             scriptName: (string) ($_SERVER['SCRIPT_NAME'] ?? '/index.php'),
             rawBody:    (string) file_get_contents('php://input'),
+            server:     $_SERVER,
         );
     }
 
@@ -65,6 +76,77 @@ final class Request
         $rest = substr($path, strlen($prefix));
 
         return ($rest === '' || $rest[0] === '/') ? $rest : null;
+    }
+
+    /** Case-insensitive; null when the header was not sent. */
+    public function header(string $name): ?string
+    {
+        $upper = strtoupper(str_replace('-', '_', $name));
+        $key = ($upper === 'CONTENT_TYPE' || $upper === 'CONTENT_LENGTH') ? $upper : 'HTTP_' . $upper;
+
+        return isset($this->server[$key]) && is_scalar($this->server[$key]) ? (string) $this->server[$key] : null;
+    }
+
+    /**
+     * Read from the Cookie header, never $_COOKIE. The first occurrence of a
+     * name wins and the value is returned raw: session and CSRF tokens are
+     * URL-safe by construction.
+     */
+    public function cookie(string $name): ?string
+    {
+        $header = $this->header('Cookie');
+
+        if ($header === null) {
+            return null;
+        }
+
+        foreach (explode(';', $header) as $pair) {
+            $pos = strpos($pair, '=');
+
+            if ($pos === false) {
+                continue;
+            }
+
+            if (trim(substr($pair, 0, $pos)) === $name) {
+                return trim(substr($pair, $pos + 1));
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The direct peer only. X-Forwarded-For is never read: this value keys the
+     * login lockout, and a client-set header would let an attacker spread
+     * attempts across unlimited buckets.
+     */
+    public function clientIp(): string
+    {
+        $ip = $this->server['REMOTE_ADDR'] ?? '';
+
+        return is_string($ip) && $ip !== '' ? $ip : 'unknown';
+    }
+
+    public function isHttps(): bool
+    {
+        $https = $this->server['HTTPS'] ?? '';
+
+        if (is_scalar($https) && (string) $https !== '' && strtolower((string) $https) !== 'off') {
+            return true;
+        }
+
+        return strtolower((string) $this->header('X-Forwarded-Proto')) === 'https';
+    }
+
+    public function userAgent(): string
+    {
+        return $this->header('User-Agent') ?? '';
+    }
+
+    /** The install directory as a URL path, used as the cookie path. */
+    public function basePath(): string
+    {
+        return rtrim(dirname(str_replace('\\', '/', $this->scriptName)), '/');
     }
 
     /** @return array<string, mixed> */

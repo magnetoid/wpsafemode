@@ -8,7 +8,9 @@ use WPSafeMode\Api\EnvController;
 use WPSafeMode\Core\Environment;
 use WPSafeMode\Core\Request;
 use WPSafeMode\Core\Response;
+use WPSafeMode\Core\RouteMatch;
 use WPSafeMode\Core\Router;
+use WPSafeMode\Security\Permission;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\StorageFactory;
 
@@ -61,5 +63,17 @@ try {
 }
 
 $router = new Router();
-$router->add('GET', '/api/env', new EnvController($storage));
-$router->dispatch($request)->send();
+$router->add('GET', '/api/env', new EnvController($storage), Permission::OPEN);
+
+// Interim: Task 11 replaces this block with the Kernel, which also checks the
+// route's permission and channel before running the handler.
+$match = $router->match($request->method, $path);
+
+if ($match->status === RouteMatch::FOUND && $match->route !== null) {
+    $request->params = $match->params;
+    ($match->route->handler)($request)->send();
+} elseif ($match->status === RouteMatch::METHOD_NOT_ALLOWED) {
+    Response::methodNotAllowed()->send();
+} else {
+    Response::notFound()->send();
+}

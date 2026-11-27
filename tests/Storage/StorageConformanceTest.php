@@ -424,6 +424,18 @@ abstract class StorageConformanceTest extends TestCase
         self::assertFalse($store->isEmpty());
     }
 
+    public function testCreateIfEmptyCreatesOnlyTheFirstUser(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+
+        $first = $store->createIfEmpty('owner', Role::OWNER, $this->credential());
+        self::assertNotNull($first);
+        self::assertSame(1, $first->id);
+
+        self::assertNull($store->createIfEmpty('second', Role::ADMIN, $this->credential()));
+        self::assertCount(1, $store->all());
+    }
+
     public function testLoginIsNormalisedAndUnique(): void
     {
         $store = $this->makeUserStore($this->dataDir);

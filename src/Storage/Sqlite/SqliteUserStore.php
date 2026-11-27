@@ -62,6 +62,36 @@ final class SqliteUserStore implements UserStore
         return new User((int) $pdo->lastInsertId(), $login, $role, $credential);
     }
 
+    public function createIfEmpty(string $login, string $role, Credential $credential): ?User
+    {
+        $login = User::normalizeLogin($login);
+        $this->assertLoginAndRole($login, $role);
+
+        $pdo = $this->connection->pdo();
+
+        // BEGIN IMMEDIATE takes the write lock before the existence check, so a
+        // concurrent first-owner request waits and then sees the row. Ended
+        // with exec('COMMIT'/'ROLLBACK'), as in SqliteRateLimiter.
+        $pdo->exec('BEGIN IMMEDIATE');
+
+        try {
+            if (!$this->isEmpty()) {
+                $pdo->exec('ROLLBACK');
+
+                return null;
+            }
+
+            $user = $this->create($login, $role, $credential);
+            $pdo->exec('COMMIT');
+
+            return $user;
+        } catch (\Throwable $e) {
+            $pdo->exec('ROLLBACK');
+
+            throw $e;
+        }
+    }
+
     public function find(int $id): ?User
     {
         $stmt = $this->connection->pdo()->prepare('SELECT * FROM users WHERE id = :id');

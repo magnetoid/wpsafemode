@@ -52,6 +52,27 @@ final class JsonUserStore implements UserStore
         });
     }
 
+    public function createIfEmpty(string $login, string $role, Credential $credential): ?User
+    {
+        $login = User::normalizeLogin($login);
+        $this->assertLoginAndRole($login, $role);
+
+        // The emptiness check and the write share one lock, so two concurrent
+        // first-owner requests cannot both see an empty store.
+        return GuardedJson::withExclusiveLock($this->path, function () use ($login, $role, $credential): ?User {
+            $state = $this->load();
+
+            if ($state['users'] !== []) {
+                return null;
+            }
+
+            $user = new User($state['next_id'], $login, $role, $credential);
+            $this->save($state['next_id'] + 1, [$user->id => $user]);
+
+            return $user;
+        });
+    }
+
     public function find(int $id): ?User
     {
         return $this->load()['users'][$id] ?? null;

@@ -22,6 +22,16 @@ interface UserStore
     /** @throws StorageException invalid login, unknown role, or login already taken */
     public function create(string $login, string $role, Credential $credential): User;
 
+    /**
+     * Creates the user only when the store holds no user, atomically: of two
+     * concurrent calls exactly one returns a User and the other returns null.
+     * The installer uses this for the first owner.
+     *
+     * @return User|null null when a user already exists
+     * @throws StorageException invalid login or unknown role, or a malformed stored record
+     */
+    public function createIfEmpty(string $login, string $role, Credential $credential): ?User;
+
     public function find(int $id): ?User;
 
     /** Normalises the login first; an invalid login simply finds nobody. */

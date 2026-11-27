@@ -6,7 +6,7 @@ import { Button } from '../../components/Button.jsx'
 import { Notice } from '../../components/Notice.jsx'
 import { ExposureNotice } from '../../components/ExposureNotice.jsx'
 
-export function KeyStep({ token, onStored }) {
+function KeyForm({ token, onStored }) {
   const [test, setTest] = useState(null)
   const [testError, setTestError] = useState(null)
   const [acknowledged, setAcknowledged] = useState(false)
@@ -103,4 +103,28 @@ export function KeyStep({ token, onStored }) {
       </div>
     </Card>
   )
+}
+
+// A saved key is never asked for again: a reload or a re-entered wizard would
+// otherwise force the owner to retype a key the provider shows only once.
+export function KeyStep({ token, hasKey, onStored }) {
+  const [replacing, setReplacing] = useState(false)
+
+  if (hasKey && !replacing) {
+    return (
+      <Card title="Your Claude key">
+        <div class="space-y-4">
+          <p class="text-sm leading-relaxed text-ink-muted">A key is already saved.</p>
+          <div class="flex flex-wrap gap-3">
+            <Button onClick={onStored}>Keep the saved key</Button>
+            <Button tone="quiet" onClick={() => setReplacing(true)}>
+              Replace the key
+            </Button>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
+  return <KeyForm token={token} onStored={onStored} />
 }

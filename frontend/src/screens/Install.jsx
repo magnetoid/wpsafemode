@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks'
+import { get } from '../api.js'
 import { Pill } from '../components/Pill.jsx'
 import { TokenStep } from './install/TokenStep.jsx'
 import { OwnerStep } from './install/OwnerStep.jsx'
@@ -14,10 +15,22 @@ export function Install({ initialState, onInstalled }) {
   const state = initialState
   const [token, setToken] = useState(null)
   const [phase, setPhase] = useState('token')
+  const [hasKey, setHasKey] = useState(false)
 
-  function verified(value) {
+  async function verified(value) {
     setToken(value)
-    setPhase(state.has_owner ? 'key' : 'owner')
+
+    // Read the current state now, not the one from page load: a key or an
+    // owner may have been saved since (a reload mid-setup, a failed finish).
+    let current = state
+    try {
+      current = await get('install/state')
+    } catch (e) {
+      // Fall back to the state from page load.
+    }
+
+    setHasKey(current.has_api_key === true)
+    setPhase(current.has_owner ? 'key' : 'owner')
   }
 
   return (
@@ -36,7 +49,7 @@ export function Install({ initialState, onInstalled }) {
 
         {phase === 'token' && <TokenStep hasWordPress={state.has_wordpress} onVerified={verified} />}
         {phase === 'owner' && <OwnerStep token={token} onCreated={() => setPhase('key')} />}
-        {phase === 'key' && <KeyStep token={token} onStored={() => setPhase('move')} />}
+        {phase === 'key' && <KeyStep token={token} hasKey={hasKey} onStored={() => setPhase('move')} />}
         {phase === 'move' && <MoveStep token={token} onFinished={onInstalled} />}
       </div>
     </main>

@@ -1044,6 +1044,13 @@ Deliberately left to later milestones of Phase 1, so nobody builds them early:
 - Team screens, second factor, the dormant lock, and the rule that the last enabled owner cannot be removed (Phase 2 and Phase 7).
 - The Claude API refresh in amendment §13.4 (M5).
 - The uninstall screen (spec §5.8). M1 ships the `/api/uninstall` endpoint but no screen for it, so the only way to remove the tool from the browser is missing. It is the first task of M2, and the 2.0.0 release is blocked until it exists (R42).
+- Six small findings from the review of M1's final fix wave. Fix them in M2, before 2.0.0:
+  1. `data/php-errors.php` is the one guarded file whose text after the guard is not escaped. A log line holding `<?` can stop the guard from parsing. Start the file with `__halt_compiler();` after the exit, or neutralise `<` in `ErrorLog::record()`.
+  2. `src/index.php` turns `log_errors` on before `ErrorLog::prepare` points the log at the guarded file, so anything logged during bootstrap goes to the host's default log. That log may be a web-readable `error_log` beside the script. Keep `log_errors` off until `prepare` has run.
+  3. Opening `index.php/` directly under a folder name with characters such as `(`, `)` or `+` gives a cookie `Path` that the browser never matches. Sign-in then succeeds, but every later call is refused. Redirect any non-canonical spelling of the base path to `Request::encodedBasePath()`.
+  4. Route parameters are decoded twice, once in `Request::path()` and once in `Router`. Decode them once, before the first route with a placeholder lands.
+  5. `WebAccessibilitySelfTestTest::testAServedButMissingCanaryReportsNotReachable` is env-gated and still expects the outcome that R36 replaced. Update it, or point it at a served copy of the tool.
+  6. `DataDirTest` calls `ErrorLog::prepare()` and never restores `error_log`, `log_errors` or the logger's state.
 
 ## Self-review
 

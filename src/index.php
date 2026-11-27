@@ -23,7 +23,29 @@ $path = $request->path();
 // Static assets and the SPA shell are served directly. Everything the browser
 // loads lives under public/; nothing else in src/ is web-reachable by design.
 if (strpos($path, '/api/') !== 0) {
-    $file = __DIR__ . '/public' . ($path === '/' ? '/index.html' : $path);
+    // A drop-in ZIP ships no rewrite rules, so the only address that reliably
+    // reaches PHP is <install-dir>/index.php/... The document must live under
+    // it, or its relative asset and API URLs resolve to places PHP never sees.
+    $urlPath = (string) parse_url($request->uri, PHP_URL_PATH);
+    $script = str_replace('\\', '/', $request->scriptName);
+    // The bare script name (no trailing slash) counts as not passing through:
+    // a relative URL there would resolve one level too high.
+    $viaScript = strpos($urlPath, $script . '/') === 0;
+    $isShell = $path === '/';
+
+    $toShell = static function () use ($request): void {
+        // Keep the query: the owner's move lands here with ?moved=1.
+        $query = (string) parse_url($request->uri, PHP_URL_QUERY);
+        header('Location: ' . $request->basePath() . '/index.php/' . ($query !== '' ? '?' . $query : ''), true, 302);
+        header('Cache-Control: no-store');
+        exit;
+    };
+
+    if ($isShell && !$viaScript) {
+        $toShell();
+    }
+
+    $file = __DIR__ . '/public' . ($isShell ? '/index.html' : $path);
     $real = realpath($file);
     $root = realpath(__DIR__ . '/public');
 
@@ -49,6 +71,10 @@ if (strpos($path, '/api/') !== 0) {
     $shell = __DIR__ . '/public/index.html';
 
     if (is_file($shell)) {
+        if (!$viaScript) {
+            $toShell();
+        }
+
         header('Content-Type: text/html; charset=utf-8');
         readfile($shell);
         exit;

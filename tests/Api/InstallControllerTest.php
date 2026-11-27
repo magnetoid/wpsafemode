@@ -141,6 +141,30 @@ final class InstallControllerTest extends TestCase
         );
     }
 
+    public function testTheFirstStateRequestIssuesTheToken(): void
+    {
+        // A fresh copy: setUp issued a token, so start from none.
+        $file = $this->dir . '/install-token.php';
+        unlink($file);
+
+        $first = $this->decode($this->controller->state($this->request([])));
+
+        self::assertSame('token', $first['step']);
+        self::assertFileExists($file);
+        $issued = \WPSafeMode\Security\GuardedJson::read($file)['token'] ?? null;
+        self::assertIsString($issued);
+
+        $this->controller->state($this->request([]));
+        self::assertSame($issued, \WPSafeMode\Security\GuardedJson::read($file)['token'] ?? null);
+
+        $this->installer->createOwner('owner', self::STRONG);
+        $this->installer->finalize('203.0.113.9');
+        self::assertFileDoesNotExist($file);
+
+        $this->controller->state($this->request([]));
+        self::assertFileDoesNotExist($file);
+    }
+
     public function testAWeakPasswordListsEveryWeakness(): void
     {
         $response = $this->controller->createOwner(

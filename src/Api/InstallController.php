@@ -26,6 +26,13 @@ final class InstallController
     {
         $state = $this->installer->state();
 
+        // A fresh copy has no token until someone asks for the installer, so
+        // the first visit writes it (idempotent). Re-read: the step depends on it.
+        if (!$state->installed && !$state->hasOwner) {
+            $this->installer->issueToken();
+            $state = $this->installer->state();
+        }
+
         return Response::json($state->installed ? $state->toPublicArray() : $state->toArray());
     }
 

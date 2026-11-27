@@ -21,7 +21,7 @@ export function TokenStep({ hasWordPress, onVerified }) {
     } catch (e) {
       setError(
         e.code === 'bad_token'
-          ? "That token doesn't match. Copy it again from data/install-token.php; it is the code inside the quotes."
+          ? 'That token doesn\'t match. Copy it again from data/install-token.php: it is the value after "token":, without the quotes.'
           : e.message
       )
       setBusy(false)
@@ -39,8 +39,8 @@ export function TokenStep({ hasWordPress, onVerified }) {
 
         <p class="text-sm leading-relaxed text-ink-muted">
           Open <code class="font-mono text-xs text-ink">data/install-token.php</code> over FTP or your host's file
-          manager and paste the token inside. This proves you're the site owner and not someone who found this page
-          first.
+          manager and paste the value after <code class="font-mono text-xs text-ink">"token":</code>, without the
+          quotes. This proves you're the site owner and not someone who found this page first.
         </p>
 
         <Field label="Install token" value={token} onInput={setToken} mono error={error} />

@@ -21,6 +21,23 @@ export function setBase(root) {
   installRoot = root
 }
 
+// The install folder's path as the web server sees it (decoded), for example
+// "/wpsm-3f9a.../" or "/wp safe mode/".
+export function installPath() {
+  try {
+    return decodeURIComponent(installRoot)
+  } catch (e) {
+    return installRoot
+  }
+}
+
+// The install folder's own name, the last segment of installPath().
+export function installFolder() {
+  const parts = installPath().split('/').filter(Boolean)
+
+  return parts.length > 0 ? parts[parts.length - 1] : ''
+}
+
 // Resolves a server `redirect` (../<name>/) against the install root and
 // returns the new root path plus the address of its shell.
 export function addressFor(redirect, query = '') {
@@ -41,6 +58,7 @@ const MESSAGES = {
   not_installed: 'Setup is not finished yet. Reload the page to carry on with it.',
   corrupt_install: "This copy's settings could not be read. Restore its data folder, or set it up again.",
   channel_not_allowed: 'That action is only available from the browser.',
+  bad_request: 'The server could not read that request. Reload the page and try again.',
 }
 const FALLBACK = 'Something went wrong on the server. Reload the page and try again.'
 
@@ -79,6 +97,8 @@ async function request(path, options = {}) {
     error.code = body.error
     error.status = response.status
     error.retryAfter = body.retry_after ?? 0
+    // weak_password lists each problem on its own.
+    error.weaknesses = Array.isArray(body.weaknesses) ? body.weaknesses.filter((w) => typeof w === 'string') : []
     throw error
   }
 

@@ -21,8 +21,8 @@ export function OwnerStep({ token, onCreated }) {
       onCreated()
     } catch (e) {
       if (e.code === 'weak_password') {
-        // The server joins every weakness into one string of sentences.
-        setProblem({ field: 'password', list: e.message.split(/(?<=\.)\s+/).filter(Boolean) })
+        // The server lists every weakness; the message is the fallback.
+        setProblem({ field: 'password', list: e.weaknesses.length > 0 ? e.weaknesses : [e.message] })
       } else if (e.code === 'bad_login') {
         setProblem({
           field: 'login',

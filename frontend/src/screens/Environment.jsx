@@ -69,6 +69,20 @@ export function Environment({ me, selfTest, notice, onSignOut }) {
 
         {selfTest?.reachable && <ExposureNotice detail={selfTest.detail} />}
 
+        {selfTest && !selfTest.reachable && selfTest.inconclusive && (
+          <Notice tone="info" title="We could not tell whether this tool's data folder can be opened from the web">
+            {selfTest.detail}
+          </Notice>
+        )}
+
+        {/* A reload comes through auth/me, which runs no check: say so rather than say nothing. */}
+        {!selfTest && (
+          <p class="text-sm text-ink-faint">
+            Each sign-in checks whether this tool's data folder can be opened from the web. Sign in again to see
+            the result.
+          </p>
+        )}
+
         {error && (
           <Card>
             <Pill tone="bad">Can't reach the server</Pill>

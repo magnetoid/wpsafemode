@@ -3,6 +3,8 @@ import { Field } from './Field.jsx'
 import { Button } from './Button.jsx'
 import { Notice } from './Notice.jsx'
 
+// Mirrors SelfRename::isSafeName() on the server. JavaScript's $ never matches
+// before a final newline (no m flag), unlike PCRE's.
 const SAFE_NAME = /^[A-Za-z0-9_-]{3,64}$/
 
 // wpsm- plus 12 lowercase hex characters, drawn in the browser so the name
@@ -16,7 +18,10 @@ function suggestName() {
 // Shared by the installer's move step and the owner's "Move this tool" card.
 // `onMove(name)` does the work and throws on failure; the parent decides what
 // happens next, because the installer and the signed-in panel differ there.
-export function MoveForm({ onMove, label, lead, children }) {
+// `locked` holds the move back while the parent runs another action, and
+// `onBusy(true|false)` tells the parent when the move itself is running, so
+// the two can never race.
+export function MoveForm({ onMove, label, lead, locked = false, onBusy = () => {}, children }) {
   const [name, setName] = useState(suggestName)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -24,7 +29,12 @@ export function MoveForm({ onMove, label, lead, children }) {
   const valid = SAFE_NAME.test(name)
 
   async function submit() {
+    if (busy || locked) {
+      return
+    }
+
     setBusy(true)
+    onBusy(true)
     setError(null)
 
     try {
@@ -32,6 +42,7 @@ export function MoveForm({ onMove, label, lead, children }) {
     } catch (e) {
       setError(e.message)
       setBusy(false)
+      onBusy(false)
     }
   }
 
@@ -55,7 +66,7 @@ export function MoveForm({ onMove, label, lead, children }) {
       )}
 
       <div class="flex flex-wrap gap-3">
-        <Button onClick={submit} busy={busy} disabled={!valid}>
+        <Button onClick={submit} busy={busy} disabled={!valid || locked}>
           {busy ? 'Moving…' : label}
         </Button>
         {children}

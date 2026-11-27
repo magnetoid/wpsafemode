@@ -7,6 +7,8 @@ namespace WPSafeMode\Api;
 use WPSafeMode\Core\Request;
 use WPSafeMode\Core\Response;
 use WPSafeMode\Installer\Installer;
+use WPSafeMode\Installer\SelfRename;
+use WPSafeMode\Storage\AuditEvent;
 use WPSafeMode\Security\WebAccessibilitySelfTest;
 use WPSafeMode\Storage\Contracts\StorageException;
 
@@ -16,7 +18,7 @@ use WPSafeMode\Storage\Contracts\StorageException;
  */
 final class InstallController
 {
-    public function __construct(private Installer $installer)
+    public function __construct(private Installer $installer, private string $appDir)
     {
     }
 
@@ -112,6 +114,43 @@ final class InstallController
         }
 
         return Response::json($this->installer->state()->toPublicArray());
+    }
+
+    public function rename(Request $request): Response
+    {
+        if (!$this->tokenOk($request)) {
+            return $this->badToken();
+        }
+
+        $name = $request->json()['name'] ?? SelfRename::suggest();
+
+        if (!is_string($name) || !SelfRename::isSafeName($name)) {
+            return Response::json(['error' => 'rename_failed', 'message' => SelfRename::UNSAFE_NAME_MESSAGE], 422);
+        }
+
+        $principal = $request->principal;
+
+        if ($principal === null) {
+            return $this->badToken();
+        }
+
+        // Every storage write happens before the move: the data directory
+        // lives inside the app directory, and a write after it would
+        // recreate the old, guessable path. Before install the principal is
+        // anonymous; the install token is what authorises this.
+        $this->installer->audit(AuditEvent::by($principal, AuditEvent::RENAME, $request->clientIp(), null, ['to' => $name]));
+
+        try {
+            SelfRename::rename($this->appDir, $name);
+        } catch (StorageException $e) {
+            $this->installer->audit(
+                AuditEvent::by($principal, AuditEvent::RENAME, $request->clientIp(), null, ['to' => $name, 'outcome' => 'failed'])
+            );
+
+            return Response::json(['error' => 'rename_failed', 'message' => $e->getMessage()], 422);
+        }
+
+        return Response::json(['ok' => true, 'redirect' => '../' . $name . '/']);
     }
 
     private function tokenOk(Request $request): bool

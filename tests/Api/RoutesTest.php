@@ -60,10 +60,12 @@ final class RoutesTest extends TestCase
             ['POST', '/api/install/self-test', 'open', ['browser'], true],
             ['POST', '/api/install/api-key',   'open', ['browser'], true],
             ['POST', '/api/install/finish',    'open', ['browser'], true],
+            ['POST', '/api/install/rename',    'open', ['browser'], true],
             ['POST', '/api/auth/login',        'open', ['browser'], false],
             ['POST', '/api/auth/logout',       'read', ['browser'], false],
             ['GET',  '/api/auth/me',           'read', ['browser'], false],
             ['GET',  '/api/env',               'read', ['browser'], false],
+            ['POST', '/api/admin/rename',      'own',  ['browser'], false],
         ], $actual);
     }
 }

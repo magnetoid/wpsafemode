@@ -77,6 +77,12 @@ final class Installer
         );
     }
 
+    /** Lets the installer's controller record an event without holding Storage. */
+    public function audit(AuditEvent $event): void
+    {
+        $this->storage->auditLog()->record($event);
+    }
+
     /**
      * The token proves whoever creates the owner can read the filesystem. A
      * public URL is discoverable, and without this whoever reaches an

@@ -37,7 +37,7 @@ final class InstallControllerTest extends TestCase
             $this->dir,
             Environment::probe($this->dir)
         );
-        $this->controller = new InstallController($this->installer);
+        $this->controller = new InstallController($this->installer, $this->dir . '/never-renamed');
         $this->token = $this->installer->issueToken();
     }
 

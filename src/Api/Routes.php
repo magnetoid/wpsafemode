@@ -24,7 +24,8 @@ final class Routes
         string $appDir,
         string $dataDir
     ): void {
-        $install = new InstallController($installer);
+        $install = new InstallController($installer, $appDir);
+        $admin = new AdminController($storage, $appDir);
         $auth = new AuthController($storage, $sessions, $installer);
 
         $router->add('GET', '/api/install/state', [$install, 'state'], Permission::OPEN, ['browser'], true);
@@ -33,11 +34,14 @@ final class Routes
         $router->add('POST', '/api/install/self-test', [$install, 'selfTest'], Permission::OPEN, ['browser'], true);
         $router->add('POST', '/api/install/api-key', [$install, 'apiKey'], Permission::OPEN, ['browser'], true);
         $router->add('POST', '/api/install/finish', [$install, 'finish'], Permission::OPEN, ['browser'], true);
+        $router->add('POST', '/api/install/rename', [$install, 'rename'], Permission::OPEN, ['browser'], true);
 
         $router->add('POST', '/api/auth/login', [$auth, 'login'], Permission::OPEN);
         $router->add('POST', '/api/auth/logout', [$auth, 'logout'], Permission::READ);
         $router->add('GET', '/api/auth/me', [$auth, 'me'], Permission::READ);
 
         $router->add('GET', '/api/env', new EnvController($storage), Permission::READ);
+
+        $router->add('POST', '/api/admin/rename', [$admin, 'rename'], Permission::OWN);
     }
 }

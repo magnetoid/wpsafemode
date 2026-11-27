@@ -20,6 +20,12 @@ final class Uninstaller
 {
     public const RECEIPT = 'WPSAFEMODE-REMOVED.txt';
 
+    /** Every top-level name the tool ships (src/), plus its data directory. */
+    public const SHIPPED = [
+        'Api', 'Core', 'Installer', 'Security', 'Storage',
+        'autoload.php', 'bootstrap.php', 'index.php', 'public', 'data',
+    ];
+
     private const INCOMPLETE = 'The uninstall did not finish: some files could not be removed.';
 
     /**
@@ -31,20 +37,44 @@ final class Uninstaller
         // Load the failure type now: once the files are gone it cannot be autoloaded.
         class_exists(StorageException::class);
 
-        $app = realpath($appDir);
-        $data = realpath($dataDir);
+        $app = @realpath($appDir);
+        $data = @realpath($dataDir);
 
         if (
             $app === false || $data === false
             || strpos($data, $app . '/') !== 0
             || dirname($app) === $app
-            || !is_file($app . '/bootstrap.php')
-            || file_exists($app . '/wp-config.php')
-            || file_exists($app . '/wp-load.php')
-            || file_exists($app . '/wp-includes')
+            || !@is_file($app . '/bootstrap.php')
+            || @file_exists($app . '/wp-config.php')
+            || @file_exists($app . '/wp-load.php')
+            || @file_exists($app . '/wp-includes')
+            || !self::holdsOnlyTheTool($app)
         ) {
             throw new StorageException('Refusing to uninstall: this folder layout is not one the tool can safely remove itself from.');
         }
+    }
+
+    /** Anything beside the tool's own files means this is not a folder the tool owns. */
+    private static function holdsOnlyTheTool(string $app): bool
+    {
+        $entries = @scandir($app);
+
+        if ($entries === false) {
+            return false;
+        }
+
+        foreach ($entries as $entry) {
+            if (
+                $entry === '.' || $entry === '..' || $entry === 'error_log'
+                || $entry[0] === '.' || in_array($entry, self::SHIPPED, true)
+            ) {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
     }
 
     /** @return string the path of the receipt */
@@ -52,18 +82,25 @@ final class Uninstaller
     {
         self::preflight($appDir, $dataDir);
 
-        $app = (string) realpath($appDir);
-        $data = (string) realpath($dataDir);
+        $app = (string) @realpath($appDir);
+        $data = (string) @realpath($dataDir);
         $receipt = dirname($app) . '/' . self::RECEIPT;
 
         self::removeRecursively($data);
-        clearstatcache();
+        @clearstatcache();
 
-        // No receipt over a data folder that survived: it would claim a cleanup that did not happen.
-        if (file_exists($data)) {
+        if (@file_exists($data)) {
             throw new StorageException(self::INCOMPLETE);
         }
 
+        self::removeRecursively($app);
+        @clearstatcache();
+
+        if (@file_exists($app)) {
+            throw new StorageException(self::INCOMPLETE);
+        }
+
+        // Last, so a receipt never exists while any of the tool does.
         @file_put_contents(
             $receipt,
             "WP Safe Mode was uninstalled on " . gmdate('Y-m-d H:i:s') . " UTC.\n\n"
@@ -73,27 +110,18 @@ final class Uninstaller
                 . "does not undo them.\n"
         );
 
-        self::removeRecursively($app);
-        clearstatcache();
-
-        if (file_exists($app)) {
-            @unlink($receipt);
-
-            throw new StorageException(self::INCOMPLETE);
-        }
-
         return $receipt;
     }
 
     private static function removeRecursively(string $path): void
     {
-        if (is_link($path) || is_file($path)) {
+        if (@is_link($path) || @is_file($path)) {
             @unlink($path);
 
             return;
         }
 
-        if (!is_dir($path)) {
+        if (!@is_dir($path)) {
             return;
         }
 

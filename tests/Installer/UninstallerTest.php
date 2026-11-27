@@ -190,4 +190,108 @@ final class UninstallerTest extends TestCase
         self::assertFileExists($this->appDir . '/index.php');
         self::assertFileExists($this->dataDir . '/keyvault.php');
     }
+
+    public function testEverythingTheToolShipsIsListedAsShipped(): void
+    {
+        foreach (scandir(dirname(__DIR__, 2) . '/src') ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..' || $entry[0] === '.' || $entry === 'data') {
+                continue;
+            }
+
+            self::assertContains($entry, Uninstaller::SHIPPED, 'Add this to Uninstaller::SHIPPED: ' . $entry);
+        }
+    }
+
+    public function testAFolderHoldingAWordPressSubfolderIsRefused(): void
+    {
+        mkdir($this->appDir . '/blog', 0755, true);
+        file_put_contents($this->appDir . '/blog/wp-config.php', '<?php');
+
+        $this->assertRefusedAndIntact();
+        self::assertFileExists($this->appDir . '/blog/wp-config.php');
+    }
+
+    public function testAFolderThatLooksLikeWpContentIsRefused(): void
+    {
+        mkdir($this->appDir . '/uploads', 0755, true);
+        mkdir($this->appDir . '/plugins', 0755, true);
+        file_put_contents($this->appDir . '/uploads/photo.jpg', 'x');
+
+        $this->assertRefusedAndIntact();
+        self::assertFileExists($this->appDir . '/uploads/photo.jpg');
+    }
+
+    private function assertRefusedAndIntact(): void
+    {
+        try {
+            Uninstaller::run($this->appDir, $this->dataDir);
+            self::fail('A folder holding other content must be refused.');
+        } catch (StorageException $e) {
+            self::assertStringNotContainsString($this->parent, $e->getMessage());
+        }
+
+        self::assertFileExists($this->appDir . '/index.php');
+        self::assertFileExists($this->dataDir . '/keyvault.php');
+        self::assertFileDoesNotExist($this->parent . '/' . Uninstaller::RECEIPT);
+    }
+
+    public function testAnErrorLogAndDotfilesBesideTheToolAreRemovedWithIt(): void
+    {
+        file_put_contents($this->appDir . '/error_log', 'log');
+        file_put_contents($this->appDir . '/.htaccess', 'x');
+
+        Uninstaller::run($this->appDir, $this->dataDir);
+
+        self::assertDirectoryDoesNotExist($this->appDir);
+    }
+
+    public function testAFailedApplicationRemovalIsReportedWithoutAReceipt(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Root ignores directory permissions.');
+        }
+
+        chmod($this->appDir . '/Security', 0555);
+
+        try {
+            Uninstaller::run($this->appDir, $this->dataDir);
+            self::fail('A removal that left the tool behind must not be reported as done.');
+        } catch (StorageException $e) {
+            self::assertStringNotContainsString($this->parent, $e->getMessage());
+        }
+
+        self::assertDirectoryDoesNotExist($this->dataDir);
+        self::assertFileExists($this->appDir . '/Security/KeyVault.php');
+        self::assertFileDoesNotExist($this->parent . '/' . Uninstaller::RECEIPT);
+    }
+
+    public function testItNeverEmitsAPathEvenWhenPhpWarns(): void
+    {
+        $base = sys_get_temp_dir() . '/wpsm-uninstall-bd-' . bin2hex(random_bytes(6));
+        mkdir($base . '/runner', 0700, true);
+        $app = $base . '/wpsm-abc123';
+        mkdir($app . '/data', 0700, true);
+        file_put_contents($app . '/bootstrap.php', '<?php');
+        file_put_contents($app . '/data/keyvault.php', '<?php');
+        $runner = $base . '/runner/run.php';
+        file_put_contents($runner, '<?php
+require $argv[1] . "/autoload.php";
+\\WPSafeMode\\Installer\\Uninstaller::run($argv[2], $argv[2] . "/data");
+echo "finished";
+');
+        $src = dirname(__DIR__, 2) . '/src';
+
+        $cmd = escapeshellarg(PHP_BINARY) . ' -d display_errors=1 -d error_reporting=-1'
+            . ' -d open_basedir=' . escapeshellarg((string) realpath($app) . ':' . (string) realpath($base . '/runner') . ':' . $src)
+            . ' ' . escapeshellarg($runner) . ' ' . escapeshellarg($src) . ' ' . escapeshellarg($app) . ' 2>&1';
+        $output = (string) shell_exec($cmd);
+
+        try {
+            self::assertStringContainsString('finished', $output);
+            self::assertSame(0, preg_match('#/[A-Za-z0-9_.-]+/#', $output), 'Output carried a path: ' . $output);
+        } finally {
+            $this->restorePermissions($base);
+            $this->removeRecursively($base);
+        }
+    }
 }

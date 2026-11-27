@@ -87,6 +87,16 @@ final class WebAccessibilitySelfTestTest extends TestCase
         self::assertSame('https://example.com/wpsm-a1b2c3', $url);
     }
 
+    public function testBaseUrlEncodesAFolderNameThatNeedsIt(): void
+    {
+        $url = WebAccessibilitySelfTest::baseUrlFrom([
+            'HTTP_HOST'   => 'example.com',
+            'SCRIPT_NAME' => '/sites/wp safe mode (1)/index.php',
+        ]);
+
+        self::assertSame('http://example.com/sites/wp%20safe%20mode%20%281%29', $url);
+    }
+
     public function testAServedButMissingCanaryReportsNotReachable(): void
     {
         $server = getenv('WPSM_SELFTEST_URL');

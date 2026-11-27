@@ -139,4 +139,57 @@ final class EntryPointTest extends TestCase
             self::assertSame(['nosniff'], $answer['headers']['x-content-type-options'] ?? null, $name);
         }
     }
+
+    /** @return array<string, array{0: string}> */
+    public static function foldersThatNeedEncoding(): array
+    {
+        return [
+            'a space'                   => ['wp safe mode'],
+            'a second extract, Windows' => ['wpsafemode (1)'],
+            'a second extract, macOS'   => ['wpsafemode 2'],
+        ];
+    }
+
+    /** @dataProvider foldersThatNeedEncoding */
+    public function testAFolderWhoseNameNeedsEncodingReachesTheShellAndTheApi(string $folder): void
+    {
+        $copy = $this->serve($folder);
+        $base = '/' . rawurlencode($folder);
+
+        $bare = $copy->request('GET', $base . '/');
+        self::assertSame(302, $bare['status']);
+        self::assertSame([$base . '/index.php/'], $bare['headers']['location'] ?? null);
+
+        // The redirect's target answers the shell itself: no loop.
+        $shell = $copy->request('GET', $base . '/index.php/');
+        self::assertSame(200, $shell['status']);
+        self::assertStringStartsWith('text/html', $shell['headers']['content-type'][0] ?? '');
+        self::assertStringContainsString('<div id="app">', $shell['body']);
+
+        $state = $copy->request('GET', $base . '/index.php/api/install/state');
+        self::assertSame(200, $state['status']);
+        $body = json_decode($state['body'], true);
+        self::assertIsArray($body);
+        self::assertFalse($body['installed']);
+
+        $deep = $copy->request('GET', $base . '/index.php/some/client/route');
+        self::assertSame(200, $deep['status']);
+    }
+
+    public function testSigningInUnderAFolderWithASpaceScopesTheCookieToItsEncodedPath(): void
+    {
+        $copy = $this->serve('wp safe mode');
+        $this->installed($copy);
+
+        $response = $copy->request(
+            'POST',
+            '/wp%20safe%20mode/index.php/api/auth/login',
+            (string) json_encode(['login' => 'owner', 'password' => self::PASSWORD]),
+            ['Content-Type' => 'application/json', 'User-Agent' => 'EntryPointTest']
+        );
+
+        self::assertSame(200, $response['status'], $response['body']);
+        $cookie = $response['headers']['set-cookie'][0] ?? '';
+        self::assertStringContainsString('; Path=/wp%20safe%20mode;', $cookie);
+    }
 }

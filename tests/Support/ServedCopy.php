@@ -94,6 +94,19 @@ final class ServedCopy
     public function stop(): void
     {
         if (is_resource($this->process)) {
+            // With PHP_CLI_SERVER_WORKERS the master forks workers that do
+            // not exit with it: stop them first, then the master.
+            $master = (int) proc_get_status($this->process)['pid'];
+            $workers = array_filter(array_map('intval', preg_split('/\s+/', trim((string) shell_exec('pgrep -P ' . $master))) ?: []));
+
+            foreach ($workers as $worker) {
+                if (function_exists('posix_kill')) {
+                    posix_kill($worker, 15);
+                } else {
+                    shell_exec('kill ' . $worker);
+                }
+            }
+
             proc_terminate($this->process, 15);
 
             for ($i = 0; $i < 50 && proc_get_status($this->process)['running']; $i++) {

@@ -388,24 +388,56 @@ final class AuthSessionsTest extends TestCase
     }
 
     /** @return array<string, array{string}> */
-    public function badPaths(): array
+    public function relativePaths(): array
     {
         return [
             'attribute injection' => [';Domain=evil.example'],
-            'second path'         => ['/ok; Path=/'],
-            'CR LF'               => ["/ok\r\nSet-Cookie: x=y"],
-            'comma'               => ['/a,b'],
-            'space'               => ['/a b'],
             'relative'            => ['wpsm'],
-            'NUL'                 => ["/a\0b"],
+            'CR LF first'         => ["\r\nSet-Cookie: x=y"],
         ];
     }
 
-    /** @dataProvider badPaths */
-    public function testCookieHeadersRefuseAnUnsafePath(string $path): void
+    /** @dataProvider relativePaths */
+    public function testCookieHeadersRefuseAPathThatIsNotAbsolute(string $path): void
     {
         self::assertTrue($this->throwsInvalidArgument(fn () => $this->auth->cookieHeader('tok', false, $path, 1000)));
         self::assertTrue($this->throwsInvalidArgument(fn () => $this->auth->clearCookieHeader(false, $path)));
+    }
+
+    /** @return array<string, array{string, string}> base path => the Path attribute it must become */
+    public function pathsThatNeedEncoding(): array
+    {
+        return [
+            'space'        => ['/wp safe mode', '/wp%20safe%20mode'],
+            'parentheses'  => ['/wpsafemode (1)', '/wpsafemode%20%281%29'],
+            'nested'       => ['/sites/wp safe mode', '/sites/wp%20safe%20mode'],
+            'second path'  => ['/ok; Path=/', '/ok%3B%20Path%3D/'],
+            'CR LF'        => ["/ok\r\nSet-Cookie: x=y", '/ok%0D%0ASet-Cookie%3A%20x%3Dy'],
+            'comma'        => ['/a,b', '/a%2Cb'],
+            'NUL'          => ["/a\0b", '/a%00b'],
+        ];
+    }
+
+    /**
+     * The Path is the percent-encoded install directory, so a folder named
+     * "wp safe mode" can sign in, and nothing in the name can add or end a
+     * cookie attribute: only unreserved characters, % and / remain.
+     *
+     * @dataProvider pathsThatNeedEncoding
+     */
+    public function testTheCookiePathIsThePercentEncodedBasePath(string $base, string $path): void
+    {
+        foreach ([
+            $this->auth->cookieHeader('tok', false, $base, 1000),
+            $this->auth->clearCookieHeader(false, $base),
+        ] as $header) {
+            self::assertStringContainsString('; Path=' . $path . ';', $header);
+            self::assertSame(1, preg_match('/; Path=([^;]*);/', $header, $m));
+            self::assertSame(1, preg_match('#^/[A-Za-z0-9._~%/-]*\z#', $m[1]));
+            self::assertSame(1, substr_count($header, 'Path='));
+            self::assertStringNotContainsString("\r", $header);
+            self::assertStringNotContainsString("\n", $header);
+        }
     }
 
     public function testCookieHeaderRefusesATokenThatIsNotUrlSafeBase64(): void

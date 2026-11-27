@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Security;
 
+use WPSafeMode\Core\Request;
+
 /**
  * Proves whether the data directory is readable over HTTP.
  *
@@ -187,6 +189,7 @@ final class WebAccessibilitySelfTest
 
         $dir = rtrim(str_replace('\\', '/', dirname((string) ($server['SCRIPT_NAME'] ?? '/index.php'))), '/');
 
-        return $scheme . '://' . $host . ($dir === '.' ? '' : $dir);
+        // SCRIPT_NAME is decoded; a URL needs each segment encoded again.
+        return $scheme . '://' . $host . ($dir === '.' ? '' : Request::encodePath($dir));
     }
 }

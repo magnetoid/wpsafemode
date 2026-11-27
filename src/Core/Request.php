@@ -45,10 +45,15 @@ final class Request
      * is what a drop-in ZIP must assume since it ships no .htaccess and cannot
      * count on mod_rewrite, the URL is /install-dir/index.php/api/env and the
      * script name is part of the path too.
+     *
+     * REQUEST_URI arrives percent-encoded and SCRIPT_NAME decoded, so the
+     * path is decoded before the two are compared: a folder called
+     * "wp safe mode" is /wp%20safe%20mode/ in the one and /wp safe mode/ in
+     * the other.
      */
     public function path(): string
     {
-        $path = (string) parse_url($this->uri, PHP_URL_PATH);
+        $path = rawurldecode((string) parse_url($this->uri, PHP_URL_PATH));
         $script = str_replace('\\', '/', $this->scriptName);
 
         $path = self::stripPrefix($path, $script)
@@ -143,10 +148,22 @@ final class Request
         return $this->header('User-Agent') ?? '';
     }
 
-    /** The install directory as a URL path, used as the cookie path. */
+    /** The install directory as a filesystem-style URL path, decoded ('' at the root). */
     public function basePath(): string
     {
         return rtrim(dirname(str_replace('\\', '/', $this->scriptName)), '/');
+    }
+
+    /** basePath() as it must appear in a URL or a header: each segment percent-encoded. */
+    public function encodedBasePath(): string
+    {
+        return self::encodePath($this->basePath());
+    }
+
+    /** Percent-encodes every segment of a path, keeping its slashes. */
+    public static function encodePath(string $path): string
+    {
+        return implode('/', array_map('rawurlencode', explode('/', $path)));
     }
 
     /**

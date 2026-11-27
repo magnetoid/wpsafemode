@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Security;
 
+use WPSafeMode\Core\Request;
 use WPSafeMode\Storage\Contracts\Storage;
 use WPSafeMode\Storage\User;
 
@@ -200,9 +201,14 @@ final class AuthSessions
     }
 
     /**
+     * The install directory ($path is decoded, as Request::basePath() gives
+     * it) becomes the percent-encoded Path a browser matches against the URL
+     * it sends: a folder called "wp safe mode" is Path=/wp%20safe%20mode.
      * '' (a root install) becomes '/', because an empty Path attribute makes
-     * browsers fall back to the request's directory. Anything that could add
-     * or override a cookie attribute is refused.
+     * browsers fall back to the request's directory.
+     *
+     * The encoded value is checked as well: only unreserved characters, '%'
+     * and '/', so nothing can add, end or override a cookie attribute.
      */
     private static function cookiePath(string $path): string
     {
@@ -210,11 +216,13 @@ final class AuthSessions
             return '/';
         }
 
-        if ($path[0] !== '/' || preg_match('/[;,\s\x00-\x1F\x7F]/', $path) === 1) {
+        $encoded = Request::encodePath($path);
+
+        if ($path[0] !== '/' || preg_match('#^/[A-Za-z0-9._~%/-]*\z#', $encoded) !== 1) {
             throw new \InvalidArgumentException('The cookie path is not a plain absolute path.');
         }
 
-        return $path;
+        return $encoded;
     }
 
     public static function hashToken(string $token): string

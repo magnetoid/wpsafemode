@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
 
-use WPSafeMode\Api\EnvController;
+use WPSafeMode\Api\Kernel;
+use WPSafeMode\Api\Routes;
 use WPSafeMode\Core\Environment;
 use WPSafeMode\Core\Request;
 use WPSafeMode\Core\Response;
-use WPSafeMode\Core\RouteMatch;
 use WPSafeMode\Core\Router;
-use WPSafeMode\Security\Permission;
+use WPSafeMode\Installer\Installer;
+use WPSafeMode\Security\AuthSessions;
+use WPSafeMode\Security\KeyVault;
+use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\StorageFactory;
 
@@ -55,25 +58,21 @@ if (strpos($path, '/api/') !== 0) {
     exit;
 }
 
+// The data directory lives inside the install directory: <install-dir>/data/.
+$dataDir = __DIR__ . '/data';
+
 try {
-    $storage = StorageFactory::open(__DIR__ . '/../data', Environment::probe());
+    $env = Environment::probe();
+    $storage = StorageFactory::open($dataDir, $env);
+
+    $hasher = new PasswordHasher();
+    $installer = new Installer($storage, new KeyVault($dataDir), $hasher, $dataDir, $env);
+    $sessions = new AuthSessions($storage, $hasher);
+
+    $router = new Router();
+    Routes::register($router, $storage, $sessions, $installer, __DIR__, $dataDir);
+
+    (new Kernel($router, $storage, $sessions, $installer))->handle($request, time())->send();
 } catch (StorageException $e) {
     Response::json(['error' => 'storage_unavailable', 'message' => $e->getMessage()], 500)->send();
-    exit;
-}
-
-$router = new Router();
-$router->add('GET', '/api/env', new EnvController($storage), Permission::OPEN);
-
-// Interim: Task 11 replaces this block with the Kernel, which also checks the
-// route's permission and channel before running the handler.
-$match = $router->match($request->method, $path);
-
-if ($match->status === RouteMatch::FOUND && $match->route !== null) {
-    $request->params = $match->params;
-    ($match->route->handler)($request)->send();
-} elseif ($match->status === RouteMatch::METHOD_NOT_ALLOWED) {
-    Response::methodNotAllowed()->send();
-} else {
-    Response::notFound()->send();
 }

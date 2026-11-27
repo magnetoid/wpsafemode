@@ -62,7 +62,7 @@ final class InstallControllerTest extends TestCase
     }
 
     /** @param array<string, mixed> $body */
-    private function request(array $body, string $host = 'localhost'): Request
+    private function request(array $body, string $host = '127.0.0.1:1'): Request
     {
         return new Request(
             'POST',
@@ -96,7 +96,10 @@ final class InstallControllerTest extends TestCase
     /** @dataProvider tokenGuardedActions */
     public function testInstallerMutationsRequireTheToken(string $action): void
     {
-        $payload = ['login' => 'owner', 'password' => self::STRONG, 'api_key' => 'sk-ant-key', 'acknowledged_risk' => true];
+        // An owner exists, so the action could otherwise succeed (or at least
+        // fail for a reason other than the token).
+        $this->installer->createOwner('owner', self::STRONG);
+        $payload = ['login' => 'second', 'password' => self::STRONG, 'api_key' => 'sk-ant-key', 'acknowledged_risk' => true];
 
         foreach ([$payload, $payload + ['token' => 'WRONG']] as $body) {
             $response = $this->controller->$action($this->request($body));
@@ -105,11 +108,12 @@ final class InstallControllerTest extends TestCase
             self::assertSame(['error' => 'bad_token'], $this->decode($response));
         }
 
-        self::assertTrue($this->storage->users()->isEmpty());
+        self::assertCount(1, $this->storage->users()->all());
         self::assertFalse($this->storage->config()->has('api_key'));
         self::assertNull($this->storage->config()->get('installed_at'));
-        self::assertFileDoesNotExist($this->dir . '/.wpsm-selftest');
-        self::assertSame([], glob($this->dir . '/wpsm-canary*') ?: []);
+        self::assertFalse($this->installer->state()->installed);
+        self::assertNull($this->installer->state()->selfTest);
+        self::assertSame([], glob($this->dir . '/canary-*.txt') ?: []);
     }
 
     public function testSelfTestAnswersNoBaseUrlForAMalformedHost(): void

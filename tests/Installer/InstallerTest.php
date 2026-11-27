@@ -100,8 +100,14 @@ final class InstallerTest extends TestCase
 
     public function testTheApiKeyIsRefusedUntilAnOwnerExists(): void
     {
-        $this->expectException(StorageException::class);
-        $this->installer->storeApiKey('sk-ant-key', false, self::UNREACHABLE);
+        // Acknowledged, so the self-test cannot be the reason for the refusal.
+        try {
+            $this->installer->storeApiKey('sk-ant-key', true, self::UNREACHABLE);
+            self::fail('The API key was stored with no owner');
+        } catch (StorageException $e) {
+            self::assertStringContainsString('owner', $e->getMessage());
+            self::assertFalse($this->installer->state()->hasApiKey);
+        }
     }
 
     public function testTheApiKeyIsStoredEncryptedAndNeverInPlaintext(): void
@@ -268,5 +274,37 @@ final class InstallerTest extends TestCase
         $recent = StorageFactory::create($this->dir, 'json')->auditLog()->recent(1);
 
         self::assertSame('user:1', $recent[0]->actor);
+    }
+
+    public function testAReissuedTokenOpensNothingOnAnInstalledCopy(): void
+    {
+        $old = $this->installer->issueToken();
+        $this->installer->createOwner('owner', self::STRONG);
+        $this->installer->storeApiKey('sk-ant-key', true, self::UNREACHABLE);
+        $this->installer->finalize('1.2.3.4');
+
+        // Put the token back by hand, as a failed unlink or a leftover copy would.
+        \WPSafeMode\Security\GuardedJson::write($this->dir . '/install-token.php', ['token' => $old, 'created_at' => time()]);
+
+        self::assertFalse($this->installer->verifyToken($old));
+
+        foreach ([
+            fn () => $this->installer->issueToken(),
+            fn () => $this->installer->storeApiKey('sk-other', true, self::UNREACHABLE),
+            fn () => $this->installer->finalize('5.6.7.8'),
+        ] as $call) {
+            try {
+                $call();
+                self::fail('An installer action ran on an installed copy');
+            } catch (StorageException $e) {
+                self::assertStringContainsString('already installed', $e->getMessage());
+            }
+        }
+
+        $installs = array_filter(
+            StorageFactory::create($this->dir, 'json')->auditLog()->recent(),
+            static fn ($e): bool => $e->event === 'install'
+        );
+        self::assertCount(1, $installs);
     }
 }

@@ -56,7 +56,7 @@ final class Installer
     {
         $hasOwner = !$this->storage->users()->isEmpty();
         $hasApiKey = $this->storage->config()->has('api_key');
-        $installed = $this->storage->config()->get('installed_at') !== null;
+        $installed = $this->isInstalled();
 
         if ($installed) {
             $step = self::STEP_DONE;
@@ -84,6 +84,8 @@ final class Installer
      */
     public function issueToken(): string
     {
+        $this->assertNotInstalled();
+
         DataDir::ensure($this->dataDir);
 
         $path = $this->dataDir . '/' . self::TOKEN_FILE;
@@ -101,6 +103,12 @@ final class Installer
 
     public function verifyToken(string $presented): bool
     {
+        // The gate is installed_at, not the token file: deleting the file is
+        // best-effort and a token written back must open nothing.
+        if ($this->isInstalled()) {
+            return false;
+        }
+
         $stored = GuardedJson::read($this->dataDir . '/' . self::TOKEN_FILE);
 
         if (!isset($stored['token']) || !is_string($stored['token'])) {
@@ -143,6 +151,7 @@ final class Installer
 
     public function storeApiKey(string $key, bool $acknowledgedRisk, string $baseUrl): void
     {
+        $this->assertNotInstalled();
         $owner = $this->owner('Create the owner before storing an API key.');
 
         $key = trim($key);
@@ -171,6 +180,7 @@ final class Installer
 
     public function finalize(string $ip): void
     {
+        $this->assertNotInstalled();
         $owner = $this->owner('Create the owner before finishing setup.');
 
         // The installer does not ask about posture; every copy starts in emergency.
@@ -179,7 +189,11 @@ final class Installer
         $this->storage->config()->set('install_id', bin2hex(random_bytes(8)));
 
         // The token has done its job; leaving it is one more secret to leak.
-        @unlink($this->dataDir . '/' . self::TOKEN_FILE);
+        // Best effort only: the installed_at check above is the gate.
+        $tokenPath = $this->dataDir . '/' . self::TOKEN_FILE;
+        if (is_file($tokenPath)) {
+            @unlink($tokenPath);
+        }
 
         $this->storage->auditLog()->record(AuditEvent::by(
             Principal::forUser($owner, Channel::BROWSER),
@@ -188,6 +202,18 @@ final class Installer
             null,
             ['backend' => $this->storage->backend(), 'encryption' => $this->vault->algorithm()]
         ));
+    }
+
+    private function isInstalled(): bool
+    {
+        return $this->storage->config()->get('installed_at') !== null;
+    }
+
+    private function assertNotInstalled(): void
+    {
+        if ($this->isInstalled()) {
+            throw new StorageException('This copy is already installed.');
+        }
     }
 
     private function owner(string $messageIfNone): User

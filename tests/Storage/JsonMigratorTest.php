@@ -7,6 +7,8 @@ namespace WPSafeMode\Tests\Storage;
 use PHPUnit\Framework\TestCase;
 use WPSafeMode\Core\Version;
 use WPSafeMode\Security\GuardedJson;
+use WPSafeMode\Security\Role;
+use WPSafeMode\Storage\Credential;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Json\JsonConfigStore;
 use WPSafeMode\Storage\Json\JsonMigrator;
@@ -136,7 +138,7 @@ final class JsonMigratorTest extends TestCase
 
         JsonMigrator::migrate($this->dir);
 
-        self::assertSame(2, JsonMigrator::currentVersion($this->dir));
+        self::assertSame(Version::SCHEMA, JsonMigrator::currentVersion($this->dir));
         self::assertTrue((new JsonUserStore($this->dir . '/users.php'))->isEmpty());
         self::assertSame('v', (new JsonConfigStore($this->dir . '/config.php'))->get('k'));
         self::assertFileDoesNotExist($this->dir . '/auth.php');
@@ -173,5 +175,28 @@ final class JsonMigratorTest extends TestCase
             self::assertStringContainsString('schema version 2', $e->getMessage());
             self::assertInstanceOf(StorageException::class, $e->getPrevious());
         }
+    }
+
+    public function testStepThreeAddsLoginSessionsWithoutTouchingUsers(): void
+    {
+        JsonMigrator::migrate($this->dir, array_slice(JsonMigrator::steps(), 0, 2, true));
+        self::assertSame(2, JsonMigrator::currentVersion($this->dir));
+        $created = (new JsonUserStore($this->dir . '/users.php'))
+            ->create('owner', Role::OWNER, new Credential('h', 'bcrypt', 1, 1));
+
+        $storage = new JsonStorage($this->dir);
+
+        $user = $storage->users()->findByLogin('owner');
+        self::assertNotNull($user);
+        self::assertSame($created->id, $user->id);
+
+        $sessions = $storage->authSessions();
+        $row = [
+            'user_id' => $user->id, 'created_at' => 10, 'last_seen_at' => 11, 'expires_at' => 99,
+            'ip' => '1.2.3.4', 'ua_hash' => 'abc',
+        ];
+        $sessions->put('tokenhash', $row);
+        self::assertSame($row, $sessions->get('tokenhash'));
+        self::assertSame(3, JsonMigrator::currentVersion($this->dir));
     }
 }

@@ -103,6 +103,22 @@ final class SqliteMigrator
                     )'
                 );
             },
+
+            // Login sessions, each bound to the user who logged in. There is
+            // nothing to carry over: no login session existed before users did.
+            3 => static function (PDO $pdo): void {
+                $pdo->exec(
+                    'CREATE TABLE auth_sessions (
+                        token_hash TEXT PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        last_seen_at INTEGER NOT NULL,
+                        expires_at INTEGER NOT NULL,
+                        ip TEXT NOT NULL,
+                        ua_hash TEXT NOT NULL
+                    )'
+                );
+            },
         ];
     }
 

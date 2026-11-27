@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage;
 
+use WPSafeMode\Storage\Contracts\AuthSessionStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\Storage;
 use WPSafeMode\Storage\Contracts\UserStore;
+use WPSafeMode\Storage\Sqlite\SqliteAuthSessionStore;
 use WPSafeMode\Storage\Sqlite\SqliteConfigStore;
 use WPSafeMode\Storage\Sqlite\SqliteConnection;
 use WPSafeMode\Storage\Sqlite\SqliteMessageLog;
@@ -49,6 +51,11 @@ final class SqliteStorage implements Storage
     public function rateLimiter(): RateLimiter
     {
         return new SqliteRateLimiter($this->connection);
+    }
+
+    public function authSessions(): AuthSessionStore
+    {
+        return new SqliteAuthSessionStore($this->connection);
     }
 
     public function backend(): string

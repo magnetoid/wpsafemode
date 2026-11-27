@@ -8,6 +8,8 @@ use PDO;
 use PHPUnit\Framework\TestCase;
 use WPSafeMode\Core\Version;
 use WPSafeMode\Storage\Contracts\StorageException;
+use WPSafeMode\Security\Role;
+use WPSafeMode\Storage\SqliteStorage;
 use WPSafeMode\Storage\Sqlite\SqliteConfigStore;
 use WPSafeMode\Storage\Sqlite\SqliteConnection;
 use WPSafeMode\Storage\Sqlite\SqliteMigrator;
@@ -139,7 +141,7 @@ final class SqliteMigratorTest extends TestCase
 
         SqliteMigrator::migrate($pdo);
 
-        self::assertSame(2, SqliteMigrator::currentVersion($pdo));
+        self::assertSame(Version::SCHEMA, SqliteMigrator::currentVersion($pdo));
 
         $connection = new SqliteConnection($this->dir . '/wpsm.sqlite');
         self::assertTrue((new SqliteUserStore($connection))->isEmpty());
@@ -168,5 +170,32 @@ final class SqliteMigratorTest extends TestCase
             self::assertStringContainsString('schema version 2', $e->getMessage());
             self::assertInstanceOf(StorageException::class, $e->getPrevious());
         }
+    }
+
+    public function testStepThreeAddsLoginSessionsWithoutTouchingUsers(): void
+    {
+        $pdo = $this->rawPdo();
+        SqliteMigrator::migrate($pdo, array_slice(SqliteMigrator::steps(), 0, 2, true));
+        self::assertSame(2, SqliteMigrator::currentVersion($pdo));
+        $pdo->exec(
+            "INSERT INTO users (login, role, password_hash, hash_algo, created_at, password_changed_at)
+             VALUES ('owner', 'owner', 'h', 'bcrypt', 1, 1)"
+        );
+        unset($pdo);
+
+        $storage = new SqliteStorage($this->dir);
+
+        $user = $storage->users()->findByLogin('owner');
+        self::assertNotNull($user);
+        self::assertSame(Role::OWNER, $user->role);
+
+        $sessions = $storage->authSessions();
+        $row = [
+            'user_id' => $user->id, 'created_at' => 10, 'last_seen_at' => 11, 'expires_at' => 99,
+            'ip' => '1.2.3.4', 'ua_hash' => 'abc',
+        ];
+        $sessions->put('tokenhash', $row);
+        self::assertSame($row, $sessions->get('tokenhash'));
+        self::assertSame(3, SqliteMigrator::currentVersion($this->rawPdo()));
     }
 }

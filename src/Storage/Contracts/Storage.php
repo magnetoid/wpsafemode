@@ -16,6 +16,8 @@ interface Storage
 
     public function rateLimiter(): RateLimiter;
 
+    public function authSessions(): AuthSessionStore;
+
     /** Either 'sqlite' or 'json'. */
     public function backend(): string;
 }

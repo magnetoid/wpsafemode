@@ -40,6 +40,10 @@ final class JsonMigrator
                     throw new StorageException('Cannot remove the old credential file.');
                 }
             },
+
+            // data/auth_sessions.php is created on first write; nothing to do.
+            3 => static function (string $dataDir): void {
+            },
         ];
     }
 

@@ -24,6 +24,7 @@ final class UninstallerTest extends TestCase
         mkdir($this->dataDir . '/sessions/sesn_1', 0700, true);
 
         file_put_contents($this->appDir . '/index.php', '<?php');
+        file_put_contents($this->appDir . '/bootstrap.php', '<?php');
         file_put_contents($this->appDir . '/Security/KeyVault.php', '<?php');
         file_put_contents($this->dataDir . '/config.php', '<?php // api key');
         file_put_contents($this->dataDir . '/keyvault.php', '<?php // master secret');
@@ -155,5 +156,38 @@ final class UninstallerTest extends TestCase
         }
 
         self::assertFileExists($this->dataDir . '/sessions/sesn_1/session.php');
+        self::assertFileDoesNotExist($this->parent . '/' . Uninstaller::RECEIPT);
+    }
+
+    public function testAnAppDirectoryThatIsTheWordPressRootIsRefused(): void
+    {
+        file_put_contents($this->appDir . '/wp-config.php', '<?php');
+
+        try {
+            Uninstaller::run($this->appDir, $this->dataDir);
+            self::fail('A WordPress root must never be removed.');
+        } catch (StorageException $e) {
+            self::assertStringNotContainsString($this->parent, $e->getMessage());
+        }
+
+        self::assertFileExists($this->appDir . '/wp-config.php');
+        self::assertFileExists($this->appDir . '/bootstrap.php');
+        self::assertFileExists($this->dataDir . '/keyvault.php');
+        self::assertFileDoesNotExist($this->parent . '/' . Uninstaller::RECEIPT);
+    }
+
+    public function testAnAppDirectoryWithoutTheToolsBootstrapIsRefused(): void
+    {
+        unlink($this->appDir . '/bootstrap.php');
+
+        try {
+            Uninstaller::run($this->appDir, $this->dataDir);
+            self::fail('A folder that is not the tool must never be removed.');
+        } catch (StorageException $e) {
+            self::assertStringNotContainsString($this->parent, $e->getMessage());
+        }
+
+        self::assertFileExists($this->appDir . '/index.php');
+        self::assertFileExists($this->dataDir . '/keyvault.php');
     }
 }

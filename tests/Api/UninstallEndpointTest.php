@@ -45,6 +45,7 @@ final class UninstallEndpointTest extends TestCase
         $this->dataDir = $this->appDir . '/data';
         mkdir($this->dataDir, 0700, true);
         file_put_contents($this->appDir . '/index.php', '<?php');
+        file_put_contents($this->appDir . '/bootstrap.php', '<?php');
 
         $this->storage = StorageFactory::create($this->dataDir, 'json');
         $this->sessions = new AuthSessions($this->storage, new PasswordHasher());
@@ -169,5 +170,20 @@ final class UninstallEndpointTest extends TestCase
         );
         self::assertDirectoryDoesNotExist($this->appDir);
         self::assertFileExists($this->parent . '/WPSAFEMODE-REMOVED.txt');
+    }
+
+    public function testAnUnsafeLayoutIsRefusedWithoutAuditingOrDeleting(): void
+    {
+        $owner = $this->install()[Role::OWNER];
+        file_put_contents($this->appDir . '/wp-config.php', '<?php');
+
+        $response = $this->post(['confirm' => 'DELETE'], $owner);
+
+        self::assertSame(409, $response->status);
+        self::assertSame('uninstall_refused', $this->decode($response)['error']);
+        self::assertStringNotContainsString($this->parent, $response->body);
+        self::assertFileExists($this->appDir . '/wp-config.php');
+        self::assertDirectoryExists($this->dataDir);
+        self::assertSame(0, $this->auditedUninstalls());
     }
 }

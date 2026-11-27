@@ -28,6 +28,17 @@ final class UninstallController
             return Response::json(['error' => 'confirmation_required'], 422);
         }
 
+        $refused = Response::json([
+            'error'   => 'uninstall_refused',
+            'message' => 'This copy\'s folder layout is not one the tool can safely remove itself from. Delete the tool\'s folder over FTP.',
+        ], 409);
+
+        try {
+            Uninstaller::preflight($this->appDir, $this->dataDir);
+        } catch (StorageException $e) {
+            return $refused;
+        }
+
         $principal = $request->principal;
 
         if ($principal === null) {

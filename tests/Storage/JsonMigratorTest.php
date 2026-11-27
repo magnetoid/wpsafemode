@@ -10,6 +10,8 @@ use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Json\JsonConfigStore;
 use WPSafeMode\Storage\Json\JsonMigrator;
+use WPSafeMode\Storage\Json\JsonUserStore;
+use WPSafeMode\Storage\JsonStorage;
 
 final class JsonMigratorTest extends TestCase
 {
@@ -123,5 +125,53 @@ final class JsonMigratorTest extends TestCase
         $this->expectException(StorageException::class);
 
         JsonMigrator::currentVersion($this->dir);
+    }
+
+    public function testVersionOneCredentialIsDroppedAndUsersStartEmpty(): void
+    {
+        JsonMigrator::migrate($this->dir, array_slice(JsonMigrator::steps(), 0, 1, true));
+        GuardedJson::write($this->dir . '/auth.php', ['password_hash' => 'h', 'hash_algo' => 'argon2id', 'created_at' => 1, 'password_changed_at' => 1]);
+        GuardedJson::write($this->dir . '/config.php', ['k' => 'v']);
+        self::assertSame(1, JsonMigrator::currentVersion($this->dir));
+
+        JsonMigrator::migrate($this->dir);
+
+        self::assertSame(2, JsonMigrator::currentVersion($this->dir));
+        self::assertTrue((new JsonUserStore($this->dir . '/users.php'))->isEmpty());
+        self::assertSame('v', (new JsonConfigStore($this->dir . '/config.php'))->get('k'));
+        self::assertFileDoesNotExist($this->dir . '/auth.php');
+    }
+
+    public function testJsonStorageRunsTheMigratorBeforeHandingOutAStore(): void
+    {
+        (new JsonStorage($this->dir))->config();
+
+        self::assertSame(Version::SCHEMA, JsonMigrator::currentVersion($this->dir));
+    }
+
+    public function testTheMigrationLockFileIsNamedAfterTheMigration(): void
+    {
+        JsonMigrator::migrate($this->dir, array_slice(JsonMigrator::steps(), 0, 1, true));
+
+        self::assertFileExists($this->dir . '/migrate.lock.php');
+        self::assertFileDoesNotExist($this->dir . '/migrate-lock.php.lock.php');
+    }
+
+    public function testAStepFailingWithAStorageExceptionNamesTheStep(): void
+    {
+        $steps = [
+            1 => JsonMigrator::steps()[1],
+            2 => function (): void {
+                throw new StorageException('inner');
+            },
+        ];
+
+        try {
+            JsonMigrator::migrate($this->dir, $steps);
+            self::fail('Expected StorageException');
+        } catch (StorageException $e) {
+            self::assertStringContainsString('schema version 2', $e->getMessage());
+            self::assertInstanceOf(StorageException::class, $e->getPrevious());
+        }
     }
 }

@@ -12,6 +12,10 @@ interface Storage
 
     public function messages(): MessageLog;
 
+    public function users(): UserStore;
+
+    public function rateLimiter(): RateLimiter;
+
     /** Either 'sqlite' or 'json'. */
     public function backend(): string;
 }

@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Storage;
 
 use WPSafeMode\Security\GuardedJson;
-use WPSafeMode\Storage\Contracts\AuthStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
-use WPSafeMode\Storage\Json\JsonAuthStore;
+use WPSafeMode\Storage\Contracts\UserStore;
 use WPSafeMode\Storage\Json\JsonConfigStore;
 use WPSafeMode\Storage\Json\JsonMessageLog;
 use WPSafeMode\Storage\Json\JsonRateLimiter;
 use WPSafeMode\Storage\Json\JsonSessionRepo;
+use WPSafeMode\Storage\Json\JsonUserStore;
 
 final class JsonStorageTest extends StorageConformanceTest
 {
@@ -34,9 +34,18 @@ final class JsonStorageTest extends StorageConformanceTest
         return new JsonMessageLog($dataDir . '/sessions');
     }
 
-    protected function makeAuthStore(string $dataDir): AuthStore
+    protected function makeUserStore(string $dataDir): UserStore
     {
-        return new JsonAuthStore($dataDir . '/auth.php');
+        return new JsonUserStore($dataDir . '/users.php');
+    }
+
+    /** Raw GuardedJson write: a role the application would never write. */
+    protected function writeMalformedUserRecord(string $dataDir): void
+    {
+        $path = $dataDir . '/users.php';
+        $file = GuardedJson::read($path);
+        $file['users']['1']['role'] = 'root';
+        GuardedJson::write($path, $file);
     }
 
     protected function makeRateLimiter(string $dataDir): RateLimiter
@@ -189,58 +198,78 @@ final class JsonStorageTest extends StorageConformanceTest
     }
 
     /**
-     * JSON-backend-specific, not part of the shared conformance suite: SQLite
-     * has no equivalent state, since a NOT NULL column makes a row that
-     * exists-but-lacks-a-password_hash impossible.
-     *
-     * GuardedJson::read() returns [] both for a file that was never written
-     * and for one whose content parses but is not a credential (empty
-     * payload, or valid JSON that isn't shaped like a row). If isConfigured()
-     * or current() treated that [] the same way for both cases, a corrupted
-     * — but PRESENT — auth.php would look identical to a fresh install, and
-     * whatever first-run flow that unlocks (Task 8) would silently overwrite
-     * it. is_file() is checked separately from the parsed result precisely so
-     * "present but unreadable" and "never written" stay distinguishable.
+     * JSON-backend-specific: GuardedJson::read() returns [] both for a file
+     * that was never written and for one whose content parses but is not a
+     * users file. isEmpty() gates the installer, so a corrupt-but-present
+     * users.php must never read as "no users yet" - anyone could then create
+     * the owner. A missing file is the only empty store.
      */
-    public function testCorruptCredentialFileIsNotTreatedAsUnconfigured(): void
+    public function testACorruptUsersFileIsNotTreatedAsEmpty(): void
     {
-        $path = $this->dataDir . '/auth.php';
-        GuardedJson::write($path, ['unexpected' => 'shape']);
+        GuardedJson::write($this->dataDir . '/users.php', ['unexpected' => 'shape']);
 
-        $store = $this->makeAuthStore($this->dataDir);
+        $store = $this->makeUserStore($this->dataDir);
 
-        self::assertTrue(
-            $store->isConfigured(),
-            'A present-but-unparseable credential file must not read as a fresh install.'
-        );
+        try {
+            $store->isEmpty();
+            self::fail('isEmpty() must throw on a corrupt users file');
+        } catch (StorageException $e) {
+            // expected
+        }
 
         $this->expectException(StorageException::class);
-        $store->current();
+        $store->all();
     }
 
     /**
-     * A row with password_hash present but one of the other three fields
-     * missing still has isset($row['password_hash']) === true, so a check
-     * that only looked at that one key would parse this "successfully" —
-     * Credential::fromRow() would read the missing key as null and hand
-     * back a Credential with a real hash and a bogus (0 or '') timestamp,
-     * silently, instead of throwing. current() must require every field the
-     * row is supposed to carry, not just the one isConfigured() cares about.
+     * A row with the hash present but another field missing would still
+     * hydrate through Credential::fromRow(), which casts leniently, into a
+     * user with a real hash and silently wrong metadata. Every field must be
+     * required.
      */
-    public function testCorruptCredentialFileMissingAnyFieldStillThrows(): void
+    public function testAUserRecordMissingAnyFieldStillThrows(): void
     {
-        $path = $this->dataDir . '/auth.php';
-        GuardedJson::write($path, [
-            'password_hash' => '$argon2id$hash',
-            'hash_algo'     => 'argon2id',
-            // created_at and password_changed_at deliberately omitted.
-        ]);
+        $full = [
+            'id' => 1, 'login' => 'marko', 'role' => 'owner',
+            'password_hash' => '$argon2id$hash', 'hash_algo' => 'argon2id',
+            'created_at' => 1000, 'password_changed_at' => 2000, 'disabled_at' => null,
+        ];
 
-        $store = $this->makeAuthStore($this->dataDir);
+        foreach (array_keys($full) as $missing) {
+            $row = $full;
+            unset($row[$missing]);
+            GuardedJson::write($this->dataDir . '/users.php', ['next_id' => 2, 'users' => ['1' => $row]]);
 
-        self::assertTrue($store->isConfigured());
+            try {
+                $this->makeUserStore($this->dataDir)->find(1);
+                self::fail('A record without ' . $missing . ' must throw');
+            } catch (StorageException $e) {
+                self::assertInstanceOf(StorageException::class, $e);
+            }
+        }
+    }
+
+    public function testARecordWhoseKeyDisagreesWithItsIdThrows(): void
+    {
+        GuardedJson::write($this->dataDir . '/users.php', ['next_id' => 3, 'users' => ['2' => [
+            'id' => 1, 'login' => 'marko', 'role' => 'owner',
+            'password_hash' => '$argon2id$hash', 'hash_algo' => 'argon2id',
+            'created_at' => 1000, 'password_changed_at' => 2000, 'disabled_at' => null,
+        ]]]);
 
         $this->expectException(StorageException::class);
-        $store->current();
+        $this->makeUserStore($this->dataDir)->all();
+    }
+
+    public function testAWrongTypeInARecordThrows(): void
+    {
+        GuardedJson::write($this->dataDir . '/users.php', ['next_id' => 2, 'users' => ['1' => [
+            'id' => 1, 'login' => 'marko', 'role' => 'owner',
+            'password_hash' => '$argon2id$hash', 'hash_algo' => 'argon2id',
+            'created_at' => '1000', 'password_changed_at' => 2000, 'disabled_at' => null,
+        ]]]);
+
+        $this->expectException(StorageException::class);
+        $this->makeUserStore($this->dataDir)->find(1);
     }
 }

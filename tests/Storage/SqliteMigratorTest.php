@@ -11,6 +11,8 @@ use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Sqlite\SqliteConfigStore;
 use WPSafeMode\Storage\Sqlite\SqliteConnection;
 use WPSafeMode\Storage\Sqlite\SqliteMigrator;
+use WPSafeMode\Storage\Sqlite\SqliteSessionRepo;
+use WPSafeMode\Storage\Sqlite\SqliteUserStore;
 
 final class SqliteMigratorTest extends TestCase
 {
@@ -120,5 +122,51 @@ final class SqliteMigratorTest extends TestCase
 
         $found = $pdo->query("SELECT name FROM sqlite_master WHERE name = 'half_done'")->fetchAll();
         self::assertSame([], $found);
+    }
+
+    public function testVersionOneCredentialIsDroppedAndUsersStartEmpty(): void
+    {
+        $pdo = $this->rawPdo();
+        SqliteMigrator::migrate($pdo, array_slice(SqliteMigrator::steps(), 0, 1, true));
+        self::assertSame(1, SqliteMigrator::currentVersion($pdo));
+
+        $pdo->exec("INSERT INTO auth (id, password_hash, hash_algo, created_at, password_changed_at) VALUES (1, 'h', 'argon2id', 1, 1)");
+        $pdo->exec("INSERT INTO config (key, value) VALUES ('k', 'v')");
+        $pdo->exec(
+            "INSERT INTO sessions (id, title, blade, status, model, effort, created_at, updated_at)
+             VALUES ('sesn_1', 't', 'b', 'idle', 'm', 'e', 1, 1)"
+        );
+
+        SqliteMigrator::migrate($pdo);
+
+        self::assertSame(2, SqliteMigrator::currentVersion($pdo));
+
+        $connection = new SqliteConnection($this->dir . '/wpsm.sqlite');
+        self::assertTrue((new SqliteUserStore($connection))->isEmpty());
+        self::assertSame('v', (new SqliteConfigStore($connection))->get('k'));
+        self::assertNotNull((new SqliteSessionRepo($connection))->find('sesn_1'));
+        self::assertSame(
+            [],
+            $pdo->query("SELECT name FROM sqlite_master WHERE name = 'auth'")->fetchAll()
+        );
+    }
+
+    public function testAStepFailingWithAStorageExceptionNamesTheStep(): void
+    {
+        $pdo = $this->rawPdo();
+        $steps = [
+            1 => SqliteMigrator::steps()[1],
+            2 => function (): void {
+                throw new StorageException('inner');
+            },
+        ];
+
+        try {
+            SqliteMigrator::migrate($pdo, $steps);
+            self::fail('Expected StorageException');
+        } catch (StorageException $e) {
+            self::assertStringContainsString('schema version 2', $e->getMessage());
+            self::assertInstanceOf(StorageException::class, $e->getPrevious());
+        }
     }
 }

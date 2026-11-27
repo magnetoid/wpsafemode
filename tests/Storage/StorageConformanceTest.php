@@ -5,15 +5,17 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Storage;
 
 use PHPUnit\Framework\TestCase;
-use WPSafeMode\Storage\Contracts\AuthStore;
+use WPSafeMode\Security\Role;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
+use WPSafeMode\Storage\Contracts\UserStore;
 use WPSafeMode\Storage\Credential;
 use WPSafeMode\Storage\Message;
 use WPSafeMode\Storage\Session;
+use WPSafeMode\Storage\User;
 
 /**
  * One suite, two backends. Every assertion here must hold identically for
@@ -30,7 +32,7 @@ abstract class StorageConformanceTest extends TestCase
 
     abstract protected function makeMessageLog(string $dataDir): MessageLog;
 
-    abstract protected function makeAuthStore(string $dataDir): AuthStore;
+    abstract protected function makeUserStore(string $dataDir): UserStore;
 
     abstract protected function makeRateLimiter(string $dataDir): RateLimiter;
 
@@ -57,6 +59,13 @@ abstract class StorageConformanceTest extends TestCase
      * interpretation; this hook only gets the bad data onto disk.
      */
     abstract protected function writeMalformedRateLimitEntry(string $dataDir, string $bucket): void;
+
+    /**
+     * Backend-specific: corrupts the stored record of user 1 directly
+     * through the backend's own storage (raw SQL / raw GuardedJson), the
+     * same idea as writeMalformedRateLimitEntry().
+     */
+    abstract protected function writeMalformedUserRecord(string $dataDir): void;
 
     protected function setUp(): void
     {
@@ -372,42 +381,220 @@ abstract class StorageConformanceTest extends TestCase
         self::assertSame(1, $log->count('sesn_1'));
     }
 
-    public function testAuthStoreStartsUnconfigured(): void
+    private function credential(string $hash = '$argon2id$hash', int $created = 1000, int $changed = 2000): Credential
     {
-        $store = $this->makeAuthStore($this->dataDir);
-
-        self::assertFalse($store->isConfigured());
-        self::assertNull($store->current());
+        return new Credential($hash, 'argon2id', $created, $changed);
     }
 
-    public function testCredentialRoundTripsEveryField(): void
+    public function testUserStoreStartsEmpty(): void
     {
-        $credential = new Credential('$argon2id$hash', 'argon2id', 1000, 2000);
-        $this->makeAuthStore($this->dataDir)->store($credential);
+        $store = $this->makeUserStore($this->dataDir);
 
-        $found = $this->makeAuthStore($this->dataDir)->current();
-
-        self::assertNotNull($found);
-        self::assertSame($credential->toRow(), $found->toRow());
-        self::assertTrue($this->makeAuthStore($this->dataDir)->isConfigured());
+        self::assertTrue($store->isEmpty());
+        self::assertSame([], $store->all());
+        self::assertNull($store->find(1));
+        self::assertNull($store->findByLogin('owner'));
     }
 
-    public function testStoringASecondCredentialReplacesTheFirst(): void
+    public function testCreateAssignsIdOneAndRoundTripsEveryField(): void
     {
-        $store = $this->makeAuthStore($this->dataDir);
-        $store->store(new Credential('$2y$first', 'bcrypt', 1000, 1000));
-        // The second credential asks for a DIFFERENT createdAt (9000) than the
-        // first (1000). If the store preserved created_at, $found->createdAt
-        // is 1000; if it overwrote it, $found->createdAt is 9000 — a single
-        // shared value for both calls could never tell those apart.
-        $store->store(new Credential('$argon2id$second', 'argon2id', 9000, 3000));
+        $credential = $this->credential();
+        $created = $this->makeUserStore($this->dataDir)->create('owner', Role::OWNER, $credential);
 
-        $found = $this->makeAuthStore($this->dataDir)->current();
+        self::assertSame(1, $created->id);
+
+        $store = $this->makeUserStore($this->dataDir);
+        $found = $store->find(1);
 
         self::assertNotNull($found);
-        self::assertSame('$argon2id$second', $found->hash);
-        self::assertSame(1000, $found->createdAt, 'created_at must survive a password change unchanged');
-        self::assertSame(3000, $found->changedAt);
+        self::assertSame('owner', $found->login);
+        self::assertSame('owner', $found->role);
+        self::assertSame($credential->toRow(), $found->credential->toRow());
+        self::assertNull($found->disabledAt);
+        self::assertTrue($found->isEnabled());
+        self::assertFalse($store->isEmpty());
+    }
+
+    public function testLoginIsNormalisedAndUnique(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+
+        self::assertSame('marko', $store->create('  Marko ', Role::ADMIN, $this->credential())->login);
+
+        $this->expectException(StorageException::class);
+        $store->create('MARKO', Role::VIEWER, $this->credential());
+    }
+
+    public function testFindByLoginIgnoresCaseAndPadding(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('marko', Role::ADMIN, $this->credential());
+
+        $found = $store->findByLogin('  MARKO ');
+
+        self::assertNotNull($found);
+        self::assertSame(1, $found->id);
+        self::assertNull($store->findByLogin('not a login'));
+    }
+
+    /** @return array<string, array{string}> */
+    public static function invalidLogins(): array
+    {
+        return [
+            'empty'     => [''],
+            'too short' => ['ab'],
+            'space'     => ['has space'],
+            'lead dash' => ['-lead'],
+            'too long'  => [str_repeat('a', 65)],
+            'non ascii' => ['ünï'],
+        ];
+    }
+
+    /** @dataProvider invalidLogins */
+    public function testAnInvalidLoginIsRejected(string $login): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+
+        try {
+            $store->create($login, Role::VIEWER, $this->credential());
+            self::fail('Expected StorageException');
+        } catch (StorageException $e) {
+            self::assertTrue($store->isEmpty(), 'A rejected create must store nothing.');
+        }
+    }
+
+    public function testAnUnknownRoleIsRejected(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+
+        try {
+            $store->create('x1y', 'root', $this->credential());
+            self::fail('Expected StorageException');
+        } catch (StorageException $e) {
+            self::assertTrue($store->isEmpty());
+        }
+    }
+
+    public function testAllReturnsUsersOrderedById(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('user-c', Role::VIEWER, $this->credential());
+        $store->create('user-a', Role::VIEWER, $this->credential());
+        $store->create('user-b', Role::VIEWER, $this->credential());
+
+        self::assertSame([1, 2, 3], array_map(static fn ($u) => $u->id, $store->all()));
+        self::assertSame(['user-c', 'user-a', 'user-b'], array_map(static fn ($u) => $u->login, $store->all()));
+    }
+
+    public function testUpdatePersistsRoleCredentialAndDisabledAt(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $user = $store->create('marko', Role::VIEWER, $this->credential());
+
+        $user->role = Role::ADMIN;
+        $user->credential = new Credential('$argon2id$new', 'argon2id', 1000, 5000);
+        $user->disabledAt = 7000;
+        $store->update($user);
+
+        $found = $this->makeUserStore($this->dataDir)->find($user->id);
+
+        self::assertNotNull($found);
+        self::assertSame(Role::ADMIN, $found->role);
+        self::assertSame('$argon2id$new', $found->credential->hash);
+        self::assertSame(5000, $found->credential->changedAt);
+        self::assertSame(7000, $found->disabledAt);
+        self::assertFalse($found->isEnabled());
+    }
+
+    public function testUpdateKeepsTheOriginalCreationTime(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $user = $store->create('marko', Role::VIEWER, $this->credential('$argon2id$a', 1000, 1000));
+
+        $user->credential = new Credential('$argon2id$b', 'argon2id', 9000, 3000);
+        $store->update($user);
+
+        $found = $store->find($user->id);
+
+        self::assertNotNull($found);
+        self::assertSame(1000, $found->credential->createdAt);
+        self::assertSame(3000, $found->credential->changedAt);
+        self::assertSame(9000, $user->credential->createdAt, 'update() must not mutate the User it was given');
+    }
+
+    public function testUpdateRejectsAnUnknownUser(): void
+    {
+        $this->expectException(StorageException::class);
+
+        $this->makeUserStore($this->dataDir)->update(new User(42, 'ghost', Role::VIEWER, $this->credential()));
+    }
+
+    public function testUpdateRejectsALoginTakenByAnotherUser(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('first', Role::VIEWER, $this->credential());
+        $second = $store->create('second', Role::VIEWER, $this->credential());
+
+        $second->login = 'FIRST';
+
+        $this->expectException(StorageException::class);
+        $store->update($second);
+    }
+
+    public function testUpdateWritesTheLoginNormalisedAndMayKeepItsOwn(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $user = $store->create('marko', Role::VIEWER, $this->credential());
+
+        $user->login = ' MARKO ';
+        $store->update($user);
+        self::assertSame('marko', $store->find($user->id)?->login);
+
+        $user->login = 'Marko.T';
+        $store->update($user);
+        self::assertSame('marko.t', $store->find($user->id)?->login);
+    }
+
+    public function testUpdateRejectsAnInvalidLoginOrRole(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $user = $store->create('marko', Role::VIEWER, $this->credential());
+
+        $user->login = 'x';
+        try {
+            $store->update($user);
+            self::fail('Expected StorageException for the login');
+        } catch (StorageException $e) {
+            // expected
+        }
+
+        $user->login = 'marko';
+        $user->role = 'root';
+        $this->expectException(StorageException::class);
+        $store->update($user);
+    }
+
+    public function testAMalformedUserRecordFailsClosedInBothBackends(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('marko', Role::OWNER, $this->credential());
+        $this->writeMalformedUserRecord($this->dataDir);
+
+        $calls = [
+            'find'        => static fn () => $store->find(1),
+            'findByLogin' => static fn () => $store->findByLogin('marko'),
+            'all'         => static fn () => $store->all(),
+            'isEmpty'     => static fn () => $store->isEmpty(),
+        ];
+
+        foreach ($calls as $name => $call) {
+            try {
+                $call();
+                self::fail($name . '() must throw on a malformed record');
+            } catch (StorageException $e) {
+                self::assertInstanceOf(StorageException::class, $e);
+            }
+        }
     }
 
     public function testAnUnknownBucketIsUnlockedWithNoAttempts(): void

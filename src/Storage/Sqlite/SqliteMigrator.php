@@ -16,6 +16,8 @@ final class SqliteMigrator
 {
     /**
      * Step N produces schema version N. Later milestones append steps here.
+     * A step must use only the PDO it is given, never SqliteConnection or
+     * SqliteStorage: the migration lock is not re-entrant.
      *
      * @return array<int, callable(PDO): void>
      */
@@ -80,6 +82,24 @@ final class SqliteMigrator
                         window_start INTEGER NOT NULL,
                         attempts INTEGER NOT NULL DEFAULT 0,
                         locked_until INTEGER
+                    )'
+                );
+            },
+
+            // No data is carried over from the single credential: nothing was
+            // released and no installer existed to create one.
+            2 => static function (PDO $pdo): void {
+                $pdo->exec('DROP TABLE IF EXISTS auth');
+                $pdo->exec(
+                    'CREATE TABLE users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        login TEXT NOT NULL UNIQUE,
+                        role TEXT NOT NULL,
+                        password_hash TEXT NOT NULL,
+                        hash_algo TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        password_changed_at INTEGER NOT NULL,
+                        disabled_at INTEGER
                     )'
                 );
             },
@@ -170,8 +190,6 @@ final class SqliteMigrator
             if ($current < $version) {
                 try {
                     $step($pdo);
-                } catch (StorageException $e) {
-                    throw $e;
                 } catch (\Throwable $e) {
                     throw new StorageException(
                         sprintf('Migration to schema version %d failed: %s', $version, $e->getMessage()),

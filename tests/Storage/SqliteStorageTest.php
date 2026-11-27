@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Tests\Storage;
 
-use WPSafeMode\Storage\Contracts\AuthStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
-use WPSafeMode\Storage\Sqlite\SqliteAuthStore;
+use WPSafeMode\Storage\Contracts\UserStore;
 use WPSafeMode\Storage\Sqlite\SqliteConfigStore;
 use WPSafeMode\Storage\Sqlite\SqliteConnection;
 use WPSafeMode\Storage\Sqlite\SqliteMessageLog;
 use WPSafeMode\Storage\Sqlite\SqliteRateLimiter;
 use WPSafeMode\Storage\Sqlite\SqliteSessionRepo;
+use WPSafeMode\Storage\Sqlite\SqliteUserStore;
 
 final class SqliteStorageTest extends StorageConformanceTest
 {
@@ -33,9 +33,16 @@ final class SqliteStorageTest extends StorageConformanceTest
         return new SqliteMessageLog(new SqliteConnection($dataDir . '/wpsm.sqlite'));
     }
 
-    protected function makeAuthStore(string $dataDir): AuthStore
+    protected function makeUserStore(string $dataDir): UserStore
     {
-        return new SqliteAuthStore(new SqliteConnection($dataDir . '/wpsm.sqlite'));
+        return new SqliteUserStore(new SqliteConnection($dataDir . '/wpsm.sqlite'));
+    }
+
+    /** Raw SQL: the only way to get a role the application would never write. */
+    protected function writeMalformedUserRecord(string $dataDir): void
+    {
+        $connection = new SqliteConnection($dataDir . '/wpsm.sqlite');
+        $connection->pdo()->exec("UPDATE users SET role = 'root' WHERE id = 1");
     }
 
     protected function makeRateLimiter(string $dataDir): RateLimiter

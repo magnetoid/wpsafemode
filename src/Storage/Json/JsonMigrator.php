@@ -19,6 +19,8 @@ final class JsonMigrator
 {
     /**
      * Step N produces schema version N. Later milestones append steps here.
+     * A step must use only the data directory it is given, never JsonStorage:
+     * the migration lock is not re-entrant.
      *
      * @return array<int, callable(string): void>
      */
@@ -27,6 +29,16 @@ final class JsonMigrator
         return [
             // Files are created on first write; nothing to do.
             1 => static function (string $dataDir): void {
+            },
+
+            // The single credential is dropped, not migrated: nothing was
+            // released and no installer existed to create one. Safe to run twice.
+            2 => static function (string $dataDir): void {
+                $auth = $dataDir . '/auth.php';
+
+                if (is_file($auth) && !@unlink($auth)) {
+                    throw new StorageException('Cannot remove the old credential file.');
+                }
             },
         ];
     }
@@ -54,7 +66,7 @@ final class JsonMigrator
             return;
         }
 
-        GuardedJson::withExclusiveLock($dataDir . '/migrate-lock.php', static function () use ($dataDir, $steps, $target): void {
+        GuardedJson::withExclusiveLock($dataDir . '/migrate', static function () use ($dataDir, $steps, $target): void {
             // Re-read under the lock: a request that waited here may find the
             // work already done.
             $current = self::currentVersion($dataDir);
@@ -67,8 +79,6 @@ final class JsonMigrator
 
                 try {
                     $step($dataDir);
-                } catch (StorageException $e) {
-                    throw $e;
                 } catch (\Throwable $e) {
                     throw new StorageException(
                         sprintf('Migration to schema version %d failed: %s', $version, $e->getMessage()),

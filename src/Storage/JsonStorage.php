@@ -6,12 +6,16 @@ namespace WPSafeMode\Storage;
 
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
+use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\Storage;
+use WPSafeMode\Storage\Contracts\UserStore;
 use WPSafeMode\Storage\Json\JsonConfigStore;
 use WPSafeMode\Storage\Json\JsonMessageLog;
 use WPSafeMode\Storage\Json\JsonMigrator;
+use WPSafeMode\Storage\Json\JsonRateLimiter;
 use WPSafeMode\Storage\Json\JsonSessionRepo;
+use WPSafeMode\Storage\Json\JsonUserStore;
 
 final class JsonStorage implements Storage
 {
@@ -45,6 +49,16 @@ final class JsonStorage implements Storage
     public function messages(): MessageLog
     {
         return new JsonMessageLog($this->migrated() . '/sessions');
+    }
+
+    public function users(): UserStore
+    {
+        return new JsonUserStore($this->migrated() . '/users.php');
+    }
+
+    public function rateLimiter(): RateLimiter
+    {
+        return new JsonRateLimiter($this->migrated() . '/rate_limit.php');
     }
 
     public function backend(): string

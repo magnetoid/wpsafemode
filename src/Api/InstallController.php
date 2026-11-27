@@ -124,7 +124,7 @@ final class InstallController
             $this->installer->storeApiKey(
                 $body['api_key'] ?? '',
                 ($body['acknowledged_risk'] ?? false) === true,
-                $baseUrl ?? 'http://127.0.0.1:1'
+                $baseUrl
             );
         } catch (StorageException $e) {
             switch ($e->getCode()) {

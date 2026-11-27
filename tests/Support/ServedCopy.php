@@ -44,6 +44,35 @@ final class ServedCopy
         mkdir($copy->root, 0700, true);
         self::copy(dirname(__DIR__, 2) . '/src', $copy->appDir, true);
 
+        return $copy->listen($ini, null);
+    }
+
+    /**
+     * Serves nothing but a router script: a stand-in for some other server
+     * (a WAF, a CDN, a default virtual host) or a fixture for the transport.
+     */
+    public static function router(string $php): self
+    {
+        $copy = new self();
+        $copy->folder = '';
+        $copy->base = sys_get_temp_dir() . '/wpsm-served-' . bin2hex(random_bytes(6));
+        $copy->root = $copy->base . '/root';
+        $copy->appDir = $copy->root;
+        mkdir($copy->root, 0700, true);
+        file_put_contents($copy->base . '/router.php', $php);
+
+        return $copy->listen([], $copy->base . '/router.php');
+    }
+
+    public function url(string $path = '/'): string
+    {
+        return 'http://127.0.0.1:' . $this->port . $path;
+    }
+
+    /** @param array<string, string> $ini */
+    private function listen(array $ini, ?string $router): self
+    {
+        $copy = $this;
         $copy->port = self::freePort();
         // The host's own php.ini still applies; these settings go on top, so
         // the copy runs where errors would be printed if it let them.
@@ -61,6 +90,10 @@ final class ServedCopy
         }
 
         array_push($command, '-S', '127.0.0.1:' . $copy->port, '-t', $copy->root);
+
+        if ($router !== null) {
+            $command[] = $router;
+        }
 
         $log = $copy->base . '/server.log';
         $process = proc_open(

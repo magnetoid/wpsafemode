@@ -21,6 +21,7 @@ use WPSafeMode\Security\Role;
 use WPSafeMode\Storage\Contracts\Storage;
 use WPSafeMode\Storage\StorageFactory;
 use WPSafeMode\Storage\User;
+use WPSafeMode\Tests\Support\FakeFetcher;
 
 final class KernelTest extends TestCase
 {
@@ -51,7 +52,8 @@ final class KernelTest extends TestCase
             new KeyVault($this->dir),
             new PasswordHasher(),
             $this->dir,
-            Environment::probe($this->dir)
+            Environment::probe($this->dir),
+            FakeFetcher::unreachable()
         );
         $this->router = new Router();
         $this->kernel = new Kernel($this->router, $this->storage, $this->sessions, $this->installer);

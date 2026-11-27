@@ -21,6 +21,7 @@ use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\Storage;
 use WPSafeMode\Storage\StorageFactory;
 use WPSafeMode\Storage\User;
+use WPSafeMode\Tests\Support\FakeFetcher;
 
 final class AuthControllerTest extends TestCase
 {
@@ -33,6 +34,7 @@ final class AuthControllerTest extends TestCase
     private AuthSessions $sessions;
     private AuthController $controller;
     private User $owner;
+    private FakeFetcher $fetcher;
 
     protected function setUp(): void
     {
@@ -45,12 +47,14 @@ final class AuthControllerTest extends TestCase
         $this->storage->config()->set('install_id', self::SECRET);
 
         $this->sessions = new AuthSessions($this->storage, new PasswordHasher());
+        $this->fetcher = FakeFetcher::refusing();
         $installer = new Installer(
             $this->storage,
             new KeyVault($this->dir),
             new PasswordHasher(),
             $this->dir,
-            Environment::probe($this->dir)
+            Environment::probe($this->dir),
+            $this->fetcher
         );
         $this->controller = new AuthController($this->storage, $this->sessions, $installer);
     }
@@ -230,5 +234,35 @@ final class AuthControllerTest extends TestCase
         }
 
         self::assertSame(0, $this->storage->rateLimiter()->peek('login:203.0.113.7', time())->attempts);
+    }
+
+    public function testLoginRunsTheSelfTestAgainstTheRequestsOwnAddress(): void
+    {
+        $request = new Request(
+            'POST',
+            '/wpsm-abc/index.php/api/auth/login',
+            '/wpsm-abc/index.php',
+            (string) json_encode(['login' => 'owner', 'password' => self::PASSWORD]),
+            ['REMOTE_ADDR' => '203.0.113.7', 'HTTP_USER_AGENT' => self::UA, 'HTTP_HOST' => 'example.test', 'SCRIPT_NAME' => '/wpsm-abc/index.php']
+        );
+
+        $body = $this->decode($this->controller->login($request));
+
+        self::assertFalse($body['self_test']['reachable']);
+        self::assertFalse($body['self_test']['inconclusive']);
+        self::assertCount(2, $this->fetcher->requested);
+        self::assertStringStartsWith('http://example.test/wpsm-abc/data/canary-', $this->fetcher->requested[0]);
+        self::assertSame('http://example.test/wpsm-abc/index.php/api/install/state', $this->fetcher->requested[1]);
+    }
+
+    public function testLoginWithNoUsableHostIsInconclusiveWithoutAProbe(): void
+    {
+        // loginRequest() sends no Host header at all.
+        $body = $this->decode($this->controller->login($this->loginRequest('owner', self::PASSWORD)));
+
+        self::assertTrue($body['ok']);
+        self::assertTrue($body['self_test']['inconclusive']);
+        self::assertNull($body['self_test']['checked_url']);
+        self::assertSame([], $this->fetcher->requested);
     }
 }

@@ -12,6 +12,7 @@ use WPSafeMode\Security\KeyVault;
 use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Security\Principal;
 use WPSafeMode\Security\Role;
+use WPSafeMode\Security\SelfTestFetcher;
 use WPSafeMode\Security\SelfTestResult;
 use WPSafeMode\Security\WebAccessibilitySelfTest;
 use WPSafeMode\Storage\AuditEvent;
@@ -57,6 +58,8 @@ final class Installer
         private PasswordHasher $hasher,
         private string $dataDir,
         private EnvironmentReport $env,
+        // The self-test's transport; null is the real one. A seam for tests.
+        private ?SelfTestFetcher $fetcher = null,
     ) {
     }
 
@@ -158,16 +161,17 @@ final class Installer
         return $user;
     }
 
-    public function runSelfTest(string $baseUrl): SelfTestResult
+    /** A null base URL (the request named no usable host) is inconclusive without a probe. */
+    public function runSelfTest(?string $baseUrl): SelfTestResult
     {
-        return $this->lastSelfTest = WebAccessibilitySelfTest::run($this->dataDir, $baseUrl);
+        return $this->lastSelfTest = WebAccessibilitySelfTest::run($this->dataDir, $baseUrl, $this->fetcher);
     }
 
     /**
      * @throws StorageException coded ERR_ALREADY_INSTALLED, ERR_NO_OWNER,
      *         ERR_EMPTY_KEY or ERR_EXPOSED for a refusal; uncoded for a fault
      */
-    public function storeApiKey(string $key, bool $acknowledgedRisk, string $baseUrl): void
+    public function storeApiKey(string $key, bool $acknowledgedRisk, ?string $baseUrl): void
     {
         $this->assertNotInstalled();
         $owner = $this->owner('Create the owner before storing an API key.');

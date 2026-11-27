@@ -80,9 +80,9 @@ final class AuthController
         ));
 
         // Only a successful login runs the self-test. An undeterminable
-        // address gives an inconclusive result, which is the honest answer.
-        $baseUrl = WebAccessibilitySelfTest::baseUrlFrom($request->server) ?? 'http://127.0.0.1:1';
-        $selfTest = $this->installer->runSelfTest($baseUrl);
+        // address gives an inconclusive result without a probe, which is the
+        // honest answer.
+        $selfTest = $this->installer->runSelfTest(WebAccessibilitySelfTest::baseUrlFrom($request->server));
 
         $response = Response::json([
             'ok'        => true,

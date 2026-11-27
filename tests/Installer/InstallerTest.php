@@ -14,6 +14,7 @@ use WPSafeMode\Storage\Contracts\Storage;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\StorageFactory;
 use WPSafeMode\Tests\Support\FailingStorage;
+use WPSafeMode\Tests\Support\FakeFetcher;
 
 final class InstallerTest extends TestCase
 {
@@ -36,14 +37,16 @@ final class InstallerTest extends TestCase
         $this->removeRecursively($this->dir);
     }
 
-    private function makeInstaller(string $envDir): Installer
+    /** The self-test never leaves the process: every request fails, so it is inconclusive. */
+    private function makeInstaller(string $envDir, ?\WPSafeMode\Security\SelfTestFetcher $fetcher = null): Installer
     {
         return new Installer(
             StorageFactory::create($this->dir, 'json'),
             new KeyVault($this->dir),
             new PasswordHasher(),
             $this->dir,
-            Environment::probe($envDir)
+            Environment::probe($envDir),
+            $fetcher ?? FakeFetcher::unreachable()
         );
     }
 
@@ -158,17 +161,75 @@ final class InstallerTest extends TestCase
             self::markTestSkipped('Set WPSM_SELFTEST_URL to a base URL serving the data dir.');
         }
 
-        $this->installer->createOwner('owner', self::STRONG);
+        // The real transport, against the real server.
+        $installer = new Installer(
+            StorageFactory::create($this->dir, 'json'),
+            new KeyVault($this->dir),
+            new PasswordHasher(),
+            $this->dir,
+            Environment::probe($this->dir)
+        );
+        $installer->createOwner('owner', self::STRONG);
 
         try {
-            $this->installer->storeApiKey('sk-ant-key', false, $server);
+            $installer->storeApiKey('sk-ant-key', false, $server);
             self::fail('The API key was stored while the data directory was web-readable');
         } catch (StorageException $e) {
             self::assertStringContainsString('readable over the web', $e->getMessage());
         }
 
-        $this->installer->storeApiKey('sk-ant-key', true, $server);
-        self::assertTrue($this->installer->state()->hasApiKey);
+        $installer->storeApiKey('sk-ant-key', true, $server);
+        self::assertTrue($installer->state()->hasApiKey);
+    }
+
+    public function testAServedDataDirectoryBlocksTheKeyUntilAcknowledgedAndIsAudited(): void
+    {
+        $installer = $this->makeInstaller($this->dir, FakeFetcher::serving($this->dir));
+        $installer->createOwner('owner', self::STRONG);
+
+        try {
+            $installer->storeApiKey('sk-ant-key', false, self::UNREACHABLE);
+            self::fail('The API key was stored while the data directory was web-readable');
+        } catch (StorageException $e) {
+            self::assertSame(Installer::ERR_EXPOSED, $e->getCode());
+            self::assertStringContainsString('readable over the web', $e->getMessage());
+        }
+
+        $installer->storeApiKey('sk-ant-key', true, self::UNREACHABLE);
+        self::assertTrue($installer->state()->hasApiKey);
+
+        $row = StorageFactory::create($this->dir, 'json')->auditLog()->recent(1)[0];
+        self::assertSame('reachable', $row->meta['outcome'] ?? null);
+        self::assertTrue($row->meta['acknowledged_risk'] ?? null);
+    }
+
+    public function testARefusedDataDirectoryLetsTheKeyInWithoutAnAcknowledgement(): void
+    {
+        $installer = $this->makeInstaller($this->dir, FakeFetcher::refusing());
+        $installer->createOwner('owner', self::STRONG);
+
+        $installer->storeApiKey('sk-ant-key', false, self::UNREACHABLE);
+
+        self::assertTrue($installer->state()->hasApiKey);
+        $row = StorageFactory::create($this->dir, 'json')->auditLog()->recent(1)[0];
+        self::assertSame('not_reachable', $row->meta['outcome'] ?? null);
+        self::assertFalse($row->meta['acknowledged_risk'] ?? null);
+    }
+
+    public function testNoBaseUrlBlocksTheKeyWithoutAProbe(): void
+    {
+        $fetcher = FakeFetcher::refusing();
+        $installer = $this->makeInstaller($this->dir, $fetcher);
+        $installer->createOwner('owner', self::STRONG);
+
+        try {
+            $installer->storeApiKey('sk-ant-key', false, null);
+            self::fail('The API key was stored with no address to check');
+        } catch (StorageException $e) {
+            self::assertSame(Installer::ERR_EXPOSED, $e->getCode());
+        }
+
+        self::assertSame([], $fetcher->requested);
     }
 
     public function testFinalizeMarksTheInstallCompleteAndRecordsIt(): void
@@ -312,7 +373,7 @@ final class InstallerTest extends TestCase
 
     private function installerOver(Storage $storage, string $dir): Installer
     {
-        return new Installer($storage, new KeyVault($dir), new PasswordHasher(), $dir, Environment::probe($dir));
+        return new Installer($storage, new KeyVault($dir), new PasswordHasher(), $dir, Environment::probe($dir), FakeFetcher::unreachable());
     }
 
     public function testAFailedInstalledAtWriteLeavesACopyThatCanStillBeFinished(): void

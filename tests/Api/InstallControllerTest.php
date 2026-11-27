@@ -16,6 +16,7 @@ use WPSafeMode\Storage\Contracts\Storage;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\StorageFactory;
 use WPSafeMode\Tests\Support\FailingStorage;
+use WPSafeMode\Tests\Support\FakeFetcher;
 
 final class InstallControllerTest extends TestCase
 {
@@ -38,7 +39,9 @@ final class InstallControllerTest extends TestCase
             new KeyVault($this->dir),
             new PasswordHasher(),
             $this->dir,
-            Environment::probe($this->dir)
+            Environment::probe($this->dir),
+            // Every self-test request fails: inconclusive, and no network.
+            FakeFetcher::unreachable()
         );
         $this->controller = new InstallController($this->installer, $this->dir . '/never-renamed');
         $this->token = $this->installer->issueToken();
@@ -65,7 +68,7 @@ final class InstallControllerTest extends TestCase
     }
 
     /** @param array<string, mixed> $body */
-    private function request(array $body, string $host = '127.0.0.1:1'): Request
+    private function request(array $body, string $host = 'example.test'): Request
     {
         return new Request(
             'POST',
@@ -285,7 +288,7 @@ final class InstallControllerTest extends TestCase
     {
         $this->installer->createOwner('owner', self::STRONG);
         $failing = new FailingStorage($this->storage, static fn (): bool => true);
-        $installer = new Installer($failing, new KeyVault($this->dir), new PasswordHasher(), $this->dir, Environment::probe($this->dir));
+        $installer = new Installer($failing, new KeyVault($this->dir), new PasswordHasher(), $this->dir, Environment::probe($this->dir), FakeFetcher::unreachable());
         $controller = new InstallController($installer, $this->dir . '/never-renamed');
 
         $this->expectException(StorageException::class);

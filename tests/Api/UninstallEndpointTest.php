@@ -19,6 +19,7 @@ use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Security\Role;
 use WPSafeMode\Storage\Contracts\Storage;
 use WPSafeMode\Storage\StorageFactory;
+use WPSafeMode\Tests\Support\FakeFetcher;
 
 /**
  * Every test points the controller at a directory under the system temp dir;
@@ -54,7 +55,8 @@ final class UninstallEndpointTest extends TestCase
             new KeyVault($this->dataDir),
             new PasswordHasher(),
             $this->dataDir,
-            Environment::probe($this->dataDir)
+            Environment::probe($this->dataDir),
+            FakeFetcher::unreachable()
         );
 
         $router = new Router();

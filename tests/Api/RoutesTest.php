@@ -13,6 +13,7 @@ use WPSafeMode\Security\AuthSessions;
 use WPSafeMode\Security\KeyVault;
 use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Storage\StorageFactory;
+use WPSafeMode\Tests\Support\FakeFetcher;
 
 final class RoutesTest extends TestCase
 {
@@ -42,7 +43,8 @@ final class RoutesTest extends TestCase
             new KeyVault($this->dir),
             new PasswordHasher(),
             $this->dir,
-            Environment::probe($this->dir)
+            Environment::probe($this->dir),
+            FakeFetcher::unreachable()
         );
         $router = new Router();
 

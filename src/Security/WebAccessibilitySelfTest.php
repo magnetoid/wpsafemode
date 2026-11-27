@@ -17,14 +17,38 @@ use WPSafeMode\Core\Request;
  * The canary uses .txt on purpose. Testing with a .php file would prove only
  * that PHP executes, not that static files are denied — and static files are
  * exactly what leaked in v1.1 (spec 15.1).
+ *
+ * A refusal is trusted only after a positive control: the same transport,
+ * through the same base URL, must reach this tool's own state route. Without
+ * it, any other responder's 403 or 404 would count as "not readable", and an
+ * undecided result is never a pass (amendment 11.5).
  */
 final class WebAccessibilitySelfTest
 {
-    private const TIMEOUT_SECONDS = 5;
+    /**
+     * The positive control: this tool's own unauthenticated state route,
+     * which answers a JSON object with a boolean "installed" before and
+     * after install. Every URL goes through index.php/ (R29).
+     */
+    public const CONTROL_PATH = '/index.php/api/install/state';
 
-    public static function run(string $dataDir, string $baseUrl): SelfTestResult
+    public static function run(string $dataDir, ?string $baseUrl, ?SelfTestFetcher $fetcher = null): SelfTestResult
     {
         $now = time();
+
+        if ($baseUrl === null) {
+            return new SelfTestResult(
+                false,
+                true,
+                "This site's address could not be worked out from the request, so the data directory could not "
+                    . "be checked. Open the data folder's address in a browser yourself and confirm it is refused.",
+                null,
+                $now
+            );
+        }
+
+        $fetcher = $fetcher ?? new SelfTestHttp();
+        $baseUrl = rtrim($baseUrl, '/');
         $name = 'canary-' . bin2hex(random_bytes(8)) . '.txt';
         $secret = bin2hex(random_bytes(16));
         $path = $dataDir . '/' . $name;
@@ -39,10 +63,10 @@ final class WebAccessibilitySelfTest
             );
         }
 
-        $url = rtrim($baseUrl, '/') . '/data/' . $name;
+        $url = $baseUrl . '/data/' . $name;
 
         try {
-            $response = self::fetch($url);
+            $response = $fetcher->fetch($url);
         } finally {
             @unlink($path);
         }
@@ -60,9 +84,10 @@ final class WebAccessibilitySelfTest
         }
 
         $status = $response['status'];
-        $body = $response['body'];
 
-        if ($status === 200 && $body === $secret) {
+        // Reachable needs no control: only this server could have answered
+        // with the random body just written.
+        if ($status === 200 && $response['body'] === $secret) {
             return new SelfTestResult(
                 true,
                 false,
@@ -73,95 +98,49 @@ final class WebAccessibilitySelfTest
             );
         }
 
-        // The server answered and did not serve the file.
-        if ($status === 200 || in_array($status, [401, 403, 404, 410], true)) {
+        // Transport failure, redirect, 5xx, 429 or anything else: undecided, so fail closed.
+        if ($status !== 200 && !in_array($status, [401, 403, 404, 410], true)) {
             return new SelfTestResult(
                 false,
-                false,
-                'The data directory is not readable over the web.',
+                true,
+                'This server could not check its own URL (loopback requests may be blocked, or the request failed '
+                    . 'or was redirected). Open ' . $url . ' in a browser yourself and confirm it is refused.',
                 $url,
                 $now
             );
         }
 
-        // Transport failure, redirect, 5xx, 429 or anything else: undecided, so fail closed.
-        return new SelfTestResult(
-            false,
-            true,
-            'This server could not check its own URL (loopback requests may be blocked, or the request failed '
-                . 'or was redirected). Open ' . $url . ' in a browser yourself and confirm it is refused.',
-            $url,
-            $now
-        );
+        // A refusal only counts if it came from this tool's own server. A WAF
+        // or CDN challenge, a module that rejects the request, or a default
+        // virtual host answering the loopback call all refuse too, while a
+        // real browser may still fetch data/.
+        if (!self::controlAnswers($fetcher, $baseUrl . self::CONTROL_PATH)) {
+            return new SelfTestResult(
+                false,
+                true,
+                'The data directory was refused, but the same address did not answer as this tool, so the refusal '
+                    . 'may have come from a firewall, a CDN or another site. Open ' . $url . ' in a browser '
+                    . 'yourself and confirm it is refused.',
+                $url,
+                $now
+            );
+        }
+
+        return new SelfTestResult(false, false, 'The data directory is not readable over the web.', $url, $now);
     }
 
-    /**
-     * @return array{status: int, body: string}|null status 0 means the request failed;
-     *         null means no HTTP client exists. Redirects are never followed.
-     */
-    private static function fetch(string $url): ?array
+    /** True only for this tool's own answer: a JSON object with a boolean "installed". */
+    private static function controlAnswers(SelfTestFetcher $fetcher, string $url): bool
     {
-        if (function_exists('curl_init')) {
-            $handle = curl_init($url);
+        $response = $fetcher->fetch($url);
 
-            if ($handle !== false) {
-                curl_setopt_array($handle, [
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_TIMEOUT        => self::TIMEOUT_SECONDS,
-                    CURLOPT_CONNECTTIMEOUT => self::TIMEOUT_SECONDS,
-                    CURLOPT_FOLLOWLOCATION => false,
-                    // Self-signed certificates are common on staging hosts. The
-                    // canary is a random string we just wrote and are only
-                    // comparing against; there is nothing here to protect.
-                    CURLOPT_SSL_VERIFYPEER => false,
-                    CURLOPT_SSL_VERIFYHOST => 0,
-                ]);
-
-                $body = curl_exec($handle);
-                $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-
-                if ($body === false) {
-                    return ['status' => 0, 'body' => ''];
-                }
-
-                return ['status' => $status, 'body' => (string) $body];
-            }
+        if ($response === null || $response['status'] !== 200) {
+            return false;
         }
 
-        if (filter_var(ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOLEAN)) {
-            $context = stream_context_create([
-                'http' => [
-                    'timeout'         => self::TIMEOUT_SECONDS,
-                    'ignore_errors'   => true,
-                    'follow_location' => 0,
-                ],
-                'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false],
-            ]);
+        $decoded = json_decode($response['body'], true);
 
-            // The stream's own metadata carries the response headers. The magic
-            // local variable is not used: PHP 8.4+ warns about every mention of
-            // it, and that warning would be printed into the JSON answer.
-            $stream = @fopen($url, 'r', false, $context);
-
-            if ($stream === false) {
-                return ['status' => 0, 'body' => ''];
-            }
-
-            $body = @stream_get_contents($stream);
-            $meta = stream_get_meta_data($stream);
-            fclose($stream);
-
-            $headers = isset($meta['wrapper_data']) && is_array($meta['wrapper_data']) ? $meta['wrapper_data'] : [];
-            $status = 0;
-
-            if ($headers !== [] && preg_match('~^HTTP/\S+\s+(\d{3})~', (string) reset($headers), $m) === 1) {
-                $status = (int) $m[1];
-            }
-
-            return ['status' => $body === false ? 0 : $status, 'body' => $body === false ? '' : (string) $body];
-        }
-
-        return null;
+        return is_array($decoded) && array_key_exists('installed', $decoded) && is_bool($decoded['installed']);
     }
 
     /**

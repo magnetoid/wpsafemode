@@ -39,6 +39,12 @@ final class AdminController
             AuditEvent::by($principal, AuditEvent::RENAME, $request->clientIp(), null, ['to' => $name])
         );
 
+        // Build the answer before the move. The autoloader reads from this
+        // directory, so after a successful rename no class can be loaded:
+        // nothing below the move may touch a class that is not loaded yet.
+        // The session cookie is scoped to the old path, so the owner signs in again.
+        $answer = Response::json(['ok' => true, 'redirect' => '../' . $name . '/', 'sign_in_again' => true]);
+
         try {
             SelfRename::rename($this->appDir, $name);
         } catch (StorageException $e) {
@@ -49,7 +55,6 @@ final class AdminController
             return Response::json(['error' => 'rename_failed', 'message' => $e->getMessage()], 422);
         }
 
-        // The session cookie is scoped to the old path, so the owner signs in again.
-        return Response::json(['ok' => true, 'redirect' => '../' . $name . '/', 'sign_in_again' => true]);
+        return $answer;
     }
 }

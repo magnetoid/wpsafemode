@@ -140,6 +140,11 @@ final class InstallController
         // anonymous; the install token is what authorises this.
         $this->installer->audit(AuditEvent::by($principal, AuditEvent::RENAME, $request->clientIp(), null, ['to' => $name]));
 
+        // Build the answer before the move. The autoloader reads from this
+        // directory, so after a successful rename no class can be loaded:
+        // nothing below the move may touch a class that is not loaded yet.
+        $answer = Response::json(['ok' => true, 'redirect' => '../' . $name . '/']);
+
         try {
             SelfRename::rename($this->appDir, $name);
         } catch (StorageException $e) {
@@ -150,7 +155,7 @@ final class InstallController
             return Response::json(['error' => 'rename_failed', 'message' => $e->getMessage()], 422);
         }
 
-        return Response::json(['ok' => true, 'redirect' => '../' . $name . '/']);
+        return $answer;
     }
 
     private function tokenOk(Request $request): bool

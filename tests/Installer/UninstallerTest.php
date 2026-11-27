@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Installer;
 
 use PHPUnit\Framework\TestCase;
+use WPSafeMode\Installer\InstallLayout;
 use WPSafeMode\Installer\Uninstaller;
 use WPSafeMode\Storage\Contracts\StorageException;
 
@@ -198,7 +199,7 @@ final class UninstallerTest extends TestCase
                 continue;
             }
 
-            self::assertContains($entry, Uninstaller::SHIPPED, 'Add this to Uninstaller::SHIPPED: ' . $entry);
+            self::assertContains($entry, InstallLayout::SHIPPED, 'Add this to InstallLayout::SHIPPED: ' . $entry);
         }
     }
 

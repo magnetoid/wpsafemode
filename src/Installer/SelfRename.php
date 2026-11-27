@@ -18,6 +18,9 @@ final class SelfRename
 {
     public const UNSAFE_NAME_MESSAGE = 'That folder name is not allowed. Use letters, numbers, dashes and underscores only.';
 
+    public const LAYOUT_MESSAGE = 'Refusing to rename: this folder holds more than the tool, so renaming it would move '
+        . 'everything else in it too. Give the tool a folder of its own first.';
+
     public static function suggest(): string
     {
         return 'wpsm-' . bin2hex(random_bytes(6));
@@ -46,6 +49,11 @@ final class SelfRename
 
         if (!is_dir($appDir)) {
             throw new StorageException('The application directory could not be found.');
+        }
+
+        // A docroot, or a folder that also holds a site, must never move.
+        if (!InstallLayout::holdsOnlyTheTool($appDir)) {
+            throw new StorageException(self::LAYOUT_MESSAGE);
         }
 
         if (file_exists($target)) {

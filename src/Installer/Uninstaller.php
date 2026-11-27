@@ -20,17 +20,14 @@ final class Uninstaller
 {
     public const RECEIPT = 'WPSAFEMODE-REMOVED.txt';
 
-    /** Every top-level name the tool ships (src/), plus its data directory. */
-    public const SHIPPED = [
-        'Api', 'Core', 'Installer', 'Security', 'Storage',
-        'autoload.php', 'bootstrap.php', 'index.php', 'public', 'data',
-    ];
-
     private const INCOMPLETE = 'The uninstall did not finish: some files could not be removed.';
 
     /**
      * Throws, deleting nothing, unless the layout is one the tool can safely
      * remove itself from. The message is fixed and carries no path.
+     *
+     * On top of the shared layout check, the data directory must sit inside
+     * the application, or removing the application would leave the secrets.
      */
     public static function preflight(string $appDir, string $dataDir): void
     {
@@ -43,38 +40,10 @@ final class Uninstaller
         if (
             $app === false || $data === false
             || strpos($data, $app . '/') !== 0
-            || dirname($app) === $app
-            || !@is_file($app . '/bootstrap.php')
-            || @file_exists($app . '/wp-config.php')
-            || @file_exists($app . '/wp-load.php')
-            || @file_exists($app . '/wp-includes')
-            || !self::holdsOnlyTheTool($app)
+            || !InstallLayout::holdsOnlyTheTool($app)
         ) {
             throw new StorageException('Refusing to uninstall: this folder layout is not one the tool can safely remove itself from.');
         }
-    }
-
-    /** Anything beside the tool's own files means this is not a folder the tool owns. */
-    private static function holdsOnlyTheTool(string $app): bool
-    {
-        $entries = @scandir($app);
-
-        if ($entries === false) {
-            return false;
-        }
-
-        foreach ($entries as $entry) {
-            if (
-                $entry === '.' || $entry === '..' || $entry === 'error_log'
-                || $entry[0] === '.' || in_array($entry, self::SHIPPED, true)
-            ) {
-                continue;
-            }
-
-            return false;
-        }
-
-        return true;
     }
 
     /** @return string the path of the receipt */

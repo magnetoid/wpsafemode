@@ -7,7 +7,6 @@ namespace WPSafeMode\Api;
 use WPSafeMode\Core\Request;
 use WPSafeMode\Core\Response;
 use WPSafeMode\Installer\Installer;
-use WPSafeMode\Installer\SelfRename;
 use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Security\WebAccessibilitySelfTest;
 use WPSafeMode\Storage\AuditEvent;
@@ -179,40 +178,17 @@ final class InstallController
             return $this->badToken();
         }
 
-        $name = $request->json()['name'] ?? SelfRename::suggest();
-
-        if (!is_string($name) || !SelfRename::isSafeName($name)) {
-            return Response::json(['error' => 'rename_failed', 'message' => SelfRename::UNSAFE_NAME_MESSAGE], 422);
-        }
-
         $principal = $request->principal;
 
         if ($principal === null) {
             return $this->badToken();
         }
 
-        // Every storage write happens before the move: the data directory
-        // lives inside the app directory, and a write after it would
-        // recreate the old, guessable path. Before install the principal is
-        // anonymous; the install token is what authorises this.
-        $this->installer->audit(AuditEvent::by($principal, AuditEvent::RENAME, $request->clientIp(), null, ['to' => $name]));
-
-        // Build the answer before the move. The autoloader reads from this
-        // directory, so after a successful rename no class can be loaded:
-        // nothing below the move may touch a class that is not loaded yet.
-        $answer = Response::json(['ok' => true, 'redirect' => '../' . $name . '/']);
-
-        try {
-            SelfRename::rename($this->appDir, $name);
-        } catch (StorageException $e) {
-            $this->installer->audit(
-                AuditEvent::by($principal, AuditEvent::RENAME, $request->clientIp(), null, ['to' => $name, 'outcome' => 'failed'])
-            );
-
-            return Response::json(['error' => 'rename_failed', 'message' => $e->getMessage()], 422);
-        }
-
-        return $answer;
+        // Before install the principal is anonymous; the install token is
+        // what authorises this.
+        return RenameAction::run($request, $principal, $this->appDir, function (AuditEvent $event): void {
+            $this->installer->audit($event);
+        });
     }
 
     private function tokenOk(Request $request): bool

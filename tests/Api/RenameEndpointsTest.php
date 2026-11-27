@@ -48,6 +48,7 @@ final class RenameEndpointsTest extends TestCase
         $this->dataDir = $this->appDir . '/data';
         mkdir($this->dataDir, 0700, true);
         file_put_contents($this->appDir . '/index.php', '<?php');
+        file_put_contents($this->appDir . '/bootstrap.php', '<?php');
 
         $this->storage = StorageFactory::create($this->dataDir, 'json');
         $this->sessions = new AuthSessions($this->storage, new PasswordHasher());
@@ -293,5 +294,43 @@ final class RenameEndpointsTest extends TestCase
         }
 
         self::assertDirectoryExists($this->appDir);
+    }
+
+    public function testAnOwnerRenameOfAFolderThatHoldsMoreThanTheToolIsRefusedAndAudited(): void
+    {
+        $owner = $this->install()[Role::OWNER];
+        mkdir($this->appDir . '/blog');
+        file_put_contents($this->appDir . '/blog/index.php', '<?php');
+
+        $response = $this->post(
+            '/api/admin/rename',
+            ['name' => self::NAME],
+            $owner,
+            ['HTTP_X_WPSM_CSRF' => Csrf::issue($owner, self::SECRET)]
+        );
+
+        self::assertSame(422, $response->status);
+        self::assertSame('rename_failed', $this->decode($response)['error']);
+        self::assertStringNotContainsString($this->parent, $response->body);
+        self::assertDirectoryExists($this->appDir . '/blog');
+        self::assertDirectoryDoesNotExist($this->parent . '/' . self::NAME);
+
+        $events = $this->storage->auditLog()->recent(2);
+        self::assertSame(['to' => self::NAME, 'outcome' => 'failed'], $events[0]->meta);
+    }
+
+    public function testTheInstallerRenameOfADocrootLikeFolderIsRefused(): void
+    {
+        $token = $this->installer->issueToken();
+        file_put_contents($this->appDir . '/wp-config.php', '<?php');
+        mkdir($this->appDir . '/wp-includes');
+
+        $response = $this->post('/api/install/rename', ['token' => $token, 'name' => self::NAME]);
+
+        self::assertSame(422, $response->status);
+        self::assertSame('rename_failed', $this->decode($response)['error']);
+        self::assertStringNotContainsString($this->parent, $response->body);
+        self::assertFileExists($this->appDir . '/wp-config.php');
+        self::assertDirectoryDoesNotExist($this->parent . '/' . self::NAME);
     }
 }

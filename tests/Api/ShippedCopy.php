@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Api;
 
 use PHPUnit\Framework\Assert;
+use WPSafeMode\Security\DataDir;
+use WPSafeMode\Security\GuardedJson;
+use WPSafeMode\Storage\StorageFactory;
 
 /**
  * Drives one request through a copy of src/ in a separate PHP process, using
@@ -32,6 +35,26 @@ final class ShippedCopy
                 ? self::copy($from . '/' . $entry, $to . '/' . $entry, $root)
                 : copy($from . '/' . $entry, $to . '/' . $entry);
         }
+    }
+
+    /** @return array<string, array{0: string}> */
+    public static function backends(): array
+    {
+        return ['sqlite' => [StorageFactory::BACKEND_SQLITE], 'json' => [StorageFactory::BACKEND_JSON]];
+    }
+
+    /**
+     * Records the backend in data/install.php before the first open, the
+     * way an install on a host without pdo_sqlite records "json".
+     */
+    public static function seedBackend(string $dataDir, string $backend): void
+    {
+        if ($backend === StorageFactory::BACKEND_SQLITE && !extension_loaded('pdo_sqlite')) {
+            Assert::markTestSkipped('Needs pdo_sqlite.');
+        }
+
+        DataDir::ensure($dataDir);
+        GuardedJson::write($dataDir . '/install.php', ['backend' => $backend]);
     }
 
     public static function remove(string $path): void

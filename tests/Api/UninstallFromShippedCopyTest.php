@@ -43,12 +43,21 @@ final class UninstallFromShippedCopyTest extends TestCase
         ShippedCopy::remove($this->base);
     }
 
-    public function testTheUninstallAnswersFromACopyThatHasDeletedItself(): void
+    /** @return array<string, array{0: string}> */
+    public static function backends(): array
+    {
+        return ShippedCopy::backends();
+    }
+
+    /** @dataProvider backends */
+    public function testTheUninstallAnswersFromACopyThatHasDeletedItself(string $backend): void
     {
         $app = $this->parent . '/wpsm-abc123';
         $dataDir = $app . '/data';
+        ShippedCopy::seedBackend($dataDir, $backend);
         $env = Environment::probe();
         $storage = StorageFactory::open($dataDir, $env);
+        self::assertSame($backend, $storage->backend());
         $hasher = new PasswordHasher();
         $installer = new Installer($storage, new KeyVault($dataDir), $hasher, $dataDir, $env);
         $storage->users()->create('owner', Role::OWNER, $hasher->hash('correct horse battery staple'));

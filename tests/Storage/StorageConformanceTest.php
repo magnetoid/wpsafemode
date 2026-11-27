@@ -10,6 +10,7 @@ use WPSafeMode\Security\Principal;
 use WPSafeMode\Security\Role;
 use WPSafeMode\Storage\AuditEvent;
 use WPSafeMode\Storage\Contracts\AuditLog;
+use WPSafeMode\Storage\Contracts\AuthSessionStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\RateLimiter;
@@ -41,6 +42,18 @@ abstract class StorageConformanceTest extends TestCase
     abstract protected function makeRateLimiter(string $dataDir): RateLimiter;
 
     abstract protected function makeAuditLog(string $dataDir): AuditLog;
+
+    abstract protected function makeAuthSessionStore(string $dataDir): AuthSessionStore;
+
+    /**
+     * Writes $value as text into a stored user's integer field, behind the
+     * store's back. SQLite stores it as a BLOB so column affinity cannot turn
+     * "5\n" back into the integer 5; JSON stores it as a string.
+     */
+    abstract protected function writeUserField(string $dataDir, int $id, string $field, string $value): void;
+
+    /** The same, for a stored login session. */
+    abstract protected function writeAuthSessionField(string $dataDir, string $tokenHash, string $field, string $value): void;
 
     /** Appends a row, through the backend's own storage, that no AuditEvent could produce (actor is empty). */
     abstract protected function writeMalformedAuditRow(string $dataDir): void;
@@ -839,5 +852,168 @@ abstract class StorageConformanceTest extends TestCase
 
         $this->expectException(StorageException::class);
         $this->makeAuditLog($this->dataDir)->recent();
+    }
+
+    // --- users: text in an integer column, and the hash algorithm -----
+
+    /** @return array<string, array{0: string}> */
+    public static function textInAnIntegerField(): array
+    {
+        return [
+            'a word'                => ['x'],
+            'digits and a newline'  => ["5\n"],
+            'digits and a space'    => ['5 '],
+        ];
+    }
+
+    /** @dataProvider textInAnIntegerField */
+    public function testTextInAUserIntegerFieldFailsClosed(string $text): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('marko', Role::OWNER, $this->credential());
+        $this->writeUserField($this->dataDir, 1, 'created_at', $text);
+
+        $this->expectException(StorageException::class);
+        $this->makeUserStore($this->dataDir)->find(1);
+    }
+
+    public function testUpdatePersistsAChangedHashAlgorithm(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $user = $store->create('marko', Role::OWNER, new Credential('$2y$10$bcrypthash', 'bcrypt', 1000, 1000));
+
+        $user->credential = new Credential('$argon2id$rehashed', 'argon2id', 1000, 4000);
+        $store->update($user);
+
+        $found = $this->makeUserStore($this->dataDir)->find($user->id);
+
+        self::assertNotNull($found);
+        self::assertSame('argon2id', $found->credential->algo);
+        self::assertSame('$argon2id$rehashed', $found->credential->hash);
+        self::assertSame(4000, $found->credential->changedAt);
+    }
+
+    // --- login sessions (AuthSessionStore) ----------------------------
+
+    /** @return array{user_id:int,created_at:int,last_seen_at:int,expires_at:int,ip:string,ua_hash:string} */
+    private function sessionRow(int $userId = 1, int $expiresAt = 5000): array
+    {
+        return [
+            'user_id'      => $userId,
+            'created_at'   => 1000,
+            'last_seen_at' => 1000,
+            'expires_at'   => $expiresAt,
+            'ip'           => '203.0.113.9',
+            'ua_hash'      => str_repeat('a', 64),
+        ];
+    }
+
+    public function testAnUnknownLoginSessionIsNull(): void
+    {
+        self::assertNull($this->makeAuthSessionStore($this->dataDir)->get(str_repeat('0', 64)));
+    }
+
+    public function testACreatedLoginSessionIsFoundWithEveryFieldIntact(): void
+    {
+        $this->makeAuthSessionStore($this->dataDir)->put('hash-1', $this->sessionRow());
+
+        // A second instance: what was found came from disk, not from memory.
+        self::assertSame($this->sessionRow(), $this->makeAuthSessionStore($this->dataDir)->get('hash-1'));
+    }
+
+    public function testPuttingTheSameHashAgainReplacesTheRecord(): void
+    {
+        $store = $this->makeAuthSessionStore($this->dataDir);
+        $store->put('hash-1', $this->sessionRow(1, 5000));
+        $store->put('hash-1', $this->sessionRow(2, 9000));
+
+        self::assertSame($this->sessionRow(2, 9000), $store->get('hash-1'));
+    }
+
+    public function testTouchMovesOnlyLastSeenAndNeverCreatesASession(): void
+    {
+        $store = $this->makeAuthSessionStore($this->dataDir);
+        $store->put('hash-1', $this->sessionRow());
+
+        $store->touch('hash-1', 1500);
+        $store->touch('hash-unknown', 1500);
+
+        $expected = $this->sessionRow();
+        $expected['last_seen_at'] = 1500;
+        self::assertSame($expected, $this->makeAuthSessionStore($this->dataDir)->get('hash-1'));
+        self::assertNull($store->get('hash-unknown'));
+    }
+
+    public function testRevokingOneSessionLeavesTheOthersAndIsIdempotent(): void
+    {
+        $store = $this->makeAuthSessionStore($this->dataDir);
+        $store->put('hash-1', $this->sessionRow(1));
+        $store->put('hash-2', $this->sessionRow(1));
+
+        $store->delete('hash-1');
+        $store->delete('hash-1');
+
+        self::assertNull($store->get('hash-1'));
+        self::assertSame($this->sessionRow(1), $store->get('hash-2'));
+    }
+
+    public function testRevokingEverySessionOfOneUserLeavesAnotherUsersSessions(): void
+    {
+        // The contract revokes by token hash; signing a user out everywhere
+        // is a delete of each of their hashes.
+        $store = $this->makeAuthSessionStore($this->dataDir);
+        $store->put('owner-laptop', $this->sessionRow(1));
+        $store->put('owner-phone', $this->sessionRow(1));
+        $store->put('admin-laptop', $this->sessionRow(2));
+
+        foreach (['owner-laptop', 'owner-phone'] as $hash) {
+            $store->delete($hash);
+        }
+
+        $reopened = $this->makeAuthSessionStore($this->dataDir);
+        self::assertNull($reopened->get('owner-laptop'));
+        self::assertNull($reopened->get('owner-phone'));
+        self::assertSame($this->sessionRow(2), $reopened->get('admin-laptop'));
+    }
+
+    public function testPurgeExpiredRemovesEverySessionWhoseExpiryHasPassed(): void
+    {
+        $store = $this->makeAuthSessionStore($this->dataDir);
+        $store->put('past', $this->sessionRow(1, 1999));
+        $store->put('now', $this->sessionRow(1, 2000));
+        $store->put('future', $this->sessionRow(1, 2001));
+
+        $store->purgeExpired(2000);
+
+        $reopened = $this->makeAuthSessionStore($this->dataDir);
+        self::assertNull($reopened->get('past'));
+        self::assertNull($reopened->get('now'));
+        self::assertSame($this->sessionRow(1, 2001), $reopened->get('future'));
+    }
+
+    public function testPutRefusesAMalformedRowInBothBackends(): void
+    {
+        $store = $this->makeAuthSessionStore($this->dataDir);
+
+        foreach (['ip' => '', 'ua_hash' => ''] as $field => $value) {
+            try {
+                $store->put('hash-1', [$field => $value] + $this->sessionRow());
+                self::fail('A session with an empty ' . $field . ' was stored.');
+            } catch (StorageException $e) {
+                self::assertStringContainsString($field, $e->getMessage());
+            }
+        }
+
+        self::assertNull($store->get('hash-1'));
+    }
+
+    /** @dataProvider textInAnIntegerField */
+    public function testTextInALoginSessionIntegerFieldFailsClosed(string $text): void
+    {
+        $this->makeAuthSessionStore($this->dataDir)->put('hash-1', $this->sessionRow());
+        $this->writeAuthSessionField($this->dataDir, 'hash-1', 'user_id', $text);
+
+        $this->expectException(StorageException::class);
+        $this->makeAuthSessionStore($this->dataDir)->get('hash-1');
     }
 }

@@ -6,11 +6,19 @@ namespace WPSafeMode\Tests\Security;
 
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
+use WPSafeMode\Core\Environment;
+use WPSafeMode\Core\ErrorLog;
+use WPSafeMode\Installer\Installer;
+use WPSafeMode\Security\AuthSessions;
 use WPSafeMode\Security\DataDir;
+use WPSafeMode\Security\GuardedJson;
+use WPSafeMode\Security\KeyVault;
+use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Message;
 use WPSafeMode\Storage\Session;
 use WPSafeMode\Storage\StorageFactory;
+use WPSafeMode\Tests\Support\FakeFetcher;
 
 final class DataDirTest extends TestCase
 {
@@ -23,11 +31,9 @@ final class DataDirTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (glob(dirname($this->dir) . '/data/*') ?: [] as $file) {
-            unlink($file);
-        }
-        @rmdir($this->dir);
-        @rmdir(dirname($this->dir));
+        // Recursive, dotfiles included: glob('*') skips .htaccess, which
+        // left the directory behind after every run.
+        $this->removeRecursively(dirname($this->dir));
     }
 
     public function testEnsureCreatesThePrivateDirectoryAndBothBlockers(): void
@@ -106,36 +112,106 @@ final class DataDirTest extends TestCase
         }
     }
 
-    public function testNoFileTheApplicationWritesIsServableAsAStaticAsset(): void
+    /** @return array<string, array{0: string, 1: list<string>}> backend, files the run must have produced */
+    public static function lifecycles(): array
     {
-        // The whole point of spec 15.1: every filename the storage layer and the
-        // security layer produce must be guarded or unguessable, so this list is
-        // the contract. A new state file added without a .php extension fails here.
-        $written = [
-            'data/install.php',
-            'data/config.php',
-            'data/auth.php',
-            'data/auth_sessions.php',
-            'data/rate_limit.php',
-            // GuardedJson::withExclusiveLock()'s sidecar lock file (review
-            // round 2, IMPORTANT B): it escaped every other guard here,
-            // since nothing previously pinned it, and a review found it
-            // shipped as data/rate_limit.php.lock — a statically-servable
-            // extension none of the JsonRateLimiter/GuardedJson tests
-            // caught, because they never checked isServableExtension() on
-            // it at all.
-            'data/rate_limit.php.lock.php',
-            'data/audit_log.php',
-            'data/keyvault.php',
-            'data/sessions/sesn_1/session.php',
-            'data/sessions/sesn_1/messages.php',
+        return [
+            'json' => ['json', [
+                'audit_log.php', 'auth_sessions.php', 'auth_sessions.php.lock.php', 'config.php', 'install.php',
+                'keyvault.php', 'migrate.lock.php', 'php-errors.php', 'rate_limit.php', 'rate_limit.php.lock.php',
+                'sessions/sesn_1/messages.php', 'sessions/sesn_1/session.php', 'users.php', 'users.php.lock.php',
+            ]],
+            'sqlite' => ['sqlite', ['install.php', 'keyvault.php', 'php-errors.php']],
         ];
+    }
 
-        foreach ($written as $path) {
-            self::assertFalse(
-                DataDir::isServableExtension($path),
-                $path . ' would be served as a static asset'
-            );
+    /**
+     * The whole of spec 15.1: every file the tool writes into data/ must be
+     * guarded (a .php name) or unguessable. Rather than a hand-kept list,
+     * this runs a full lifecycle (install, a failed and a good sign-in, a
+     * sign-out, a session with a message, the error log) and checks every
+     * file it finds, so a new state file cannot slip past.
+     *
+     * @dataProvider lifecycles
+     * @param list<string> $expected
+     */
+    public function testNoFileTheApplicationWritesIsServableAsAStaticAsset(string $backend, array $expected): void
+    {
+        if ($backend === StorageFactory::BACKEND_SQLITE && !extension_loaded('pdo_sqlite')) {
+            self::markTestSkipped('Needs pdo_sqlite.');
+        }
+
+        $base = sys_get_temp_dir() . '/wpsm-datadir-lifecycle-' . bin2hex(random_bytes(6));
+        $dataDir = $base . '/data';
+
+        try {
+            DataDir::ensure($dataDir);
+            GuardedJson::write($dataDir . '/install.php', ['backend' => $backend]);
+            ErrorLog::prepare($dataDir);
+
+            $env = Environment::probe($dataDir);
+            $storage = StorageFactory::open($dataDir, $env);
+            self::assertSame($backend, $storage->backend());
+
+            $hasher = new PasswordHasher();
+            $installer = new Installer($storage, new KeyVault($dataDir), $hasher, $dataDir, $env, FakeFetcher::refusing());
+            $installer->issueToken();
+            $installer->createOwner('owner', 'correct horse battery staple');
+            $installer->storeApiKey('sk-ant-lifecycle', false, 'http://example.test/wpsafemode');
+            $installer->finalize('203.0.113.1');
+
+            $auth = new AuthSessions($storage, $hasher);
+            $auth->login('owner', 'not the password at all', '203.0.113.1', 'UA', 1000);
+            $token = (string) $auth->login('owner', 'correct horse battery staple', '203.0.113.1', 'UA', 1000)->token;
+            self::assertNotNull($auth->validate($token, 'UA', 1010));
+            $auth->logout($token);
+
+            $storage->sessions()->create(new Session(
+                id:        'sesn_1',
+                title:     'White screen on example.com',
+                blade:     Session::BLADE_RESCUE,
+                status:    Session::STATUS_IDLE,
+                model:     'claude-opus-4-8',
+                effort:    'high',
+                createdAt: 1000,
+                updatedAt: 1000,
+            ));
+            $storage->messages()->append('sesn_1', Message::ROLE_USER, [['type' => 'text', 'text' => 'hi']]);
+
+            $protection = array_keys(DataDir::protectionFiles());
+            $sqliteFile = StorageFactory::sqliteFilename($dataDir);
+            $found = [];
+
+            foreach ($this->filesUnder($dataDir) as $file) {
+                $relative = substr($file, strlen($dataDir) + 1);
+
+                // Each directory's own .htaccess and index.php blockers,
+                // which the tests above check on their own terms.
+                if (in_array(basename($relative), $protection, true)) {
+                    continue;
+                }
+
+                $found[] = $relative;
+
+                // The SQLite database cannot carry the die() guard; its
+                // defence is a random name, recorded in install.php.
+                if ($sqliteFile !== null && ($relative === $sqliteFile || $relative === $sqliteFile . '-journal')) {
+                    self::assertMatchesRegularExpression('/^store-[0-9a-f]{32}\.db\z/', $sqliteFile);
+                    continue;
+                }
+
+                self::assertFalse(DataDir::isServableExtension($relative), 'data/' . $relative . ' would be served as a static asset');
+            }
+
+            foreach ($expected as $name) {
+                self::assertContains($name, $found, 'The lifecycle did not produce data/' . $name . ': the scan would be vacuous.');
+            }
+
+            if ($backend === StorageFactory::BACKEND_SQLITE) {
+                self::assertContains((string) $sqliteFile, $found);
+            }
+        } finally {
+            $this->removeRecursively($base);
         }
     }
 

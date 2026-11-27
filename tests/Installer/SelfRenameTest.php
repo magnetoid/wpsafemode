@@ -115,7 +115,7 @@ final class SelfRenameTest extends TestCase
 
     public function testTraversalAndSeparatorsAreRejected(): void
     {
-        foreach (['../escape', 'a/b', 'a\\b', '..', '.', '', 'has space'] as $bad) {
+        foreach (['../escape', 'a/b', 'a\\b', '..', '.', '', 'has space', "wpsm-abc123\n"] as $bad) {
             self::assertFalse(SelfRename::isSafeName($bad), $bad . ' should be rejected');
         }
     }

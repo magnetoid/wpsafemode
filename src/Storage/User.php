@@ -9,7 +9,7 @@ use WPSafeMode\Storage\Contracts\StorageException;
 
 final class User
 {
-    public const LOGIN_PATTERN = '/^[a-z0-9][a-z0-9._@-]{2,63}$/';
+    public const LOGIN_PATTERN = '/^[a-z0-9][a-z0-9._@-]{2,63}\z/';
 
     public function __construct(
         public int $id,

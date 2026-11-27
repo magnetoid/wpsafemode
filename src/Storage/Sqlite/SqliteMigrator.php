@@ -187,7 +187,7 @@ final class SqliteMigrator
             return 0;
         }
 
-        if (!is_string($value) || preg_match('/^\d+$/', $value) !== 1) {
+        if (!is_string($value) || preg_match('/^\d+\z/', $value) !== 1) {
             throw new StorageException('The stored schema version is not an integer.');
         }
 

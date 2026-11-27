@@ -33,7 +33,7 @@ final class SelfRename
      */
     public static function isSafeName(string $name): bool
     {
-        return preg_match('/^[A-Za-z0-9_-]{3,64}$/', $name) === 1;
+        return preg_match('/^[A-Za-z0-9_-]{3,64}\z/', $name) === 1;
     }
 
     /** @return string the new absolute path */

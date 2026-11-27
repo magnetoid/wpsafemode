@@ -12,7 +12,13 @@ final class SqliteConnection
 {
     private ?PDO $pdo = null;
 
-    public function __construct(private string $path)
+    /**
+     * @param array<int, mixed> $attributes extra PDO attributes, for tests
+     *        only: the suite sets PDO::ATTR_STRINGIFY_FETCHES to read INTEGER
+     *        columns back as strings, the way pdo_sqlite does before PHP 8.1.
+     *        Production passes none and keeps the defaults below.
+     */
+    public function __construct(private string $path, private array $attributes = [])
     {
     }
 
@@ -29,7 +35,7 @@ final class SqliteConnection
         }
 
         try {
-            $pdo = new PDO('sqlite:' . $this->path, null, null, [
+            $pdo = new PDO('sqlite:' . $this->path, null, null, $this->attributes + [
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,

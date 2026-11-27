@@ -6,6 +6,7 @@ namespace WPSafeMode\Tests\Security;
 
 use PHPUnit\Framework\TestCase;
 use WPSafeMode\Security\AuthSessions;
+use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Security\Role;
 use WPSafeMode\Storage\Contracts\RateLimiter;
@@ -15,21 +16,44 @@ use WPSafeMode\Storage\Credential;
 use WPSafeMode\Storage\StorageFactory;
 use WPSafeMode\Storage\User;
 
-final class AuthSessionsTest extends TestCase
+/**
+ * Runs on the JSON backend; AuthSessionsSqliteTest runs every test again on
+ * SQLite, which is what most hosts get.
+ */
+class AuthSessionsTest extends TestCase
 {
-    private const PASSWORD = 'correct horse battery staple';
+    protected const PASSWORD = 'correct horse battery staple';
 
-    private string $dir;
-    private Storage $storage;
-    private AuthSessions $auth;
-    private User $owner;
+    protected string $dir;
+    protected Storage $storage;
+    protected AuthSessions $auth;
+    protected User $owner;
+
+    protected function backend(): string
+    {
+        return StorageFactory::BACKEND_JSON;
+    }
+
+    /** The file that holds the login sessions. */
+    protected function sessionsFile(): string
+    {
+        return $this->dir . '/auth_sessions.php';
+    }
+
+    /** Overwrites one field of a stored login session behind the store's back. */
+    protected function corruptSession(string $tokenHash, string $field, string $value): void
+    {
+        $rows = GuardedJson::read($this->sessionsFile());
+        $rows[$tokenHash][$field] = $value;
+        GuardedJson::write($this->sessionsFile(), $rows);
+    }
 
     protected function setUp(): void
     {
         $this->dir = sys_get_temp_dir() . '/wpsm-auth-' . bin2hex(random_bytes(6));
         mkdir($this->dir, 0700, true);
 
-        $this->storage = StorageFactory::create($this->dir, 'json');
+        $this->storage = StorageFactory::create($this->dir, $this->backend());
         $this->owner = $this->storage->users()->create('owner', Role::OWNER, (new PasswordHasher())->hash(self::PASSWORD));
 
         $this->auth = new AuthSessions($this->storage, new PasswordHasher());
@@ -97,7 +121,7 @@ final class AuthSessionsTest extends TestCase
         $token = $this->loginToken();
 
         // A stolen data directory must not yield usable session tokens.
-        $stored = (string) file_get_contents($this->dir . '/auth_sessions.php');
+        $stored = (string) file_get_contents($this->sessionsFile());
 
         self::assertStringNotContainsString($token, $stored);
         self::assertStringContainsString(AuthSessions::hashToken($token), $stored);
@@ -186,10 +210,10 @@ final class AuthSessionsTest extends TestCase
 
     public function testLoginOnAnInstallWithNoUsersFails(): void
     {
-        $empty = sys_get_temp_dir() . '/wpsm-auth-empty-' . bin2hex(random_bytes(6));
+        $empty = $this->dir . '/empty';
         mkdir($empty, 0700, true);
 
-        $storage = StorageFactory::create($empty, 'json');
+        $storage = StorageFactory::create($empty, $this->backend());
         $auth = new AuthSessions($storage, new PasswordHasher());
         $result = $auth->login('anything', 'whatever-long-password', '1.2.3.4', 'UA', 1000);
 
@@ -284,12 +308,7 @@ final class AuthSessionsTest extends TestCase
     public function testAMalformedSessionRowFailsClosed(): void
     {
         $token = $this->loginToken();
-        $path = $this->dir . '/auth_sessions.php';
-        $hash = AuthSessions::hashToken($token);
-
-        $rows = \WPSafeMode\Security\GuardedJson::read($path);
-        $rows[$hash]['user_id'] = 'one';
-        \WPSafeMode\Security\GuardedJson::write($path, $rows);
+        $this->corruptSession(AuthSessions::hashToken($token), 'user_id', 'one');
 
         $this->expectException(StorageException::class);
 
@@ -344,16 +363,10 @@ final class AuthSessionsTest extends TestCase
         self::assertSame(1, $this->storage->rateLimiter()->peek('login:unknown', 1000)->attempts);
     }
 
-    public function testASessionRowWithAnEmptyIpOrEmptyTokenHashFailsClosed(): void
+    public function testASessionRowWithAnEmptyIpFailsClosed(): void
     {
         $token = $this->loginToken();
-        $path = $this->dir . '/auth_sessions.php';
-        $hash = AuthSessions::hashToken($token);
-        $good = \WPSafeMode\Security\GuardedJson::read($path);
-
-        $bad = $good;
-        $bad[$hash]['ip'] = '';
-        \WPSafeMode\Security\GuardedJson::write($path, $bad);
+        $this->corruptSession(AuthSessions::hashToken($token), 'ip', '');
 
         try {
             $this->auth->validate($token, 'UA', 1010);
@@ -361,13 +374,24 @@ final class AuthSessionsTest extends TestCase
         } catch (StorageException $e) {
             self::assertStringContainsString('ip', $e->getMessage());
         }
+    }
 
-        $bad = $good;
-        $bad[''] = $good[$hash];
-        \WPSafeMode\Security\GuardedJson::write($path, $bad);
+    /** JSON only by nature: SQLite reads one row by its key and never sees another. */
+    public function testAJsonSessionsFileWithAnEmptyTokenHashFailsClosed(): void
+    {
+        $dir = $this->dir . '/json';
+        mkdir($dir, 0700, true);
+        $storage = StorageFactory::create($dir, StorageFactory::BACKEND_JSON);
+        $storage->users()->create('owner', Role::OWNER, (new PasswordHasher())->hash(self::PASSWORD));
+        $auth = new AuthSessions($storage, new PasswordHasher());
+        $token = (string) $auth->login('owner', self::PASSWORD, '1.2.3.4', 'UA', 1000)->token;
+
+        $rows = GuardedJson::read($dir . '/auth_sessions.php');
+        $rows[''] = $rows[AuthSessions::hashToken($token)];
+        GuardedJson::write($dir . '/auth_sessions.php', $rows);
 
         $this->expectException(StorageException::class);
-        $this->auth->validate($token, 'UA', 1010);
+        $auth->validate($token, 'UA', 1010);
     }
 
     public function testARootInstallCookieUsesPathSlash(): void

@@ -105,7 +105,7 @@ final class Router
         $params = [];
 
         foreach ($parts as $i => $part) {
-            if (preg_match('/^\{([A-Za-z_][A-Za-z0-9_]*)\}$/', $part, $m) === 1) {
+            if (preg_match('/^\{([A-Za-z_][A-Za-z0-9_]*)\}\z/', $part, $m) === 1) {
                 if ($segments[$i] === '') {
                     return null;
                 }

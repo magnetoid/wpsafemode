@@ -15,6 +15,10 @@ final class SqliteAuthSessionStore implements AuthSessionStore
 
     public function put(string $tokenHash, array $row): void
     {
+        // The same check the JSON backend makes, so neither stores what the
+        // other would refuse to read back.
+        $row = AuthSessionRow::validate($row);
+
         $stmt = $this->connection->pdo()->prepare(
             'INSERT INTO auth_sessions (token_hash, user_id, created_at, last_seen_at, expires_at, ip, ua_hash)
              VALUES (:t, :user, :created, :seen, :expires, :ip, :ua)

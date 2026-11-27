@@ -60,7 +60,7 @@ final class JsonMessageLog implements MessageLog
 
     private function pathFor(string $sessionId): string
     {
-        if (preg_match('/^[A-Za-z0-9_-]{1,64}$/', $sessionId) !== 1) {
+        if (preg_match('/^[A-Za-z0-9_-]{1,64}\z/', $sessionId) !== 1) {
             throw new StorageException('Illegal session id: ' . $sessionId);
         }
 

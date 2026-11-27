@@ -42,11 +42,13 @@ final class RenameFromShippedCopyTest extends TestCase
     }
 
     /** @return array{0: \WPSafeMode\Storage\Contracts\Storage, 1: Installer, 2: AuthSessions} */
-    private function seeded(): array
+    private function seeded(string $backend): array
     {
         $dataDir = $this->parent . '/wpsafemode/data';
+        ShippedCopy::seedBackend($dataDir, $backend);
         $env = Environment::probe();
         $storage = StorageFactory::open($dataDir, $env);
+        self::assertSame($backend, $storage->backend());
         $hasher = new PasswordHasher();
 
         return [
@@ -73,9 +75,16 @@ final class RenameFromShippedCopyTest extends TestCase
         self::assertDirectoryDoesNotExist($this->parent . '/wpsafemode');
     }
 
-    public function testTheInstallerRenameAnswersFromAMovedCopy(): void
+    /** @return array<string, array{0: string}> */
+    public static function backends(): array
     {
-        [, $installer] = $this->seeded();
+        return ShippedCopy::backends();
+    }
+
+    /** @dataProvider backends */
+    public function testTheInstallerRenameAnswersFromAMovedCopy(string $backend): void
+    {
+        [, $installer] = $this->seeded($backend);
         $token = $installer->issueToken();
 
         $result = $this->runCopy('/api/install/rename', ['token' => $token], ['REMOTE_ADDR' => '203.0.113.1', 'HTTP_USER_AGENT' => self::UA]);
@@ -85,9 +94,10 @@ final class RenameFromShippedCopyTest extends TestCase
         $this->assertMoved((string) $result['body']['redirect']);
     }
 
-    public function testTheOwnerRenameAnswersFromAMovedCopy(): void
+    /** @dataProvider backends */
+    public function testTheOwnerRenameAnswersFromAMovedCopy(string $backend): void
     {
-        [$storage, , $sessions] = $this->seeded();
+        [$storage, , $sessions] = $this->seeded($backend);
         $storage->users()->create('owner', Role::OWNER, (new PasswordHasher())->hash('correct horse battery staple'));
         $storage->config()->set('installed_at', '1');
         $storage->config()->set('install_id', self::SECRET);

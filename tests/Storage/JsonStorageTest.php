@@ -7,6 +7,7 @@ namespace WPSafeMode\Tests\Storage;
 use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Security\GuardedJsonLines;
 use WPSafeMode\Storage\Contracts\AuditLog;
+use WPSafeMode\Storage\Contracts\AuthSessionStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\RateLimiter;
@@ -14,6 +15,7 @@ use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Contracts\UserStore;
 use WPSafeMode\Storage\Json\JsonAuditLog;
+use WPSafeMode\Storage\Json\JsonAuthSessionStore;
 use WPSafeMode\Storage\Json\JsonConfigStore;
 use WPSafeMode\Storage\Json\JsonMessageLog;
 use WPSafeMode\Storage\Json\JsonRateLimiter;
@@ -52,6 +54,27 @@ final class JsonStorageTest extends StorageConformanceTest
     protected function makeUserStore(string $dataDir): UserStore
     {
         return new JsonUserStore($dataDir . '/users.php');
+    }
+
+    protected function makeAuthSessionStore(string $dataDir): AuthSessionStore
+    {
+        return new JsonAuthSessionStore($dataDir . '/auth_sessions.php');
+    }
+
+    protected function writeUserField(string $dataDir, int $id, string $field, string $value): void
+    {
+        $path = $dataDir . '/users.php';
+        $file = GuardedJson::read($path);
+        $file['users'][(string) $id][$field] = $value;
+        GuardedJson::write($path, $file);
+    }
+
+    protected function writeAuthSessionField(string $dataDir, string $tokenHash, string $field, string $value): void
+    {
+        $path = $dataDir . '/auth_sessions.php';
+        $rows = GuardedJson::read($path);
+        $rows[$tokenHash][$field] = $value;
+        GuardedJson::write($path, $rows);
     }
 
     /** Raw GuardedJson write: a role the application would never write. */

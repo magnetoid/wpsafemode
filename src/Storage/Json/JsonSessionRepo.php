@@ -133,7 +133,7 @@ final class JsonSessionRepo implements SessionRepo
      */
     private function pathFor(string $id): string
     {
-        if (preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id) !== 1) {
+        if (preg_match('/^[A-Za-z0-9_-]{1,64}\z/', $id) !== 1) {
             throw new StorageException('Illegal session id: ' . $id);
         }
 

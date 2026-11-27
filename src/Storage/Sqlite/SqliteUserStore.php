@@ -86,7 +86,12 @@ final class SqliteUserStore implements UserStore
 
             return $user;
         } catch (\Throwable $e) {
-            $pdo->exec('ROLLBACK');
+            try {
+                $pdo->exec('ROLLBACK');
+            } catch (\Throwable $ignored) {
+                // The original failure is the one worth reporting, as in
+                // SqliteMigrator::runStep().
+            }
 
             throw $e;
         }
@@ -185,7 +190,7 @@ final class SqliteUserStore implements UserStore
         // else (text written into an INTEGER column) stays a string and is
         // refused by User::fromRow().
         foreach (self::INT_COLUMNS as $column) {
-            if (isset($row[$column]) && is_string($row[$column]) && preg_match('/^-?\d+$/', $row[$column]) === 1) {
+            if (isset($row[$column]) && is_string($row[$column]) && preg_match('/^-?\d+\z/', $row[$column]) === 1) {
                 $row[$column] = (int) $row[$column];
             }
         }

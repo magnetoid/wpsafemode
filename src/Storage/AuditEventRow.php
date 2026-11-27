@@ -25,7 +25,7 @@ final class AuditEventRow
     {
         $at = $row['at'] ?? null;
 
-        if (is_string($at) && preg_match('/^(0|-?[1-9]\d*)$/', $at) === 1) {
+        if (is_string($at) && preg_match('/^(0|-?[1-9]\d*)\z/', $at) === 1) {
             $at = (int) $at;
         }
 

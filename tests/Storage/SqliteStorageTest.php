@@ -5,12 +5,17 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Storage;
 
 use WPSafeMode\Storage\Contracts\AuditLog;
+use WPSafeMode\Storage\Contracts\AuthSessionStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
+use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Contracts\UserStore;
+use WPSafeMode\Storage\Credential;
+use WPSafeMode\Security\Role;
 use WPSafeMode\Storage\Sqlite\SqliteAuditLog;
+use WPSafeMode\Storage\Sqlite\SqliteAuthSessionStore;
 use WPSafeMode\Storage\Sqlite\SqliteConfigStore;
 use WPSafeMode\Storage\Sqlite\SqliteConnection;
 use WPSafeMode\Storage\Sqlite\SqliteMessageLog;
@@ -18,31 +23,62 @@ use WPSafeMode\Storage\Sqlite\SqliteRateLimiter;
 use WPSafeMode\Storage\Sqlite\SqliteSessionRepo;
 use WPSafeMode\Storage\Sqlite\SqliteUserStore;
 
-final class SqliteStorageTest extends StorageConformanceTest
+/** Not final: SqliteStringFetchStorageTest runs the whole suite again with PHP 8.0's string fetches. */
+class SqliteStorageTest extends StorageConformanceTest
 {
+    /** @return array<int, mixed> extra PDO attributes for every connection this suite opens */
+    protected function attributes(): array
+    {
+        return [];
+    }
+
+    protected function connection(string $dataDir): SqliteConnection
+    {
+        return new SqliteConnection($dataDir . '/wpsm.sqlite', $this->attributes());
+    }
+
+    protected function makeAuthSessionStore(string $dataDir): AuthSessionStore
+    {
+        return new SqliteAuthSessionStore($this->connection($dataDir));
+    }
+
+    protected function writeUserField(string $dataDir, int $id, string $field, string $value): void
+    {
+        $stmt = $this->connection($dataDir)->pdo()->prepare('UPDATE users SET ' . $field . ' = CAST(:v AS BLOB) WHERE id = :id');
+        $stmt->execute([':v' => $value, ':id' => $id]);
+    }
+
+    protected function writeAuthSessionField(string $dataDir, string $tokenHash, string $field, string $value): void
+    {
+        $stmt = $this->connection($dataDir)->pdo()->prepare(
+            'UPDATE auth_sessions SET ' . $field . ' = CAST(:v AS BLOB) WHERE token_hash = :t'
+        );
+        $stmt->execute([':v' => $value, ':t' => $tokenHash]);
+    }
+
     protected function makeConfigStore(string $dataDir): ConfigStore
     {
-        return new SqliteConfigStore(new SqliteConnection($dataDir . '/wpsm.sqlite'));
+        return new SqliteConfigStore($this->connection($dataDir));
     }
 
     protected function makeSessionRepo(string $dataDir): SessionRepo
     {
-        return new SqliteSessionRepo(new SqliteConnection($dataDir . '/wpsm.sqlite'));
+        return new SqliteSessionRepo($this->connection($dataDir));
     }
 
     protected function makeMessageLog(string $dataDir): MessageLog
     {
-        return new SqliteMessageLog(new SqliteConnection($dataDir . '/wpsm.sqlite'));
+        return new SqliteMessageLog($this->connection($dataDir));
     }
 
     protected function makeAuditLog(string $dataDir): AuditLog
     {
-        return new SqliteAuditLog(new SqliteConnection($dataDir . '/wpsm.sqlite'));
+        return new SqliteAuditLog($this->connection($dataDir));
     }
 
     protected function writeMalformedAuditRow(string $dataDir): void
     {
-        $connection = new SqliteConnection($dataDir . '/wpsm.sqlite');
+        $connection = $this->connection($dataDir);
         $connection->pdo()->exec(
             "INSERT INTO audit_log (at, actor, event, subject, meta_json, ip) VALUES (3000, '', 'login', NULL, '{}', NULL)"
         );
@@ -50,19 +86,19 @@ final class SqliteStorageTest extends StorageConformanceTest
 
     protected function makeUserStore(string $dataDir): UserStore
     {
-        return new SqliteUserStore(new SqliteConnection($dataDir . '/wpsm.sqlite'));
+        return new SqliteUserStore($this->connection($dataDir));
     }
 
     /** Raw SQL: the only way to get a role the application would never write. */
     protected function writeMalformedUserRecord(string $dataDir): void
     {
-        $connection = new SqliteConnection($dataDir . '/wpsm.sqlite');
+        $connection = $this->connection($dataDir);
         $connection->pdo()->exec("UPDATE users SET role = 'root' WHERE id = 1");
     }
 
     protected function makeRateLimiter(string $dataDir): RateLimiter
     {
-        return new SqliteRateLimiter(new SqliteConnection($dataDir . '/wpsm.sqlite'));
+        return new SqliteRateLimiter($this->connection($dataDir));
     }
 
     protected function assertNoSessionStorageLeftBehind(string $dataDir, string $id): void
@@ -79,7 +115,7 @@ final class SqliteStorageTest extends StorageConformanceTest
      */
     protected function writeMalformedRateLimitEntry(string $dataDir, string $bucket): void
     {
-        $connection = new SqliteConnection($dataDir . '/wpsm.sqlite');
+        $connection = $this->connection($dataDir);
         $stmt = $connection->pdo()->prepare(
             'INSERT INTO rate_limit (bucket, window_start, attempts, locked_until) VALUES (:b, :ws, :a, :lu)'
         );
@@ -129,7 +165,8 @@ final class SqliteStorageTest extends StorageConformanceTest
         $limiter->hit('race', 1000); // primes attempts=1, and creates the schema/file up front
 
         $limiterExpr = 'new \WPSafeMode\Storage\Sqlite\SqliteRateLimiter('
-            . 'new \WPSafeMode\Storage\Sqlite\SqliteConnection($dataDir . \'/wpsm.sqlite\'))';
+            . 'new \WPSafeMode\Storage\Sqlite\SqliteConnection($dataDir . \'/wpsm.sqlite\', '
+            . var_export($this->attributes(), true) . '))';
 
         $expected = 1;
         $workersPerBurst = 15;
@@ -154,5 +191,28 @@ final class SqliteStorageTest extends StorageConformanceTest
                 "burst $burst: every concurrent hit() call so far must be counted - none silently lost to a stale read"
             );
         }
+    }
+
+    /**
+     * createIfEmpty() holds BEGIN IMMEDIATE across its check. When the check
+     * throws, the rollback must neither mask that error nor leave the
+     * transaction open: a later write on the same connection must commit.
+     */
+    public function testAFailedCreateIfEmptyReportsTheOriginalErrorAndLeavesNoTransactionOpen(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('marko', Role::OWNER, new Credential('$argon2id$hash', 'argon2id', 1000, 2000));
+        $this->writeMalformedUserRecord($this->dataDir);
+
+        try {
+            $store->createIfEmpty('other', Role::OWNER, new Credential('$argon2id$hash', 'argon2id', 1000, 2000));
+            self::fail('createIfEmpty() read past a corrupt record');
+        } catch (StorageException $e) {
+            self::assertStringContainsString('Corrupt user record', $e->getMessage());
+        }
+
+        $third = $store->create('third', Role::VIEWER, new Credential('$argon2id$hash', 'argon2id', 1000, 2000));
+        $count = $this->connection($this->dataDir)->pdo()->query('SELECT COUNT(*) FROM users WHERE id = ' . $third->id)->fetchColumn();
+        self::assertSame(1, (int) $count, 'The write after the failure never committed: the transaction was left open.');
     }
 }

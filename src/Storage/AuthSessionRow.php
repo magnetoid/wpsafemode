@@ -28,7 +28,7 @@ final class AuthSessionRow
         foreach (self::INT_KEYS as $key) {
             $value = $row[$key] ?? null;
 
-            if (is_string($value) && preg_match('/^(0|-?[1-9]\d*)$/', $value) === 1) {
+            if (is_string($value) && preg_match('/^(0|-?[1-9]\d*)\z/', $value) === 1) {
                 $value = (int) $value;
             }
 

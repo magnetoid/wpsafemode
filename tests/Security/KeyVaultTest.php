@@ -510,4 +510,25 @@ final class KeyVaultTest extends TestCase
 
         self::assertSame('sk-ant-secret', (new KeyVault($this->dir))->decrypt($envelope));
     }
+
+    /**
+     * A known answer for the config subkey, the key every stored API key is
+     * encrypted under. A change to the HKDF hash, length, salt or the
+     * 'wpsm:config:v1' label would orphan every existing envelope; this pins
+     * all four. The expected value was computed once from RFC 5869 by hand
+     * (HMAC-SHA256 extract with a zero salt, one expand block), not with
+     * hash_hkdf(), and is checked against that construction here too.
+     */
+    public function testTheConfigSubkeyMatchesAFixedVector(): void
+    {
+        $master = str_repeat("\x42", 32);
+        GuardedJson::write($this->dir . '/keyvault.php', ['secret' => base64_encode($master), 'created_at' => 1]);
+
+        $expected = 'a8783b6034a4c6158fb4c17342085cba719e1941f4966aff916e32c6e9ec5274';
+
+        $prk = hash_hmac('sha256', $master, str_repeat("\0", 32), true);
+        self::assertSame($expected, hash_hmac('sha256', 'wpsm:config:v1' . "\x01", $prk));
+
+        self::assertSame($expected, bin2hex((new KeyVault($this->dir))->subkey(KeyVault::PURPOSE_CONFIG)));
+    }
 }

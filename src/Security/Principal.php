@@ -12,13 +12,15 @@ if (!defined('WPSM_ENTRY')) {
 use WPSafeMode\Storage\User;
 
 /**
- * Who is acting, and over which channel. Built only by the two factories;
- * it does not check that the user is enabled, which is the session layer's job.
+ * Who is acting, and over which channel. Built only by the two factories and
+ * never changed afterwards: the properties are private, read through
+ * channel() and user() (PHP 8.0 has no readonly). It does not check that the
+ * user is enabled, which is the session layer's job.
  */
 final class Principal
 {
-    public string $channel;
-    public ?User $user;
+    private string $channel;
+    private ?User $user;
 
     private function __construct(string $channel, ?User $user)
     {
@@ -38,6 +40,16 @@ final class Principal
     public static function forUser(User $user, string $channel): self
     {
         return new self($channel, $user);
+    }
+
+    public function channel(): string
+    {
+        return $this->channel;
+    }
+
+    public function user(): ?User
+    {
+        return $this->user;
     }
 
     public function isAnonymous(): bool

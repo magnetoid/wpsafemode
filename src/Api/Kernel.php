@@ -75,7 +75,7 @@ final class Kernel
             : Principal::forUser($user, Channel::BROWSER);
 
         // 5. Channel.
-        if (!in_array($principal->channel, $route->channels, true)) {
+        if (!in_array($principal->channel(), $route->channels, true)) {
             return Response::json(['error' => 'channel_not_allowed'], 403);
         }
 
@@ -91,7 +91,7 @@ final class Kernel
         // itself be a POST.
         if (
             !$principal->isAnonymous()
-            && $principal->channel === Channel::BROWSER
+            && $principal->channel() === Channel::BROWSER
             && !in_array($request->method, ['GET', 'HEAD', 'OPTIONS'], true)
         ) {
             $secret = $this->storage->config()->get('install_id');

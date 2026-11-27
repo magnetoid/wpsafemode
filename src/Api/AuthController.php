@@ -114,7 +114,7 @@ final class AuthController
             return $this->corrupt();
         }
 
-        $user = $request->principal === null ? null : $request->principal->user;
+        $user = $request->principal === null ? null : $request->principal->user();
 
         if ($user === null || $token === null || $token === '') {
             return Response::json(['error' => 'unauthenticated'], 401);

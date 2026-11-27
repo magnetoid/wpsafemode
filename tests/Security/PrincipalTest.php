@@ -57,9 +57,21 @@ final class PrincipalTest extends TestCase
         self::assertSame('user:7', $principal->label());
         self::assertSame(7, $principal->userId());
         self::assertSame(Role::ADMIN, $principal->role());
-        self::assertSame(Channel::REMOTE, $principal->channel);
+        self::assertSame(Channel::REMOTE, $principal->channel());
+        self::assertSame(7, $principal->user()?->id);
+        self::assertNull(Principal::anonymous(Channel::BROWSER)->user());
         self::assertFalse($principal->isAnonymous());
         self::assertTrue(Principal::anonymous(Channel::BROWSER)->isAnonymous());
+    }
+
+    public function testNothingOutsideCanChangeWhoIsActingOrOverWhichChannel(): void
+    {
+        foreach (['channel', 'user'] as $name) {
+            self::assertFalse(
+                (new \ReflectionProperty(Principal::class, $name))->isPublic(),
+                'Principal::$' . $name . ' can be overwritten after construction.'
+            );
+        }
     }
 
     public function testAnUnknownChannelIsRefused(): void

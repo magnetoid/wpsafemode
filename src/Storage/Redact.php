@@ -5,15 +5,22 @@ declare(strict_types=1);
 namespace WPSafeMode\Storage;
 
 /**
- * Field-name redaction for anything written to a log.
+ * Key-name redaction for anything written to a log.
  *
- * The audit log is the file most likely to end up in a support thread or a
- * screenshot. Nothing should be putting a secret in it, but "nothing should"
- * is how v1.1 ended up with the API key in a world-readable JSON file.
+ * This is by KEY NAME only. Each key is lowercased and stripped of "-", "_",
+ * "." and spaces, then matched by substring against a list of secret-looking
+ * names, so api_key, API-KEY, apiKey and session_token are all caught, at any
+ * depth. It does not inspect values: a secret stored under a benign key is
+ * written verbatim, so callers must never put a secret value in meta. Plain
+ * "key" is deliberately not on the list, because config_change meta names the
+ * changed setting under it.
  */
 final class Redact
 {
-    private const SECRET_KEYS = ['api_key', 'apikey', 'password', 'token', 'secret', 'hash', 'authorization'];
+    private const SECRET_KEYS = [
+        'apikey', 'password', 'passwd', 'pwd', 'token', 'secret', 'hash',
+        'authorization', 'cookie', 'bearer', 'credential', 'privatekey',
+    ];
 
     /**
      * @param array<mixed> $meta
@@ -24,7 +31,7 @@ final class Redact
         $clean = [];
 
         foreach ($meta as $key => $value) {
-            $lower = strtolower((string) $key);
+            $lower = str_replace(['-', '_', '.', ' '], '', strtolower((string) $key));
             $isSecret = false;
 
             foreach (self::SECRET_KEYS as $needle) {

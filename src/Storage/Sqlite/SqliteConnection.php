@@ -44,7 +44,7 @@ final class SqliteConnection
         $pdo->exec('PRAGMA busy_timeout = 5000');
         $pdo->exec('PRAGMA foreign_keys = ON');
 
-        SqliteSchema::install($pdo);
+        SqliteMigrator::migrate($pdo);
 
         return $this->pdo = $pdo;
     }

@@ -315,4 +315,115 @@ final class AuthSessionsTest extends TestCase
 
         $auth->validate($token, 'UA', 1020);
     }
+
+    public function testANulBytePasswordIsCountedIdenticallyForRealAndUnknownLogins(): void
+    {
+        $real = $this->auth->login('owner', "pass\0word-long-enough", '10.0.0.1', 'UA', 1000);
+        $unknown = $this->auth->login('nobody', "pass\0word-long-enough", '10.0.0.2', 'UA', 1000);
+
+        foreach ([$real, $unknown] as $result) {
+            self::assertFalse($result->ok);
+            self::assertSame('bad_credentials', $result->reason);
+            self::assertNull($result->token);
+        }
+
+        $limiter = $this->storage->rateLimiter();
+        self::assertSame(1, $limiter->peek('login:10.0.0.1', 1000)->attempts);
+        self::assertSame(1, $limiter->peek('login:10.0.0.2', 1000)->attempts);
+    }
+
+    public function testAnEmptyIpIsRecordedAsUnknown(): void
+    {
+        $token = (string) $this->auth->login('owner', self::PASSWORD, '', 'UA', 1000)->token;
+
+        $row = $this->storage->authSessions()->get(AuthSessions::hashToken($token));
+        self::assertNotNull($row);
+        self::assertSame('unknown', $row['ip']);
+
+        $this->auth->login('owner', 'wrong', '', 'UA', 1000);
+        self::assertSame(1, $this->storage->rateLimiter()->peek('login:unknown', 1000)->attempts);
+    }
+
+    public function testASessionRowWithAnEmptyIpOrEmptyTokenHashFailsClosed(): void
+    {
+        $token = $this->loginToken();
+        $path = $this->dir . '/auth_sessions.php';
+        $hash = AuthSessions::hashToken($token);
+        $good = \WPSafeMode\Security\GuardedJson::read($path);
+
+        $bad = $good;
+        $bad[$hash]['ip'] = '';
+        \WPSafeMode\Security\GuardedJson::write($path, $bad);
+
+        try {
+            $this->auth->validate($token, 'UA', 1010);
+            self::fail('Expected StorageException for an empty ip');
+        } catch (StorageException $e) {
+            self::assertStringContainsString('ip', $e->getMessage());
+        }
+
+        $bad = $good;
+        $bad[''] = $good[$hash];
+        \WPSafeMode\Security\GuardedJson::write($path, $bad);
+
+        $this->expectException(StorageException::class);
+        $this->auth->validate($token, 'UA', 1010);
+    }
+
+    public function testARootInstallCookieUsesPathSlash(): void
+    {
+        self::assertStringContainsString('Path=/;', $this->auth->cookieHeader('tok', false, '', 1000));
+        self::assertStringContainsString('Path=/;', $this->auth->clearCookieHeader(false, ''));
+    }
+
+    private function throwsInvalidArgument(callable $fn): bool
+    {
+        try {
+            $fn();
+        } catch (\InvalidArgumentException $e) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /** @return array<string, array{string}> */
+    public function badPaths(): array
+    {
+        return [
+            'attribute injection' => [';Domain=evil.example'],
+            'second path'         => ['/ok; Path=/'],
+            'CR LF'               => ["/ok\r\nSet-Cookie: x=y"],
+            'comma'               => ['/a,b'],
+            'space'               => ['/a b'],
+            'relative'            => ['wpsm'],
+            'NUL'                 => ["/a\0b"],
+        ];
+    }
+
+    /** @dataProvider badPaths */
+    public function testCookieHeadersRefuseAnUnsafePath(string $path): void
+    {
+        self::assertTrue($this->throwsInvalidArgument(fn () => $this->auth->cookieHeader('tok', false, $path, 1000)));
+        self::assertTrue($this->throwsInvalidArgument(fn () => $this->auth->clearCookieHeader(false, $path)));
+    }
+
+    public function testCookieHeaderRefusesATokenThatIsNotUrlSafeBase64(): void
+    {
+        foreach (['', 'a;b', "a\nb", 'a b', "tok\n"] as $token) {
+            self::assertTrue(
+                $this->throwsInvalidArgument(fn () => $this->auth->cookieHeader($token, false, '/', 1000)),
+                'accepted token ' . json_encode($token)
+            );
+        }
+    }
+
+    public function testClearCookieCarriesTheSameAttributes(): void
+    {
+        $header = $this->auth->clearCookieHeader(true, '/wpsm-abc');
+
+        foreach (['Path=/wpsm-abc', 'Max-Age=0', 'HttpOnly', 'SameSite=Strict', 'Secure'] as $attr) {
+            self::assertStringContainsString($attr, $header);
+        }
+    }
 }

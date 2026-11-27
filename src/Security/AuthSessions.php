@@ -31,6 +31,9 @@ final class AuthSessions
 
     public function login(string $login, string $password, string $ip, string $userAgent, int $now): LoginResult
     {
+        // The same placeholder Request::clientIp() uses, so the bucket and
+        // the stored row agree when no address is known.
+        $ip = $ip === '' ? 'unknown' : $ip;
         $bucket = 'login:' . $ip;
         $limiter = $this->storage->rateLimiter();
 
@@ -49,9 +52,14 @@ final class AuthSessions
             return LoginResult::failure('not_installed');
         }
 
-        $user = $users->findByLogin($login);
-
-        if ($user !== null && $user->isEnabled()) {
+        if (strpos($password, "\0") !== false) {
+            // bcrypt refuses a NUL byte (hash() throws) while verify() and
+            // argon2id do not, so such a password must never reach either: it
+            // takes the counted failure path below for every login, real or
+            // not, and can neither enumerate logins nor go uncounted.
+            $user = null;
+            $verified = false;
+        } elseif (($user = $users->findByLogin($login)) !== null && $user->isEnabled()) {
             $verified = $this->hasher->verify($password, $user->credential);
         } else {
             // An unknown or disabled login does the same work as a real
@@ -153,9 +161,13 @@ final class AuthSessions
 
     public function cookieHeader(string $token, bool $https, string $path, int $now): string
     {
+        if (preg_match('/^[A-Za-z0-9_-]+\z/', $token) !== 1) {
+            throw new \InvalidArgumentException('The session token has characters a cookie value must not carry.');
+        }
+
         $parts = [
             self::COOKIE . '=' . $token,
-            'Path=' . ($path === '' ? '/' : $path),
+            'Path=' . self::cookiePath($path),
             'Max-Age=' . self::LIFETIME_SECONDS,
             'Expires=' . gmdate('D, d M Y H:i:s T', $now + self::LIFETIME_SECONDS),
             'HttpOnly',
@@ -173,7 +185,7 @@ final class AuthSessions
     {
         $parts = [
             self::COOKIE . '=',
-            'Path=' . ($path === '' ? '/' : $path),
+            'Path=' . self::cookiePath($path),
             'Max-Age=0',
             'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
             'HttpOnly',
@@ -185,6 +197,24 @@ final class AuthSessions
         }
 
         return implode('; ', $parts);
+    }
+
+    /**
+     * '' (a root install) becomes '/', because an empty Path attribute makes
+     * browsers fall back to the request's directory. Anything that could add
+     * or override a cookie attribute is refused.
+     */
+    private static function cookiePath(string $path): string
+    {
+        if ($path === '') {
+            return '/';
+        }
+
+        if ($path[0] !== '/' || preg_match('/[;,\s\x00-\x1F\x7F]/', $path) === 1) {
+            throw new \InvalidArgumentException('The cookie path is not a plain absolute path.');
+        }
+
+        return $path;
     }
 
     public static function hashToken(string $token): string

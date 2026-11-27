@@ -91,6 +91,10 @@ final class JsonAuthSessionStore implements AuthSessionStore
                 throw new StorageException('Corrupt login sessions file: a record is not an object.');
             }
 
+            if ((string) $key === '') {
+                throw new StorageException('Corrupt login sessions file: a record has an empty token hash.');
+            }
+
             $all[(string) $key] = AuthSessionRow::validate($row);
         }
 

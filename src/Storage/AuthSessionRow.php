@@ -39,8 +39,8 @@ final class AuthSessionRow
             $row[$key] = $value;
         }
 
-        if (!isset($row['ip']) || !is_string($row['ip'])) {
-            throw new StorageException('Corrupt login session record: ip is not a string.');
+        if (!isset($row['ip']) || !is_string($row['ip']) || $row['ip'] === '') {
+            throw new StorageException('Corrupt login session record: ip is not a non-empty string.');
         }
 
         if (!isset($row['ua_hash']) || !is_string($row['ua_hash']) || $row['ua_hash'] === '') {

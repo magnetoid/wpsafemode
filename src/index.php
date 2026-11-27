@@ -74,5 +74,7 @@ try {
 
     (new Kernel($router, $storage, $sessions, $installer))->handle($request, time())->send();
 } catch (StorageException $e) {
-    Response::json(['error' => 'storage_unavailable', 'message' => $e->getMessage()], 500)->send();
+    // The message can carry an absolute server path: log it, never send it.
+    error_log('WP Safe Mode storage unavailable: ' . $e->getMessage());
+    Response::json(['error' => 'storage_unavailable'], 500)->send();
 }

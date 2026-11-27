@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage\Json;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
+use WPSafeMode\Security\DataDir;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Session;
 
 /**
  * One directory per session (spec 7.2). The session record itself lives in
- * session.json; Task 5 adds messages.jsonl beside it.
+ * session.php; Task 5 adds messages.php beside it.
  */
 final class JsonSessionRepo implements SessionRepo
 {
@@ -88,9 +94,36 @@ final class JsonSessionRepo implements SessionRepo
 
         $dir = dirname($path);
 
-        if (is_dir($dir) && (scandir($dir) ?: []) === ['.', '..']) {
+        if (is_dir($dir) && $this->hasNothingButProtectionFiles($dir)) {
+            // rmdir() is a raw syscall: it does not know this directory's
+            // .htaccess/index.php are "ignorable" and refuses to remove a
+            // directory that still physically contains them. The check
+            // above only decided that nothing *else* is left; these two
+            // still have to be unlinked before the directory itself can go.
+            foreach (array_keys(DataDir::protectionFiles()) as $name) {
+                $blocker = $dir . '/' . $name;
+
+                if (is_file($blocker)) {
+                    unlink($blocker);
+                }
+            }
+
             rmdir($dir);
         }
+    }
+
+    /**
+     * True once only the directory's own .htaccess/index.php are left.
+     * DataDir::ensure() drops those into every directory a guarded writer
+     * touches, including this session's, so a literal
+     * scandir() === ['.', '..'] check never matches again — every deleted
+     * session would otherwise leave an orphan directory behind forever.
+     */
+    private function hasNothingButProtectionFiles(string $dir): bool
+    {
+        $ignored = array_merge(['.', '..'], array_keys(DataDir::protectionFiles()));
+
+        return array_diff(scandir($dir) ?: [], $ignored) === [];
     }
 
     private function fileFor(string $id): JsonFile
@@ -105,10 +138,10 @@ final class JsonSessionRepo implements SessionRepo
      */
     private function pathFor(string $id): string
     {
-        if (preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id) !== 1) {
+        if (preg_match('/^[A-Za-z0-9_-]{1,64}\z/', $id) !== 1) {
             throw new StorageException('Illegal session id: ' . $id);
         }
 
-        return $this->baseDir . '/' . $id . '/session.json';
+        return $this->baseDir . '/' . $id . '/session.php';
     }
 }

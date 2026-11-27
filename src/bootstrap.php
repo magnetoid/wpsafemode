@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 /**
  * Single entry point for src/index.php. Loads the autoloader and refuses to
  * continue on an unsupported PHP version.

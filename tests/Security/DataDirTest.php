@@ -1,0 +1,436 @@
+<?php
+
+declare(strict_types=1);
+
+namespace WPSafeMode\Tests\Security;
+
+use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
+use WPSafeMode\Core\Environment;
+use WPSafeMode\Core\ErrorLog;
+use WPSafeMode\Installer\Installer;
+use WPSafeMode\Security\AuthSessions;
+use WPSafeMode\Security\DataDir;
+use WPSafeMode\Security\GuardedJson;
+use WPSafeMode\Security\KeyVault;
+use WPSafeMode\Security\PasswordHasher;
+use WPSafeMode\Storage\Contracts\StorageException;
+use WPSafeMode\Storage\Message;
+use WPSafeMode\Storage\Session;
+use WPSafeMode\Storage\StorageFactory;
+use WPSafeMode\Tests\Support\FakeFetcher;
+
+final class DataDirTest extends TestCase
+{
+    private string $dir;
+
+    protected function setUp(): void
+    {
+        $this->dir = sys_get_temp_dir() . '/wpsm-datadir-' . bin2hex(random_bytes(6)) . '/data';
+    }
+
+    protected function tearDown(): void
+    {
+        // Recursive, dotfiles included: glob('*') skips .htaccess, which
+        // left the directory behind after every run.
+        $this->removeRecursively(dirname($this->dir));
+    }
+
+    public function testEnsureCreatesThePrivateDirectoryAndBothBlockers(): void
+    {
+        DataDir::ensure($this->dir);
+
+        self::assertDirectoryExists($this->dir);
+        self::assertSame('0700', substr(sprintf('%o', fileperms($this->dir)), -4));
+        self::assertFileExists($this->dir . '/.htaccess');
+        self::assertFileExists($this->dir . '/index.php');
+    }
+
+    public function testHtaccessDeniesOnBothApacheGenerations(): void
+    {
+        DataDir::ensure($this->dir);
+        $htaccess = (string) file_get_contents($this->dir . '/.htaccess');
+
+        // 2.4 syntax and the 2.2 fallback both matter: shared hosts run either,
+        // and an unrecognised directive is a 500, not a silent no-op.
+        self::assertStringContainsString('Require all denied', $htaccess);
+        self::assertStringContainsString('Deny from all', $htaccess);
+    }
+
+    public function testEnsureIsIdempotentAndDoesNotClobberExistingState(): void
+    {
+        DataDir::ensure($this->dir);
+        file_put_contents($this->dir . '/config.php', 'sentinel');
+
+        DataDir::ensure($this->dir);
+
+        self::assertSame('sentinel', file_get_contents($this->dir . '/config.php'));
+    }
+
+    public function testServableExtensionsAreRecognised(): void
+    {
+        self::assertTrue(DataDir::isServableExtension('data/config.json'));
+        self::assertTrue(DataDir::isServableExtension('data/messages.jsonl'));
+        self::assertTrue(DataDir::isServableExtension('data/store.sqlite'));
+        self::assertTrue(DataDir::isServableExtension('data/keyvault'));
+        self::assertFalse(DataDir::isServableExtension('data/config.php'));
+        self::assertFalse(DataDir::isServableExtension('data/index.php'));
+    }
+
+    public function testExtensionsMissingFromAnyDenylistAreTreatedAsServable(): void
+    {
+        // isServableExtension() must fail closed: a fixed list of "known
+        // servable" extensions only has to miss one real hosting
+        // configuration to wrongly declare a secret-bearing file safe. Every
+        // one of these previously came back false (safe) under the old
+        // implementation — a list of extensions it considered servable,
+        // returning true only for names on that list — even though a real
+        // web server would serve every one of them verbatim.
+        $wronglyTrustedBefore = [
+            'data/store.sqlite3',
+            'data/store.db3',
+            'data/keyvault.dat',
+            'data/keyvault.bin',
+            'data/keyvault.key',
+            'data/keyvault.pem',
+            'data/config.env',
+            'data/config.php.old',
+            'data/backup.tar',
+            'data/backup.7z',
+            'data/settings.toml',
+            // The atomic-write temp suffix used by GuardedJson::write(): it
+            // does not end in .php, so `location ~ \.php$` would not route
+            // it to the PHP handler — nginx serves it as a static file.
+            'data/config.php.tmp.a1b2c3d4',
+        ];
+
+        foreach ($wronglyTrustedBefore as $path) {
+            self::assertTrue(
+                DataDir::isServableExtension($path),
+                $path . ' must be treated as servable (fail closed)'
+            );
+        }
+    }
+
+    /** @return array<string, array{0: string, 1: list<string>}> backend, files the run must have produced */
+    public static function lifecycles(): array
+    {
+        return [
+            'json' => ['json', [
+                'audit_log.php', 'auth_sessions.php', 'auth_sessions.php.lock.php', 'config.php', 'install.php',
+                'keyvault.php', 'migrate.lock.php', 'php-errors.php', 'rate_limit.php', 'rate_limit.php.lock.php',
+                'sessions/sesn_1/messages.php', 'sessions/sesn_1/session.php', 'users.php', 'users.php.lock.php',
+            ]],
+            'sqlite' => ['sqlite', ['install.php', 'keyvault.php', 'php-errors.php']],
+        ];
+    }
+
+    /**
+     * The whole of spec 15.1: every file the tool writes into data/ must be
+     * guarded (a .php name) or unguessable. Rather than a hand-kept list,
+     * this runs a full lifecycle (install, a failed and a good sign-in, a
+     * sign-out, a session with a message, the error log) and checks every
+     * file it finds, so a new state file cannot slip past.
+     *
+     * @dataProvider lifecycles
+     * @param list<string> $expected
+     */
+    public function testNoFileTheApplicationWritesIsServableAsAStaticAsset(string $backend, array $expected): void
+    {
+        if ($backend === StorageFactory::BACKEND_SQLITE && !extension_loaded('pdo_sqlite')) {
+            self::markTestSkipped('Needs pdo_sqlite.');
+        }
+
+        $base = sys_get_temp_dir() . '/wpsm-datadir-lifecycle-' . bin2hex(random_bytes(6));
+        $dataDir = $base . '/data';
+
+        try {
+            DataDir::ensure($dataDir);
+            GuardedJson::write($dataDir . '/install.php', ['backend' => $backend]);
+            ErrorLog::prepare($dataDir);
+
+            $env = Environment::probe($dataDir);
+            $storage = StorageFactory::open($dataDir, $env);
+            self::assertSame($backend, $storage->backend());
+
+            $hasher = new PasswordHasher();
+            $installer = new Installer($storage, new KeyVault($dataDir), $hasher, $dataDir, $env, FakeFetcher::refusing());
+            $installer->issueToken();
+            $installer->createOwner('owner', 'correct horse battery staple');
+            $installer->storeApiKey('sk-ant-lifecycle', false, 'http://example.test/wpsafemode');
+            $installer->finalize('203.0.113.1');
+
+            $auth = new AuthSessions($storage, $hasher);
+            $auth->login('owner', 'not the password at all', '203.0.113.1', 'UA', 1000);
+            $token = (string) $auth->login('owner', 'correct horse battery staple', '203.0.113.1', 'UA', 1000)->token;
+            self::assertNotNull($auth->validate($token, 'UA', 1010));
+            $auth->logout($token);
+
+            $storage->sessions()->create(new Session(
+                id:        'sesn_1',
+                title:     'White screen on example.com',
+                blade:     Session::BLADE_RESCUE,
+                status:    Session::STATUS_IDLE,
+                model:     'claude-opus-4-8',
+                effort:    'high',
+                createdAt: 1000,
+                updatedAt: 1000,
+            ));
+            $storage->messages()->append('sesn_1', Message::ROLE_USER, [['type' => 'text', 'text' => 'hi']]);
+
+            $protection = array_keys(DataDir::protectionFiles());
+            $sqliteFile = StorageFactory::sqliteFilename($dataDir);
+            $found = [];
+
+            foreach ($this->filesUnder($dataDir) as $file) {
+                $relative = substr($file, strlen($dataDir) + 1);
+
+                // Each directory's own .htaccess and index.php blockers,
+                // which the tests above check on their own terms.
+                if (in_array(basename($relative), $protection, true)) {
+                    continue;
+                }
+
+                $found[] = $relative;
+
+                // The SQLite database cannot carry the die() guard; its
+                // defence is a random name, recorded in install.php.
+                if ($sqliteFile !== null && ($relative === $sqliteFile || $relative === $sqliteFile . '-journal')) {
+                    self::assertMatchesRegularExpression('/^store-[0-9a-f]{32}\.db\z/', $sqliteFile);
+                    continue;
+                }
+
+                self::assertFalse(DataDir::isServableExtension($relative), 'data/' . $relative . ' would be served as a static asset');
+            }
+
+            foreach ($expected as $name) {
+                self::assertContains($name, $found, 'The lifecycle did not produce data/' . $name . ': the scan would be vacuous.');
+            }
+
+            if ($backend === StorageFactory::BACKEND_SQLITE) {
+                self::assertContains((string) $sqliteFile, $found);
+            }
+        } finally {
+            $this->removeRecursively($base);
+        }
+    }
+
+    // --- review round 1 -----------------------------------------------
+
+    public function testEnsureThrowsWhenABlockerCannotBeWritten(): void
+    {
+        mkdir($this->dir, 0700, true);
+        // Forces file_put_contents() to fail deterministically and
+        // portably — even running as root, which bypasses permission bits —
+        // by making the write target itself a directory rather than relying
+        // on chmod, which ensure()'s own @chmod($dir, 0700) would undo.
+        mkdir($this->dir . '/.htaccess');
+
+        try {
+            $this->expectException(StorageException::class);
+            DataDir::ensure($this->dir);
+        } finally {
+            @rmdir($this->dir . '/.htaccess');
+        }
+    }
+
+    public function testEveryFileTheJsonBackendProducesIsGuardedOrUnguessable(): void
+    {
+        // Reverting config.php/session.php/messages.php back to
+        // .json/.jsonl must fail a test somewhere. This one drives the real
+        // production path — StorageFactory::create() through the actual
+        // JsonStorage/JsonSessionRepo/JsonMessageLog classes, not a
+        // test-only shortcut — and pins every filename it produces.
+        $dir = sys_get_temp_dir() . '/wpsm-datadir-contract-' . bin2hex(random_bytes(6));
+
+        try {
+            $storage = StorageFactory::create($dir, 'json');
+
+            $storage->config()->set('model', 'claude-opus-4-8');
+
+            $storage->sessions()->create(new Session(
+                id:        'sesn_1',
+                title:     'White screen on example.com',
+                blade:     Session::BLADE_RESCUE,
+                status:    Session::STATUS_IDLE,
+                model:     'claude-opus-4-8',
+                effort:    'high',
+                createdAt: 1000,
+                updatedAt: 1000,
+            ));
+
+            $storage->messages()->append('sesn_1', Message::ROLE_USER, [['type' => 'text', 'text' => 'hi']]);
+
+            // .htaccess/index.php are the directory's own protection
+            // markers (asserted elsewhere in this file), not state produced
+            // by the storage layer, so they are excluded from this check —
+            // asserting isServableExtension() is false for .htaccess itself
+            // would be asserting the wrong thing (its own extension,
+            // "htaccess", is not PHP-executable, and that is a separate,
+            // already-documented residual risk, not a state-file leak).
+            $protectionNames = array_keys(DataDir::protectionFiles());
+            $stateFiles = array_values(array_filter(
+                $this->filesUnder($dir),
+                static fn (string $file): bool => !in_array(basename($file), $protectionNames, true)
+            ));
+
+            self::assertNotEmpty(
+                $stateFiles,
+                'the storage layer produced no files — this assertion would be vacuous otherwise'
+            );
+
+            foreach ($stateFiles as $file) {
+                self::assertFalse(
+                    DataDir::isServableExtension($file),
+                    $file . ' would be served as a static asset'
+                );
+            }
+        } finally {
+            $this->removeRecursively($dir);
+        }
+    }
+
+    // --- review round 2 (task 2 findings) ---
+
+    public function testEnsureSweepsStaleTempFilesButLeavesFreshOnesAlone(): void
+    {
+        // Task 2's IMPORTANT 4: a fatal, timeout, or OOM between
+        // GuardedJson::write()'s file_put_contents() and its rename()
+        // leaves a *.tmp.<hex> file holding a full, UNGUARDED copy of
+        // whatever was being written — for KeyVault, the master secret
+        // itself — at an extension isServableExtension() already
+        // classifies as servable. ensure() runs on every guarded write, so
+        // it is where this gets swept.
+        DataDir::ensure($this->dir);
+
+        $stale = $this->dir . '/keyvault.php.tmp.' . bin2hex(random_bytes(4));
+        file_put_contents($stale, 'leftover master secret payload');
+        touch($stale, time() - 301);
+
+        $fresh = $this->dir . '/keyvault.php.tmp.' . bin2hex(random_bytes(4));
+        file_put_contents($fresh, 'a concurrent write may still own this file');
+
+        DataDir::ensure($this->dir);
+
+        self::assertFileDoesNotExist($stale, 'a temp file older than the threshold must be swept');
+        self::assertFileExists($fresh, 'a temp file young enough to belong to an in-flight write must survive');
+    }
+
+    // --- review round 3 (task 2 findings r2) ---
+
+    public function testSweepToleratesAnUnreadableOrAbsentDirectoryWithoutEmittingAWarning(): void
+    {
+        // Task 2 review round 2, item (c): scandir() in the sweep was
+        // unsuppressed, so on a data directory whose mode or ownership got
+        // mangled — the exact misconfiguration this class exists to defend
+        // against — it leaked a raw "scandir(): failed to open dir"
+        // E_WARNING straight into the HTTP response. A non-existent
+        // directory triggers the identical failure mode (scandir()
+        // returning false with a warning) portably, without needing
+        // fragile permission/ownership tricks that ensure()'s own
+        // @chmod($dir, 0700) would undo before the sweep ever ran anyway.
+        $method = new ReflectionMethod(DataDir::class, 'sweepStaleTempFiles');
+
+        if (PHP_VERSION_ID < 80100) {
+            $method->setAccessible(true);
+        }
+
+        $warnings = [];
+        set_error_handler(
+            // error_reporting() & $errno, not a literal 0 comparison: since
+            // PHP 8, @ no longer zeroes error_reporting() for the duration
+            // of the call — it reduces the mask to only the levels @
+            // cannot silence (fatal-ish ones), verified empirically at
+            // 4437 with E_WARNING absent from it. Checking the bit for
+            // this specific $errno is the correct, version-accurate way to
+            // tell "silenced by @" apart from "genuinely unsuppressed".
+            static function (int $errno, string $errstr) use (&$warnings): bool {
+                if (!(error_reporting() & $errno)) {
+                    return true;
+                }
+
+                $warnings[] = $errstr;
+
+                return true;
+            },
+            E_WARNING
+        );
+
+        try {
+            $method->invoke(null, $this->dir . '/does-not-exist-' . bin2hex(random_bytes(4)));
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([], $warnings, 'an unreadable or absent directory must not leak a raw scandir() warning');
+    }
+
+    public function testSweepRegexDoesNotTreatATrailingNewlineAsPartOfTheHexSuffix(): void
+    {
+        // Task 2 review round 2, item (e): PCRE's $ matches "end of
+        // subject" OR "immediately before a single trailing newline at the
+        // end of the subject" unless \z is used instead. bin2hex() never
+        // emits "\n", so a filename ending "...deadbeef\n" is not one
+        // GuardedJson::write() could ever have produced, and must never be
+        // treated as a sweepable temp file.
+        DataDir::ensure($this->dir);
+
+        $decoy = $this->dir . "/keyvault.php.tmp.deadbeef\n";
+        touch($decoy, time() - 301);
+
+        try {
+            DataDir::ensure($this->dir);
+
+            self::assertFileExists($decoy, 'a trailing newline after the hex suffix must not match the sweep pattern');
+        } finally {
+            // finally, not a trailing statement: if the regex ever
+            // regresses — the exact thing this test exists to catch — the
+            // assertion above throws, and a trailing unlink() would never
+            // run, leaving the decoy behind for every later test in this
+            // file to trip over.
+            @unlink($decoy);
+        }
+    }
+
+    /** @return list<string> */
+    private function filesUnder(string $dir): array
+    {
+        $files = [];
+
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $full = $dir . '/' . $entry;
+
+            if (is_dir($full)) {
+                foreach ($this->filesUnder($full) as $nested) {
+                    $files[] = $nested;
+                }
+            } else {
+                $files[] = $full;
+            }
+        }
+
+        return $files;
+    }
+
+    private function removeRecursively(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $full = $dir . '/' . $entry;
+            is_dir($full) ? $this->removeRecursively($full) : unlink($full);
+        }
+
+        rmdir($dir);
+    }
+}

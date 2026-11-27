@@ -1,112 +1,91 @@
 import { useEffect, useState } from 'preact/hooks'
+import { get, post, setCsrf } from './api.js'
+import { Install } from './screens/Install.jsx'
+import { Login } from './screens/Login.jsx'
+import { Environment } from './screens/Environment.jsx'
 
-// Relative, no leading slash — same reason as `base: './'` in vite.config.js.
-const ENDPOINT = 'api/env'
-
-function Pill({ tone, children }) {
-  const tones = {
-    good: 'bg-green/10 text-green ring-green/20',
-    bad: 'bg-danger/10 text-danger-deep ring-danger/20',
-    idle: 'bg-surface-raised text-ink-muted ring-edge',
-  }
-
-  return (
-    <span class={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${tones[tone]}`}>
-      {children}
-    </span>
-  )
-}
-
-function Row({ label, value, note }) {
-  return (
-    <div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-edge py-3 first:border-t-0">
-      <dt class="text-sm text-ink-muted">{label}</dt>
-      <dd class="text-right">
-        <span class="text-sm font-medium text-ink">{value}</span>
-        {note && <span class="mt-0.5 block text-xs text-ink-faint">{note}</span>}
-      </dd>
-    </div>
-  )
-}
-
+// install/state first. Not installed -> the wizard. Installed -> auth/me: a
+// 401 means sign in; a 200 means the environment panel. Nothing here asks for
+// api/env before sign-in.
 export function App() {
-  const [env, setEnv] = useState(null)
-  const [error, setError] = useState(null)
+  const [view, setView] = useState({ name: 'loading' })
+  const [signOutError, setSignOutError] = useState(null)
 
   useEffect(() => {
-    fetch(ENDPOINT)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(setEnv)
-      .catch((e) => setError(e.message))
+    async function route() {
+      try {
+        const state = await get('install/state')
+
+        if (!state.installed) {
+          setView({ name: 'install', state })
+          return
+        }
+
+        try {
+          const me = await get('auth/me')
+          setCsrf(me.csrf)
+          setView({ name: 'panel', me, selfTest: null })
+        } catch (e) {
+          if (e.status === 401) {
+            setView({ name: 'login' })
+            return
+          }
+          throw e
+        }
+      } catch (e) {
+        setView({ name: 'error', message: e.message })
+      }
+    }
+
+    route()
   }, [])
 
-  const ready = env?.environment?.php_satisfied === true
+  async function signOut() {
+    setSignOutError(null)
 
-  return (
-    <main class="min-h-screen bg-surface-sunken px-6 py-12 font-sans text-ink antialiased">
-      <div class="mx-auto max-w-xl">
-        <header class="mb-8">
-          <h1 class="font-display text-3xl font-semibold tracking-tight">WP SafeMode</h1>
-          <p class="mt-1 text-sm text-ink-muted">
-            Skeleton build. Nothing is being watched yet — this page only reports what
-            this server can do.
+    try {
+      await post('auth/logout', {})
+    } catch (e) {
+      // Still signed in as far as the server is concerned: say so, stay here.
+      setSignOutError("Sign out didn't work, so you are still signed in. " + e.message)
+      return
+    }
+
+    setCsrf(null)
+    setView({ name: 'login' })
+  }
+
+  if (view.name === 'install') {
+    return <Install initialState={view.state} onInstalled={() => setView({ name: 'login' })} />
+  }
+
+  if (view.name === 'login') {
+    return (
+      <Login
+        onSignedIn={(body) =>
+          setView({ name: 'panel', me: { user: body.user, csrf: body.csrf }, selfTest: body.self_test })
+        }
+      />
+    )
+  }
+
+  if (view.name === 'panel') {
+    return <Environment me={view.me} selfTest={view.selfTest} notice={signOutError} onSignOut={signOut} />
+  }
+
+  if (view.name === 'error') {
+    return (
+      <main class="min-h-screen bg-surface-sunken px-6 py-12 font-sans text-ink">
+        <div class="mx-auto max-w-xl rounded-card border border-danger/30 bg-surface p-6 shadow-card">
+          <p class="font-medium">Can't reach the server</p>
+          <p class="mt-2 text-sm text-ink-muted">
+            The page loaded but the tool's own PHP did not answer ({view.message}). Nothing here reflects the state of
+            your site.
           </p>
-        </header>
+        </div>
+      </main>
+    )
+  }
 
-        {error && (
-          <section class="rounded-card border border-danger/30 bg-surface p-6 shadow-card">
-            <Pill tone="bad">Can't reach the server</Pill>
-            <p class="mt-3 text-sm text-ink-muted">
-              The page loaded but <code class="font-mono text-xs text-ink">{ENDPOINT}</code>{' '}
-              did not answer ({error}). The tool's own PHP is not responding, so nothing
-              here reflects the state of your site.
-            </p>
-          </section>
-        )}
-
-        {env && (
-          <section class="rounded-card border border-edge bg-surface p-6 shadow-card">
-            <div class="mb-5 flex items-center justify-between gap-4">
-              <h2 class="font-display text-lg font-semibold">
-                {ready ? 'This server can run WP SafeMode' : 'This server cannot run WP SafeMode'}
-              </h2>
-              <Pill tone={ready ? 'good' : 'bad'}>{ready ? 'Ready' : 'Blocked'}</Pill>
-            </div>
-
-            <dl>
-              <Row label="Version" value={env.app.version} />
-
-              <Row
-                label="PHP"
-                value={env.environment.php_version}
-                note={ready ? 'meets the 8.0 minimum' : 'below the 8.0 minimum — nothing will run'}
-              />
-
-              <Row
-                label="Storage"
-                value={env.storage.backend}
-                note={
-                  env.storage.backend === 'sqlite'
-                    ? 'one database file, chosen at install'
-                    : 'JSON files — pdo_sqlite was unavailable at install'
-                }
-              />
-
-              <Row
-                label="WordPress"
-                value={env.environment.wp_detected ? 'found' : 'not found'}
-                note={
-                  env.environment.wp_detected
-                    ? 'sitting next to this folder'
-                    : 'not in any of the usual places around this folder'
-                }
-              />
-            </dl>
-          </section>
-        )}
-
-        {!env && !error && <p class="text-sm text-ink-faint">Checking this server…</p>}
-      </div>
-    </main>
-  )
+  return <p class="p-6 text-sm text-ink-faint">Checking this server…</p>
 }

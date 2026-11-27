@@ -6,9 +6,25 @@ namespace WPSafeMode\Tests\Core;
 
 use PHPUnit\Framework\TestCase;
 use WPSafeMode\Core\Environment;
+use WPSafeMode\Tests\Support\ServedCopy;
 
 final class EnvironmentTest extends TestCase
 {
+    /** @var list<string> */
+    private array $made = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->made as $dir) {
+            ServedCopy::remove($dir);
+        }
+    }
+
+    private function tempDir(): string
+    {
+        return $this->made[] = sys_get_temp_dir() . '/wpsm-env-' . bin2hex(random_bytes(4));
+    }
+
     public function testProbeReportsRunningPhpVersionAsSatisfied(): void
     {
         $report = Environment::probe();
@@ -24,7 +40,7 @@ final class EnvironmentTest extends TestCase
 
     public function testWpRootIsNullWhenNoWordPressAbove(): void
     {
-        $dir = sys_get_temp_dir() . '/wpsm-env-' . bin2hex(random_bytes(4)) . '/nested';
+        $dir = $this->tempDir() . '/nested';
         mkdir($dir, 0777, true);
 
         self::assertNull(Environment::probe($dir)->wpRoot);
@@ -32,7 +48,7 @@ final class EnvironmentTest extends TestCase
 
     public function testWpRootIsFoundInParentDirectory(): void
     {
-        $base = sys_get_temp_dir() . '/wpsm-env-' . bin2hex(random_bytes(4));
+        $base = $this->tempDir();
         mkdir($base . '/wp-includes', 0777, true);
         mkdir($base . '/wpsm-abc123', 0777, true);
         file_put_contents($base . '/wp-config.php', "<?php\n");

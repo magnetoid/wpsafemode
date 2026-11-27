@@ -4,22 +4,35 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
+use WPSafeMode\Storage\Contracts\AuditLog;
+use WPSafeMode\Storage\Contracts\AuthSessionStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
+use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\Storage;
+use WPSafeMode\Storage\Contracts\UserStore;
+use WPSafeMode\Storage\Sqlite\SqliteAuditLog;
+use WPSafeMode\Storage\Sqlite\SqliteAuthSessionStore;
 use WPSafeMode\Storage\Sqlite\SqliteConfigStore;
 use WPSafeMode\Storage\Sqlite\SqliteConnection;
 use WPSafeMode\Storage\Sqlite\SqliteMessageLog;
+use WPSafeMode\Storage\Sqlite\SqliteRateLimiter;
 use WPSafeMode\Storage\Sqlite\SqliteSessionRepo;
+use WPSafeMode\Storage\Sqlite\SqliteUserStore;
 
 final class SqliteStorage implements Storage
 {
     private SqliteConnection $connection;
 
-    public function __construct(string $dataDir)
+    public function __construct(string $dataDir, string $filename = 'wpsm.sqlite')
     {
-        $this->connection = new SqliteConnection($dataDir . '/wpsm.sqlite');
+        $this->connection = new SqliteConnection($dataDir . '/' . $filename);
     }
 
     public function config(): ConfigStore
@@ -35,6 +48,26 @@ final class SqliteStorage implements Storage
     public function messages(): MessageLog
     {
         return new SqliteMessageLog($this->connection);
+    }
+
+    public function users(): UserStore
+    {
+        return new SqliteUserStore($this->connection);
+    }
+
+    public function rateLimiter(): RateLimiter
+    {
+        return new SqliteRateLimiter($this->connection);
+    }
+
+    public function authSessions(): AuthSessionStore
+    {
+        return new SqliteAuthSessionStore($this->connection);
+    }
+
+    public function auditLog(): AuditLog
+    {
+        return new SqliteAuditLog($this->connection);
     }
 
     public function backend(): string

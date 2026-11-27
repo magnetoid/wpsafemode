@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+// What src/index.php defines before anything else: without it every file
+// under src/ answers 404 and exits.
+define('WPSM_ENTRY', true);
+
 require __DIR__ . '/../src/autoload.php';
 
 spl_autoload_register(static function (string $class): void {

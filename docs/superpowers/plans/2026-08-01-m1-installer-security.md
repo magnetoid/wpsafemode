@@ -1,5 +1,7 @@
 # M1 — Installer and Security Implementation Plan
 
+> **Status, 2026-11-25:** Tasks 1–4 are built. Tasks 5–13 are superseded by `2026-11-25-m1-recut-identity-installer.md`, which reuses parts of them by task name. Do not execute Tasks 5–13 from this file.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the tool refuse to do anything until it has been installed, and make an installed copy defensible — password-gated, rate-limited, CSRF-protected, with its data directory proven unreachable over HTTP before an API key is ever accepted.
@@ -18,6 +20,9 @@ Every task's requirements implicitly include this section.
 - **`data/` is never committed.** It is already in `.gitignore`.
 - **No absolute server path may reach the browser or the model** (spec §5.7). `EnvironmentReport::toArray()` already omits `wpRoot`; every new response follows the same rule.
 - **No file under `data/` may carry an extension a web server will serve as a static asset** (spec §15.1 corollary). This overrides the `.json`/`.jsonl` filenames drawn in spec §7.2 — see Task 1.
+- **Every `json_encode` whose output lands in a `.php` file sets `JSON_HEX_TAG`.** State files are named `.php` so the server executes them, which means payload bytes are code if they are ever reached. `json_encode` does not escape `<` or `?` by default, so model- and user-supplied content can carry a literal `<?php`. Found by review during Task 1, where it combined with a guard-placement bug into remote code execution.
+- **Fail closed on anything that classifies a file as safe.** `DataDir::isServableExtension()` returns false only for extensions the server *executes*; every unrecognised extension is treated as servable. A denylist of "risky" extensions silently blesses the next one nobody thought of.
+- **A guard decision is made from a locked file handle, never from a pre-`fopen()` snapshot.** `fopen(..., 'ab')` itself creates the file, and `ftell()` on an append stream returns 0 regardless of size, so "is this file new" is only answerable via `fstat()` under `LOCK_EX`.
 - **Commit after every task**, conventional commit messages, small commits.
 - **Run `vendor/bin/phpstan analyse --no-progress` and `vendor/bin/phpunit` before every commit.** Where Docker is available, `make test` is the reference; `make check-host` is the fallback.
 
@@ -1659,6 +1664,29 @@ final class RateLimitState
     {
         return $this->isLocked($now) ? (int) $this->lockedUntil - $now : 0;
     }
+
+    /**
+     * This state as it should be read at $now, with an elapsed window or a
+     * released lock already forgotten.
+     *
+     * It lives on the value object rather than in either backend so the two
+     * implementations cannot drift: the conformance suite would catch a
+     * divergence, but only after it had already shipped in one backend.
+     */
+    public function afterExpiry(int $now, int $windowSeconds): self
+    {
+        if ($this->isLocked($now)) {
+            return $this;
+        }
+
+        if ($now - $this->windowStart >= $windowSeconds) {
+            return new self(0, $now, null);
+        }
+
+        // The window is still open, but an expired lock must not keep counting
+        // against the user, or one lockout would become permanent.
+        return $this->lockedUntil !== null ? new self(0, $now, null) : $this;
+    }
 }
 ```
 
@@ -1890,24 +1918,7 @@ final class SqliteRateLimiter implements RateLimiter
             $row['locked_until'] === null ? null : (int) $row['locked_until']
         );
 
-        return self::expire($state, $now);
-    }
-
-    public static function expire(RateLimitState $state, int $now): RateLimitState
-    {
-        if ($state->isLocked($now)) {
-            return $state;
-        }
-
-        if ($now - $state->windowStart >= RateLimiter::WINDOW_SECONDS) {
-            return new RateLimitState(0, $now, null);
-        }
-
-        // The window is still open but an expired lock must not keep counting
-        // against the user, or one lockout would become permanent.
-        return $state->lockedUntil !== null
-            ? new RateLimitState(0, $now, null)
-            : $state;
+        return $state->afterExpiry($now, self::WINDOW_SECONDS);
     }
 }
 ```
@@ -1924,7 +1935,6 @@ namespace WPSafeMode\Storage\Json;
 use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\RateLimitState;
-use WPSafeMode\Storage\Sqlite\SqliteRateLimiter;
 
 final class JsonRateLimiter implements RateLimiter
 {
@@ -1967,10 +1977,7 @@ final class JsonRateLimiter implements RateLimiter
             isset($row['locked_until']) && $row['locked_until'] !== null ? (int) $row['locked_until'] : null
         );
 
-        // Shared with the SQLite implementation so the two cannot drift: the
-        // conformance suite would catch a divergence, but only after it shipped
-        // in one backend and not the other.
-        return SqliteRateLimiter::expire($state, $now);
+        return $state->afterExpiry($now, self::WINDOW_SECONDS);
     }
 
     public function clear(string $bucket): void

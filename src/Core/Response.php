@@ -4,8 +4,24 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Core;
 
+if (!defined('WPSM_ENTRY')) {
+    http_response_code(404);
+    exit;
+}
+
 final class Response
 {
+    /**
+     * Sent with every answer: the shell, the assets, the API and the errors.
+     * The install folder's random name is the secret part of its address, so
+     * no page of it may hand that address to another site in a Referer.
+     */
+    public const SECURITY_HEADERS = [
+        'Referrer-Policy'        => 'no-referrer',
+        'X-Frame-Options'        => 'DENY',
+        'X-Content-Type-Options' => 'nosniff',
+    ];
+
     /** @param array<string, string> $headers */
     public function __construct(
         public int $status,
@@ -21,16 +37,21 @@ final class Response
             status:  $status,
             body:    (string) json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             headers: [
-                'Content-Type'           => 'application/json; charset=utf-8',
-                'X-Content-Type-Options' => 'nosniff',
-                'Cache-Control'          => 'no-store',
-            ],
+                'Content-Type'  => 'application/json; charset=utf-8',
+                'Cache-Control' => 'no-store',
+            ] + self::SECURITY_HEADERS,
         );
     }
 
     public static function notFound(): self
     {
         return self::json(['error' => 'not_found'], 404);
+    }
+
+    /** A body field of the wrong type: the request is malformed, whatever it holds. */
+    public static function badRequest(): self
+    {
+        return self::json(['error' => 'bad_request'], 422);
     }
 
     public static function methodNotAllowed(): self
@@ -42,7 +63,7 @@ final class Response
     {
         http_response_code($this->status);
 
-        foreach ($this->headers as $name => $value) {
+        foreach ($this->headers + self::SECURITY_HEADERS as $name => $value) {
             header($name . ': ' . $value);
         }
 

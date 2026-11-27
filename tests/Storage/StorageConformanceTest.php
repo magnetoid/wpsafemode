@@ -5,12 +5,22 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Storage;
 
 use PHPUnit\Framework\TestCase;
+use WPSafeMode\Security\Channel;
+use WPSafeMode\Security\Principal;
+use WPSafeMode\Security\Role;
+use WPSafeMode\Storage\AuditEvent;
+use WPSafeMode\Storage\Contracts\AuditLog;
+use WPSafeMode\Storage\Contracts\AuthSessionStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
+use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
+use WPSafeMode\Storage\Contracts\UserStore;
+use WPSafeMode\Storage\Credential;
 use WPSafeMode\Storage\Message;
 use WPSafeMode\Storage\Session;
+use WPSafeMode\Storage\User;
 
 /**
  * One suite, two backends. Every assertion here must hold identically for
@@ -26,6 +36,58 @@ abstract class StorageConformanceTest extends TestCase
     abstract protected function makeSessionRepo(string $dataDir): SessionRepo;
 
     abstract protected function makeMessageLog(string $dataDir): MessageLog;
+
+    abstract protected function makeUserStore(string $dataDir): UserStore;
+
+    abstract protected function makeRateLimiter(string $dataDir): RateLimiter;
+
+    abstract protected function makeAuditLog(string $dataDir): AuditLog;
+
+    abstract protected function makeAuthSessionStore(string $dataDir): AuthSessionStore;
+
+    /**
+     * Writes $value as text into a stored user's integer field, behind the
+     * store's back. SQLite stores it as a BLOB so column affinity cannot turn
+     * "5\n" back into the integer 5; JSON stores it as a string.
+     */
+    abstract protected function writeUserField(string $dataDir, int $id, string $field, string $value): void;
+
+    /** The same, for a stored login session. */
+    abstract protected function writeAuthSessionField(string $dataDir, string $tokenHash, string $field, string $value): void;
+
+    /** Appends a row, through the backend's own storage, that no AuditEvent could produce (actor is empty). */
+    abstract protected function writeMalformedAuditRow(string $dataDir): void;
+
+    /**
+     * Backend-specific: the JSON backend keeps one directory per session and
+     * must leave none behind after delete() removes an otherwise-untouched
+     * session; SQLite has no per-session directory to check, so its
+     * implementation is a documented no-op.
+     */
+    abstract protected function assertNoSessionStorageLeftBehind(string $dataDir, string $id): void;
+
+    /**
+     * Backend-specific, added in review round 1 (IMPORTANT 2): writes a
+     * value for $bucket that cannot have been produced by this backend's own
+     * hit() — directly through the backend's own storage (raw SQL for
+     * SQLite, a raw GuardedJson::write() for JSON) rather than through
+     * RateLimiter at all, since going through the interface could never
+     * produce a malformed row in the first place. The two backends' storage
+     * shapes are different enough (a typed SQL row vs. a JSON sub-array)
+     * that there is no way to express "a malformed value" once, generically,
+     * the way the other hooks do — the conformance test that uses this
+     * (testMalformedStoredValueFailsClosedIdenticallyInBothBackends) is what
+     * actually pins the two backends to one shared, fail-closed
+     * interpretation; this hook only gets the bad data onto disk.
+     */
+    abstract protected function writeMalformedRateLimitEntry(string $dataDir, string $bucket): void;
+
+    /**
+     * Backend-specific: corrupts the stored record of user 1 directly
+     * through the backend's own storage (raw SQL / raw GuardedJson), the
+     * same idea as writeMalformedRateLimitEntry().
+     */
+    abstract protected function writeMalformedUserRecord(string $dataDir): void;
 
     protected function setUp(): void
     {
@@ -53,6 +115,75 @@ abstract class StorageConformanceTest extends TestCase
         }
 
         rmdir($path);
+    }
+
+    /**
+     * Spawns $workers independent PHP processes, each performing exactly one
+     * hit() against $bucket, and returns each process's raw stdout
+     * ("OK:<attempts>" or "ERR:<message>").
+     *
+     * Added in review round 1 (CRITICAL 1), to prove the concurrent
+     * lost-update fix against the real hit() method rather than against a
+     * hand-rolled stand-in for it. That requires genuine OS-level
+     * concurrency, not a simulated interleaving: hit() is one atomic PHP
+     * method call with no seam that would let a single test process pause
+     * it mid-way to interleave it with itself, so the only way to make two
+     * "logical" callers' read and write steps actually overlap is to run
+     * hit() in two real, independent processes and let the OS schedule
+     * them. This is a concrete helper, not a new abstract factory hook: the
+     * only backend-specific part is the constructor expression each test
+     * passes in as a string, evaluated inside the worker script.
+     *
+     * @return list<string>
+     */
+    protected function hitConcurrently(string $limiterExpr, string $bucket, int $now, int $workers): array
+    {
+        $bootstrap = dirname(__DIR__, 2) . '/src/autoload.php';
+        $script = $this->dataDir . '/_concurrent_hit_worker.php';
+
+        file_put_contents(
+            $script,
+            '<?php' . "\n"
+            . "define('WPSM_ENTRY', true);" . "\n"
+            . 'require ' . var_export($bootstrap, true) . ';' . "\n"
+            . '$dataDir = ' . var_export($this->dataDir, true) . ';' . "\n"
+            . '$limiter = ' . $limiterExpr . ';' . "\n"
+            . 'try {' . "\n"
+            . '    $state = $limiter->hit(' . var_export($bucket, true) . ', ' . $now . ');' . "\n"
+            . '    fwrite(STDOUT, \'OK:\' . $state->attempts);' . "\n"
+            . '} catch (\Throwable $e) {' . "\n"
+            . '    fwrite(STDOUT, \'ERR:\' . $e->getMessage());' . "\n"
+            . '}' . "\n"
+        );
+
+        $handles = [];
+        for ($i = 0; $i < $workers; $i++) {
+            $descriptors = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+            $proc = proc_open([PHP_BINARY, $script], $descriptors, $pipes);
+            self::assertTrue(is_resource($proc), 'proc_open() must succeed for this test to run');
+            $handles[] = ['proc' => $proc, 'pipes' => $pipes];
+        }
+
+        $outputs = [];
+
+        foreach ($handles as $h) {
+            $stdout = (string) stream_get_contents($h['pipes'][1]);
+            // Drained, but not asserted empty (review round 2, "also fix" b):
+            // workers run under whatever default php.ini this machine has,
+            // so a benign startup notice on some environment would fail this
+            // helper on output that has nothing to do with the code under
+            // test. The worker's own OK:/ERR: protocol on stdout is the
+            // signal that matters; stderr is folded in only as context for
+            // whichever assertion the caller makes against $stdout.
+            $stderr = (string) stream_get_contents($h['pipes'][2]);
+            fclose($h['pipes'][1]);
+            fclose($h['pipes'][2]);
+            proc_close($h['proc']);
+
+            $outputs[] = $stderr === '' ? $stdout : $stdout . ' [stderr: ' . $stderr . ']';
+        }
+
+        return $outputs;
     }
 
     public function testGetReturnsDefaultWhenKeyIsAbsent(): void
@@ -217,6 +348,7 @@ abstract class StorageConformanceTest extends TestCase
         $repo->delete('sesn_1');
 
         self::assertNull($repo->find('sesn_1'));
+        $this->assertNoSessionStorageLeftBehind($this->dataDir, 'sesn_1');
     }
 
     public function testAppendAssignsSequentialSeqStartingAtOne(): void
@@ -270,5 +402,619 @@ abstract class StorageConformanceTest extends TestCase
 
         $log->append('sesn_1', Message::ROLE_USER, [['type' => 'text', 'text' => 'x']]);
         self::assertSame(1, $log->count('sesn_1'));
+    }
+
+    private function credential(string $hash = '$argon2id$hash', int $created = 1000, int $changed = 2000): Credential
+    {
+        return new Credential($hash, 'argon2id', $created, $changed);
+    }
+
+    public function testUserStoreStartsEmpty(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+
+        self::assertTrue($store->isEmpty());
+        self::assertSame([], $store->all());
+        self::assertNull($store->find(1));
+        self::assertNull($store->findByLogin('owner'));
+    }
+
+    public function testCreateAssignsIdOneAndRoundTripsEveryField(): void
+    {
+        $credential = $this->credential();
+        $created = $this->makeUserStore($this->dataDir)->create('owner', Role::OWNER, $credential);
+
+        self::assertSame(1, $created->id);
+
+        $store = $this->makeUserStore($this->dataDir);
+        $found = $store->find(1);
+
+        self::assertNotNull($found);
+        self::assertSame('owner', $found->login);
+        self::assertSame('owner', $found->role);
+        self::assertSame($credential->toRow(), $found->credential->toRow());
+        self::assertNull($found->disabledAt);
+        self::assertTrue($found->isEnabled());
+        self::assertFalse($store->isEmpty());
+    }
+
+    public function testCreateIfEmptyCreatesOnlyTheFirstUser(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+
+        $first = $store->createIfEmpty('owner', Role::OWNER, $this->credential());
+        self::assertNotNull($first);
+        self::assertSame(1, $first->id);
+
+        self::assertNull($store->createIfEmpty('second', Role::ADMIN, $this->credential()));
+        self::assertCount(1, $store->all());
+    }
+
+    public function testLoginIsNormalisedAndUnique(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+
+        self::assertSame('marko', $store->create('  Marko ', Role::ADMIN, $this->credential())->login);
+
+        $this->expectException(StorageException::class);
+        $store->create('MARKO', Role::VIEWER, $this->credential());
+    }
+
+    public function testFindByLoginIgnoresCaseAndPadding(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('marko', Role::ADMIN, $this->credential());
+
+        $found = $store->findByLogin('  MARKO ');
+
+        self::assertNotNull($found);
+        self::assertSame(1, $found->id);
+        self::assertNull($store->findByLogin('not a login'));
+    }
+
+    /** @return array<string, array{string}> */
+    public static function invalidLogins(): array
+    {
+        return [
+            'empty'     => [''],
+            'too short' => ['ab'],
+            'space'     => ['has space'],
+            'lead dash' => ['-lead'],
+            'too long'  => [str_repeat('a', 65)],
+            'non ascii' => ['ünï'],
+        ];
+    }
+
+    /** @dataProvider invalidLogins */
+    public function testAnInvalidLoginIsRejected(string $login): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+
+        try {
+            $store->create($login, Role::VIEWER, $this->credential());
+            self::fail('Expected StorageException');
+        } catch (StorageException $e) {
+            self::assertTrue($store->isEmpty(), 'A rejected create must store nothing.');
+        }
+    }
+
+    public function testAnUnknownRoleIsRejected(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+
+        try {
+            $store->create('x1y', 'root', $this->credential());
+            self::fail('Expected StorageException');
+        } catch (StorageException $e) {
+            self::assertTrue($store->isEmpty());
+        }
+    }
+
+    public function testAllReturnsUsersOrderedById(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('user-c', Role::VIEWER, $this->credential());
+        $store->create('user-a', Role::VIEWER, $this->credential());
+        $store->create('user-b', Role::VIEWER, $this->credential());
+
+        self::assertSame([1, 2, 3], array_map(static fn ($u) => $u->id, $store->all()));
+        self::assertSame(['user-c', 'user-a', 'user-b'], array_map(static fn ($u) => $u->login, $store->all()));
+    }
+
+    public function testUpdatePersistsRoleCredentialAndDisabledAt(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $user = $store->create('marko', Role::VIEWER, $this->credential());
+
+        $user->role = Role::ADMIN;
+        $user->credential = new Credential('$argon2id$new', 'argon2id', 1000, 5000);
+        $user->disabledAt = 7000;
+        $store->update($user);
+
+        $found = $this->makeUserStore($this->dataDir)->find($user->id);
+
+        self::assertNotNull($found);
+        self::assertSame(Role::ADMIN, $found->role);
+        self::assertSame('$argon2id$new', $found->credential->hash);
+        self::assertSame(5000, $found->credential->changedAt);
+        self::assertSame(7000, $found->disabledAt);
+        self::assertFalse($found->isEnabled());
+    }
+
+    public function testUpdateKeepsTheOriginalCreationTime(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $user = $store->create('marko', Role::VIEWER, $this->credential('$argon2id$a', 1000, 1000));
+
+        $user->credential = new Credential('$argon2id$b', 'argon2id', 9000, 3000);
+        $store->update($user);
+
+        $found = $store->find($user->id);
+
+        self::assertNotNull($found);
+        self::assertSame(1000, $found->credential->createdAt);
+        self::assertSame(3000, $found->credential->changedAt);
+        self::assertSame(9000, $user->credential->createdAt, 'update() must not mutate the User it was given');
+    }
+
+    public function testUpdateRejectsAnUnknownUser(): void
+    {
+        $this->expectException(StorageException::class);
+
+        $this->makeUserStore($this->dataDir)->update(new User(42, 'ghost', Role::VIEWER, $this->credential()));
+    }
+
+    public function testUpdateRejectsALoginTakenByAnotherUser(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('first', Role::VIEWER, $this->credential());
+        $second = $store->create('second', Role::VIEWER, $this->credential());
+
+        $second->login = 'FIRST';
+
+        $this->expectException(StorageException::class);
+        $store->update($second);
+    }
+
+    public function testUpdateWritesTheLoginNormalisedAndMayKeepItsOwn(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $user = $store->create('marko', Role::VIEWER, $this->credential());
+
+        $user->login = ' MARKO ';
+        $store->update($user);
+        self::assertSame('marko', $store->find($user->id)?->login);
+
+        $user->login = 'Marko.T';
+        $store->update($user);
+        self::assertSame('marko.t', $store->find($user->id)?->login);
+    }
+
+    public function testUpdateRejectsAnInvalidLoginOrRole(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $user = $store->create('marko', Role::VIEWER, $this->credential());
+
+        $user->login = 'x';
+        try {
+            $store->update($user);
+            self::fail('Expected StorageException for the login');
+        } catch (StorageException $e) {
+            // expected
+        }
+
+        $user->login = 'marko';
+        $user->role = 'root';
+        $this->expectException(StorageException::class);
+        $store->update($user);
+    }
+
+    public function testAMalformedUserRecordFailsClosedInBothBackends(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('marko', Role::OWNER, $this->credential());
+        $this->writeMalformedUserRecord($this->dataDir);
+
+        $calls = [
+            'find'        => static fn () => $store->find(1),
+            'findByLogin' => static fn () => $store->findByLogin('marko'),
+            'all'         => static fn () => $store->all(),
+            'isEmpty'     => static fn () => $store->isEmpty(),
+        ];
+
+        foreach ($calls as $name => $call) {
+            try {
+                $call();
+                self::fail($name . '() must throw on a malformed record');
+            } catch (StorageException $e) {
+                self::assertInstanceOf(StorageException::class, $e);
+            }
+        }
+    }
+
+    public function testAnUnknownBucketIsUnlockedWithNoAttempts(): void
+    {
+        $state = $this->makeRateLimiter($this->dataDir)->peek('ip:1.2.3.4', 1000);
+
+        self::assertSame(0, $state->attempts);
+        self::assertFalse($state->isLocked(1000));
+    }
+
+    public function testAttemptsAccumulateWithinTheWindow(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+
+        self::assertSame(1, $limiter->hit('ip:1.2.3.4', 1000)->attempts);
+        self::assertSame(2, $limiter->hit('ip:1.2.3.4', 1010)->attempts);
+        self::assertSame(2, $this->makeRateLimiter($this->dataDir)->peek('ip:1.2.3.4', 1010)->attempts);
+    }
+
+    public function testExceedingTheLimitLocksTheBucket(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+        $state = new \WPSafeMode\Storage\RateLimitState(0, 0, null);
+
+        for ($i = 0; $i < RateLimiter::MAX_ATTEMPTS; $i++) {
+            $state = $limiter->hit('ip:1.2.3.4', 1000);
+        }
+
+        self::assertTrue($state->isLocked(1000));
+        self::assertSame(RateLimiter::LOCKOUT_SECONDS, $state->retryAfter(1000));
+    }
+
+    public function testTheLockExpires(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+
+        for ($i = 0; $i < RateLimiter::MAX_ATTEMPTS; $i++) {
+            $limiter->hit('ip:1.2.3.4', 1000);
+        }
+
+        $after = 1000 + RateLimiter::LOCKOUT_SECONDS + 1;
+
+        self::assertFalse($limiter->peek('ip:1.2.3.4', $after)->isLocked($after));
+    }
+
+    public function testTheWindowResetsAfterItElapses(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+        $limiter->hit('ip:1.2.3.4', 1000);
+        $limiter->hit('ip:1.2.3.4', 1000);
+
+        $later = 1000 + RateLimiter::WINDOW_SECONDS + 1;
+
+        self::assertSame(1, $limiter->hit('ip:1.2.3.4', $later)->attempts);
+    }
+
+    public function testBucketsAreIndependent(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+
+        for ($i = 0; $i < RateLimiter::MAX_ATTEMPTS; $i++) {
+            $limiter->hit('ip:1.2.3.4', 1000);
+        }
+
+        self::assertFalse($limiter->peek('ip:5.6.7.8', 1000)->isLocked(1000));
+    }
+
+    public function testClearForgetsTheBucket(): void
+    {
+        $limiter = $this->makeRateLimiter($this->dataDir);
+
+        for ($i = 0; $i < RateLimiter::MAX_ATTEMPTS; $i++) {
+            $limiter->hit('ip:1.2.3.4', 1000);
+        }
+
+        $limiter->clear('ip:1.2.3.4');
+
+        self::assertSame(0, $this->makeRateLimiter($this->dataDir)->peek('ip:1.2.3.4', 1000)->attempts);
+    }
+
+    /**
+     * Review round 1, IMPORTANT 2: before this test, nothing wrote a
+     * malformed row/entry directly, so the conformance suite could not see
+     * that the two backends disagreed on what a corrupt stored value means —
+     * SQLite blindly (int)-cast garbage (an arbitrary result depending on
+     * the garbage), while JSON collapsed a shape it did not recognise to a
+     * clean, unlocked slate (the most permissive reading possible for a
+     * security counter). Both must now fail closed the same way: a value
+     * that cannot be trusted to mean anything else reads as already at the
+     * limit, not as a fresh bucket.
+     */
+    public function testMalformedStoredValueFailsClosedIdenticallyInBothBackends(): void
+    {
+        $this->writeMalformedRateLimitEntry($this->dataDir, 'ip:9.9.9.9');
+
+        $state = $this->makeRateLimiter($this->dataDir)->peek('ip:9.9.9.9', 1000);
+
+        self::assertTrue(
+            $state->isLocked(1000),
+            'a stored value that cannot be trusted to mean anything else must fail closed (locked), never silently read as a fresh, unlocked bucket'
+        );
+        self::assertSame(RateLimiter::MAX_ATTEMPTS, $state->attempts);
+        self::assertSame(RateLimiter::LOCKOUT_SECONDS, $state->retryAfter(1000));
+    }
+
+    private function auditUser(): Principal
+    {
+        return Principal::forUser(new User(3, 'owner', Role::OWNER, new Credential('h', 'argon2id', 1, 1)), Channel::BROWSER);
+    }
+
+    public function testAnEventCarriesItsActorsLabel(): void
+    {
+        self::assertSame('user:3', AuditEvent::by($this->auditUser(), AuditEvent::LOGIN)->actor);
+        self::assertSame(
+            'anonymous',
+            AuditEvent::by(Principal::anonymous(Channel::BROWSER), AuditEvent::LOGIN_FAILED)->actor
+        );
+    }
+
+    public function testAuditLogStartsEmpty(): void
+    {
+        self::assertSame([], $this->makeAuditLog($this->dataDir)->recent());
+    }
+
+    public function testRecordedEventsComeBackNewestFirst(): void
+    {
+        $log = $this->makeAuditLog($this->dataDir);
+        $log->record(AuditEvent::by($this->auditUser(), AuditEvent::INSTALL, '1.2.3.4', null, [], 1000));
+        $log->record(AuditEvent::by($this->auditUser(), AuditEvent::LOGIN, '1.2.3.4', null, [], 2000));
+
+        $events = $this->makeAuditLog($this->dataDir)->recent();
+
+        self::assertCount(2, $events);
+        self::assertSame(AuditEvent::LOGIN, $events[0]->event);
+        self::assertSame(AuditEvent::INSTALL, $events[1]->event);
+    }
+
+    public function testEqualTimestampsComeBackInInsertionOrderNewestFirst(): void
+    {
+        $log = $this->makeAuditLog($this->dataDir);
+        $log->record(AuditEvent::by($this->auditUser(), AuditEvent::INSTALL, null, null, [], 1000));
+        $log->record(AuditEvent::by($this->auditUser(), AuditEvent::LOGIN, null, null, [], 1000));
+        $log->record(AuditEvent::by($this->auditUser(), AuditEvent::LOGOUT, null, null, [], 1000));
+
+        $events = $log->recent();
+
+        self::assertSame(
+            [AuditEvent::LOGOUT, AuditEvent::LOGIN, AuditEvent::INSTALL],
+            array_map(static fn (AuditEvent $e): string => $e->event, $events)
+        );
+    }
+
+    public function testEveryFieldRoundTrips(): void
+    {
+        $log = $this->makeAuditLog($this->dataDir);
+        $log->record(AuditEvent::by(
+            $this->auditUser(),
+            AuditEvent::CONFIG_CHANGE,
+            '1.2.3.4',
+            'model',
+            ['from' => 'a', 'to' => 'b'],
+            1000
+        ));
+
+        $event = $this->makeAuditLog($this->dataDir)->recent()[0];
+
+        self::assertSame(1000, $event->at);
+        self::assertSame('user:3', $event->actor);
+        self::assertSame(AuditEvent::CONFIG_CHANGE, $event->event);
+        self::assertSame('model', $event->subject);
+        self::assertSame(['from' => 'a', 'to' => 'b'], $event->meta);
+        self::assertSame('1.2.3.4', $event->ip);
+    }
+
+    public function testAtDefaultsToNow(): void
+    {
+        $before = time();
+        $event = AuditEvent::by($this->auditUser(), AuditEvent::LOGIN);
+
+        self::assertGreaterThanOrEqual($before, $event->at);
+        self::assertLessThanOrEqual(time(), $event->at);
+    }
+
+    public function testRecentHonoursItsLimit(): void
+    {
+        $log = $this->makeAuditLog($this->dataDir);
+
+        for ($i = 1; $i <= 5; $i++) {
+            $log->record(AuditEvent::by($this->auditUser(), AuditEvent::LOGIN, null, null, [], 1000 + $i));
+        }
+
+        self::assertCount(2, $log->recent(2));
+        self::assertSame(1005, $log->recent(1)[0]->at);
+        self::assertSame([], $log->recent(0));
+        self::assertSame([], $log->recent(-3));
+    }
+
+    public function testASecretPassedInMetaIsNotWrittenVerbatim(): void
+    {
+        // Nothing should ever put a key here, but the audit log is the file most
+        // likely to be pasted into a support thread, so it redacts by field name.
+        $log = $this->makeAuditLog($this->dataDir);
+        $log->record(AuditEvent::by(
+            $this->auditUser(),
+            AuditEvent::CONFIG_CHANGE,
+            null,
+            'api_key',
+            ['api_key' => 'sk-ant-secret'],
+            1000
+        ));
+
+        $event = $this->makeAuditLog($this->dataDir)->recent()[0];
+
+        self::assertSame('[redacted]', $event->meta['api_key']);
+    }
+
+    public function testAMalformedAuditRowFailsClosed(): void
+    {
+        $this->makeAuditLog($this->dataDir)->record(AuditEvent::by($this->auditUser(), AuditEvent::LOGIN, null, null, [], 1000));
+        $this->writeMalformedAuditRow($this->dataDir);
+
+        $this->expectException(StorageException::class);
+        $this->makeAuditLog($this->dataDir)->recent();
+    }
+
+    // --- users: text in an integer column, and the hash algorithm -----
+
+    /** @return array<string, array{0: string}> */
+    public static function textInAnIntegerField(): array
+    {
+        return [
+            'a word'                => ['x'],
+            'digits and a newline'  => ["5\n"],
+            'digits and a space'    => ['5 '],
+        ];
+    }
+
+    /** @dataProvider textInAnIntegerField */
+    public function testTextInAUserIntegerFieldFailsClosed(string $text): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $store->create('marko', Role::OWNER, $this->credential());
+        $this->writeUserField($this->dataDir, 1, 'created_at', $text);
+
+        $this->expectException(StorageException::class);
+        $this->makeUserStore($this->dataDir)->find(1);
+    }
+
+    public function testUpdatePersistsAChangedHashAlgorithm(): void
+    {
+        $store = $this->makeUserStore($this->dataDir);
+        $user = $store->create('marko', Role::OWNER, new Credential('$2y$10$bcrypthash', 'bcrypt', 1000, 1000));
+
+        $user->credential = new Credential('$argon2id$rehashed', 'argon2id', 1000, 4000);
+        $store->update($user);
+
+        $found = $this->makeUserStore($this->dataDir)->find($user->id);
+
+        self::assertNotNull($found);
+        self::assertSame('argon2id', $found->credential->algo);
+        self::assertSame('$argon2id$rehashed', $found->credential->hash);
+        self::assertSame(4000, $found->credential->changedAt);
+    }
+
+    // --- login sessions (AuthSessionStore) ----------------------------
+
+    /** @return array{user_id:int,created_at:int,last_seen_at:int,expires_at:int,ip:string,ua_hash:string} */
+    private function sessionRow(int $userId = 1, int $expiresAt = 5000): array
+    {
+        return [
+            'user_id'      => $userId,
+            'created_at'   => 1000,
+            'last_seen_at' => 1000,
+            'expires_at'   => $expiresAt,
+            'ip'           => '203.0.113.9',
+            'ua_hash'      => str_repeat('a', 64),
+        ];
+    }
+
+    public function testAnUnknownLoginSessionIsNull(): void
+    {
+        self::assertNull($this->makeAuthSessionStore($this->dataDir)->get(str_repeat('0', 64)));
+    }
+
+    public function testACreatedLoginSessionIsFoundWithEveryFieldIntact(): void
+    {
+        $this->makeAuthSessionStore($this->dataDir)->put('hash-1', $this->sessionRow());
+
+        // A second instance: what was found came from disk, not from memory.
+        self::assertSame($this->sessionRow(), $this->makeAuthSessionStore($this->dataDir)->get('hash-1'));
+    }
+
+    public function testPuttingTheSameHashAgainReplacesTheRecord(): void
+    {
+        $store = $this->makeAuthSessionStore($this->dataDir);
+        $store->put('hash-1', $this->sessionRow(1, 5000));
+        $store->put('hash-1', $this->sessionRow(2, 9000));
+
+        self::assertSame($this->sessionRow(2, 9000), $store->get('hash-1'));
+    }
+
+    public function testTouchMovesOnlyLastSeenAndNeverCreatesASession(): void
+    {
+        $store = $this->makeAuthSessionStore($this->dataDir);
+        $store->put('hash-1', $this->sessionRow());
+
+        $store->touch('hash-1', 1500);
+        $store->touch('hash-unknown', 1500);
+
+        $expected = $this->sessionRow();
+        $expected['last_seen_at'] = 1500;
+        self::assertSame($expected, $this->makeAuthSessionStore($this->dataDir)->get('hash-1'));
+        self::assertNull($store->get('hash-unknown'));
+    }
+
+    public function testRevokingOneSessionLeavesTheOthersAndIsIdempotent(): void
+    {
+        $store = $this->makeAuthSessionStore($this->dataDir);
+        $store->put('hash-1', $this->sessionRow(1));
+        $store->put('hash-2', $this->sessionRow(1));
+
+        $store->delete('hash-1');
+        $store->delete('hash-1');
+
+        self::assertNull($store->get('hash-1'));
+        self::assertSame($this->sessionRow(1), $store->get('hash-2'));
+    }
+
+    public function testRevokingEverySessionOfOneUserLeavesAnotherUsersSessions(): void
+    {
+        // The contract revokes by token hash; signing a user out everywhere
+        // is a delete of each of their hashes.
+        $store = $this->makeAuthSessionStore($this->dataDir);
+        $store->put('owner-laptop', $this->sessionRow(1));
+        $store->put('owner-phone', $this->sessionRow(1));
+        $store->put('admin-laptop', $this->sessionRow(2));
+
+        foreach (['owner-laptop', 'owner-phone'] as $hash) {
+            $store->delete($hash);
+        }
+
+        $reopened = $this->makeAuthSessionStore($this->dataDir);
+        self::assertNull($reopened->get('owner-laptop'));
+        self::assertNull($reopened->get('owner-phone'));
+        self::assertSame($this->sessionRow(2), $reopened->get('admin-laptop'));
+    }
+
+    public function testPurgeExpiredRemovesEverySessionWhoseExpiryHasPassed(): void
+    {
+        $store = $this->makeAuthSessionStore($this->dataDir);
+        $store->put('past', $this->sessionRow(1, 1999));
+        $store->put('now', $this->sessionRow(1, 2000));
+        $store->put('future', $this->sessionRow(1, 2001));
+
+        $store->purgeExpired(2000);
+
+        $reopened = $this->makeAuthSessionStore($this->dataDir);
+        self::assertNull($reopened->get('past'));
+        self::assertNull($reopened->get('now'));
+        self::assertSame($this->sessionRow(1, 2001), $reopened->get('future'));
+    }
+
+    public function testPutRefusesAMalformedRowInBothBackends(): void
+    {
+        $store = $this->makeAuthSessionStore($this->dataDir);
+
+        foreach (['ip' => '', 'ua_hash' => ''] as $field => $value) {
+            try {
+                $store->put('hash-1', [$field => $value] + $this->sessionRow());
+                self::fail('A session with an empty ' . $field . ' was stored.');
+            } catch (StorageException $e) {
+                self::assertStringContainsString($field, $e->getMessage());
+            }
+        }
+
+        self::assertNull($store->get('hash-1'));
+    }
+
+    /** @dataProvider textInAnIntegerField */
+    public function testTextInALoginSessionIntegerFieldFailsClosed(string $text): void
+    {
+        $this->makeAuthSessionStore($this->dataDir)->put('hash-1', $this->sessionRow());
+        $this->writeAuthSessionField($this->dataDir, 'hash-1', 'user_id', $text);
+
+        $this->expectException(StorageException::class);
+        $this->makeAuthSessionStore($this->dataDir)->get('hash-1');
     }
 }

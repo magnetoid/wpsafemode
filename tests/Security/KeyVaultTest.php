@@ -457,4 +457,57 @@ final class KeyVaultTest extends TestCase
             rmdir($path);
         }
     }
+
+    // --- task 4: purpose-scoped subkeys ---
+
+    public function testSubkeysAreThirtyTwoBytesAndDifferByPurpose(): void
+    {
+        $vault = new KeyVault($this->dir);
+
+        $keys = [
+            $vault->subkey(KeyVault::PURPOSE_CONFIG),
+            $vault->subkey(KeyVault::PURPOSE_BRIDGE),
+            $vault->subkey(KeyVault::PURPOSE_TOTP),
+            $vault->subkey(KeyVault::PURPOSE_REMOTE),
+        ];
+
+        foreach ($keys as $key) {
+            self::assertSame(32, strlen($key));
+        }
+
+        self::assertCount(4, array_unique($keys));
+    }
+
+    public function testASubkeyIsStableAcrossInstances(): void
+    {
+        $first = (new KeyVault($this->dir))->subkey(KeyVault::PURPOSE_BRIDGE);
+        $second = (new KeyVault($this->dir))->subkey(KeyVault::PURPOSE_BRIDGE);
+
+        self::assertSame($first, $second);
+    }
+
+    public function testAnUnknownPurposeIsRefused(): void
+    {
+        $vault = new KeyVault($this->dir);
+
+        try {
+            $vault->subkey('anything-else');
+            self::fail('An unknown purpose must throw.');
+        } catch (\InvalidArgumentException $e) {
+            // Refused before the master secret is touched: no file is minted.
+            self::assertFileDoesNotExist($this->dir . '/keyvault.php');
+        }
+    }
+
+    public function testAnEnvelopeWrittenBeforeSubkeysStillDecrypts(): void
+    {
+        $envelope = (new KeyVault($this->dir))->encrypt('sk-ant-secret');
+
+        $vault = new KeyVault($this->dir);
+        $vault->subkey(KeyVault::PURPOSE_BRIDGE);
+        $vault->subkey(KeyVault::PURPOSE_TOTP);
+        $vault->subkey(KeyVault::PURPOSE_REMOTE);
+
+        self::assertSame('sk-ant-secret', (new KeyVault($this->dir))->decrypt($envelope));
+    }
 }

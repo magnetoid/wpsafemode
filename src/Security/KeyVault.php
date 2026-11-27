@@ -30,7 +30,18 @@ final class KeyVault
 {
     private const SECRET_FILE = 'keyvault.php';
     private const SECRET_BYTES = 32;
-    private const CONTEXT = 'wpsm:config:v1';
+
+    public const PURPOSE_CONFIG = 'config';
+    public const PURPOSE_BRIDGE = 'bridge';
+    public const PURPOSE_TOTP = 'totp';
+    public const PURPOSE_REMOTE = 'remote';
+
+    private const PURPOSES = [
+        self::PURPOSE_CONFIG,
+        self::PURPOSE_BRIDGE,
+        self::PURPOSE_TOTP,
+        self::PURPOSE_REMOTE,
+    ];
 
     private ?string $key = null;
 
@@ -158,8 +169,22 @@ final class KeyVault
     }
 
     /**
-     * The 32-byte encryption key, derived from the stored master secret so the
-     * secret itself is never used directly and can serve other contexts later.
+     * A 32-byte key derived for one purpose, so the master secret is never
+     * used directly and a key leaked for one purpose cannot decrypt another.
+     * The purpose is checked before the master secret is touched, so an
+     * unknown purpose never mints a secret file.
+     */
+    public function subkey(string $purpose): string
+    {
+        if (!in_array($purpose, self::PURPOSES, true)) {
+            throw new \InvalidArgumentException('Unknown key vault purpose.');
+        }
+
+        return hash_hkdf('sha256', $this->masterSecret(), self::SECRET_BYTES, 'wpsm:' . $purpose . ':v1');
+    }
+
+    /**
+     * The config subkey that encrypt() and decrypt() use. Cached, as before.
      */
     private function key(): string
     {
@@ -167,7 +192,7 @@ final class KeyVault
             return $this->key;
         }
 
-        return $this->key = hash_hkdf('sha256', $this->masterSecret(), self::SECRET_BYTES, self::CONTEXT);
+        return $this->key = $this->subkey(self::PURPOSE_CONFIG);
     }
 
     private function masterSecret(): string

@@ -18,6 +18,8 @@ interface Storage
 
     public function authSessions(): AuthSessionStore;
 
+    public function auditLog(): AuditLog;
+
     /** Either 'sqlite' or 'json'. */
     public function backend(): string;
 }

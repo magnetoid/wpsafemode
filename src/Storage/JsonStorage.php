@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Storage;
 
+use WPSafeMode\Storage\Contracts\AuditLog;
 use WPSafeMode\Storage\Contracts\AuthSessionStore;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
@@ -11,6 +12,7 @@ use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\Storage;
 use WPSafeMode\Storage\Contracts\UserStore;
+use WPSafeMode\Storage\Json\JsonAuditLog;
 use WPSafeMode\Storage\Json\JsonAuthSessionStore;
 use WPSafeMode\Storage\Json\JsonConfigStore;
 use WPSafeMode\Storage\Json\JsonMessageLog;
@@ -66,6 +68,11 @@ final class JsonStorage implements Storage
     public function authSessions(): AuthSessionStore
     {
         return new JsonAuthSessionStore($this->migrated() . '/auth_sessions.php');
+    }
+
+    public function auditLog(): AuditLog
+    {
+        return new JsonAuditLog($this->migrated() . '/audit_log.php');
     }
 
     public function backend(): string

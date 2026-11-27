@@ -119,6 +119,23 @@ final class SqliteMigrator
                     )'
                 );
             },
+
+            // Non-agent events only (spec 7.1). Append-only: nothing updates or
+            // deletes a row, and nothing existed before to carry over.
+            4 => static function (PDO $pdo): void {
+                $pdo->exec(
+                    'CREATE TABLE audit_log (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        at INTEGER NOT NULL,
+                        actor TEXT NOT NULL,
+                        event TEXT NOT NULL,
+                        subject TEXT,
+                        meta_json TEXT NOT NULL,
+                        ip TEXT
+                    )'
+                );
+                $pdo->exec('CREATE INDEX audit_log_at ON audit_log (at)');
+            },
         ];
     }
 

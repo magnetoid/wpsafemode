@@ -44,6 +44,10 @@ final class JsonMigrator
             // data/auth_sessions.php is created on first write; nothing to do.
             3 => static function (string $dataDir): void {
             },
+
+            // data/audit_log.php is created on first append; nothing to do.
+            4 => static function (string $dataDir): void {
+            },
         ];
     }
 

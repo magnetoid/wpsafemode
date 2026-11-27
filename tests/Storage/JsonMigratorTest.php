@@ -13,6 +13,9 @@ use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Json\JsonConfigStore;
 use WPSafeMode\Storage\Json\JsonMigrator;
 use WPSafeMode\Storage\Json\JsonUserStore;
+use WPSafeMode\Security\Channel;
+use WPSafeMode\Security\Principal;
+use WPSafeMode\Storage\AuditEvent;
 use WPSafeMode\Storage\JsonStorage;
 
 final class JsonMigratorTest extends TestCase
@@ -197,6 +200,21 @@ final class JsonMigratorTest extends TestCase
         ];
         $sessions->put('tokenhash', $row);
         self::assertSame($row, $sessions->get('tokenhash'));
-        self::assertSame(3, JsonMigrator::currentVersion($this->dir));
+        self::assertSame(Version::SCHEMA, JsonMigrator::currentVersion($this->dir));
+    }
+
+    public function testStepFourAddsTheAuditLog(): void
+    {
+        $storage = new JsonStorage($this->dir);
+        $storage->auditLog();
+        self::assertSame(4, JsonMigrator::currentVersion($this->dir));
+
+        $actor = Principal::anonymous(Channel::BROWSER);
+        $storage->auditLog()->record(AuditEvent::by($actor, AuditEvent::LOGIN_FAILED, '1.2.3.4', null, [], 1000));
+
+        $events = $storage->auditLog()->recent(1);
+        self::assertCount(1, $events);
+        self::assertSame('anonymous', $events[0]->actor);
+        self::assertSame(AuditEvent::LOGIN_FAILED, $events[0]->event);
     }
 }

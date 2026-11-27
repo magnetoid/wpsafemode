@@ -9,6 +9,9 @@ use PHPUnit\Framework\TestCase;
 use WPSafeMode\Core\Version;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Security\Role;
+use WPSafeMode\Security\Channel;
+use WPSafeMode\Security\Principal;
+use WPSafeMode\Storage\AuditEvent;
 use WPSafeMode\Storage\SqliteStorage;
 use WPSafeMode\Storage\Sqlite\SqliteConfigStore;
 use WPSafeMode\Storage\Sqlite\SqliteConnection;
@@ -196,6 +199,20 @@ final class SqliteMigratorTest extends TestCase
         ];
         $sessions->put('tokenhash', $row);
         self::assertSame($row, $sessions->get('tokenhash'));
-        self::assertSame(3, SqliteMigrator::currentVersion($this->rawPdo()));
+        self::assertSame(Version::SCHEMA, SqliteMigrator::currentVersion($this->rawPdo()));
+    }
+
+    public function testStepFourAddsTheAuditLog(): void
+    {
+        $storage = new SqliteStorage($this->dir);
+        $actor = Principal::anonymous(Channel::BROWSER);
+        $storage->auditLog()->record(AuditEvent::by($actor, AuditEvent::LOGIN_FAILED, '1.2.3.4', null, [], 1000));
+
+        self::assertSame(4, SqliteMigrator::currentVersion($this->rawPdo()));
+
+        $events = $storage->auditLog()->recent(1);
+        self::assertCount(1, $events);
+        self::assertSame('anonymous', $events[0]->actor);
+        self::assertSame(AuditEvent::LOGIN_FAILED, $events[0]->event);
     }
 }

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace WPSafeMode\Tests\Storage;
 
+use WPSafeMode\Storage\Contracts\AuditLog;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\UserStore;
+use WPSafeMode\Storage\Sqlite\SqliteAuditLog;
 use WPSafeMode\Storage\Sqlite\SqliteConfigStore;
 use WPSafeMode\Storage\Sqlite\SqliteConnection;
 use WPSafeMode\Storage\Sqlite\SqliteMessageLog;
@@ -31,6 +33,19 @@ final class SqliteStorageTest extends StorageConformanceTest
     protected function makeMessageLog(string $dataDir): MessageLog
     {
         return new SqliteMessageLog(new SqliteConnection($dataDir . '/wpsm.sqlite'));
+    }
+
+    protected function makeAuditLog(string $dataDir): AuditLog
+    {
+        return new SqliteAuditLog(new SqliteConnection($dataDir . '/wpsm.sqlite'));
+    }
+
+    protected function writeMalformedAuditRow(string $dataDir): void
+    {
+        $connection = new SqliteConnection($dataDir . '/wpsm.sqlite');
+        $connection->pdo()->exec(
+            "INSERT INTO audit_log (at, actor, event, subject, meta_json, ip) VALUES (3000, '', 'login', NULL, '{}', NULL)"
+        );
     }
 
     protected function makeUserStore(string $dataDir): UserStore

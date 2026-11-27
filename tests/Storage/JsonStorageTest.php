@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Storage;
 
 use WPSafeMode\Security\GuardedJson;
+use WPSafeMode\Security\GuardedJsonLines;
+use WPSafeMode\Storage\Contracts\AuditLog;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\RateLimiter;
 use WPSafeMode\Storage\Contracts\SessionRepo;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\Contracts\UserStore;
+use WPSafeMode\Storage\Json\JsonAuditLog;
 use WPSafeMode\Storage\Json\JsonConfigStore;
 use WPSafeMode\Storage\Json\JsonMessageLog;
 use WPSafeMode\Storage\Json\JsonRateLimiter;
@@ -32,6 +35,18 @@ final class JsonStorageTest extends StorageConformanceTest
     protected function makeMessageLog(string $dataDir): MessageLog
     {
         return new JsonMessageLog($dataDir . '/sessions');
+    }
+
+    protected function makeAuditLog(string $dataDir): AuditLog
+    {
+        return new JsonAuditLog($dataDir . '/audit_log.php');
+    }
+
+    protected function writeMalformedAuditRow(string $dataDir): void
+    {
+        GuardedJsonLines::append($dataDir . '/audit_log.php', [
+            'at' => 3000, 'actor' => '', 'event' => 'login', 'subject' => null, 'meta' => [], 'ip' => null,
+        ]);
     }
 
     protected function makeUserStore(string $dataDir): UserStore

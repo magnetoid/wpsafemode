@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace WPSafeMode\Tests\Storage;
 
 use PHPUnit\Framework\TestCase;
+use WPSafeMode\Security\Channel;
+use WPSafeMode\Security\Principal;
 use WPSafeMode\Security\Role;
+use WPSafeMode\Storage\AuditEvent;
+use WPSafeMode\Storage\Contracts\AuditLog;
 use WPSafeMode\Storage\Contracts\ConfigStore;
 use WPSafeMode\Storage\Contracts\MessageLog;
 use WPSafeMode\Storage\Contracts\RateLimiter;
@@ -35,6 +39,11 @@ abstract class StorageConformanceTest extends TestCase
     abstract protected function makeUserStore(string $dataDir): UserStore;
 
     abstract protected function makeRateLimiter(string $dataDir): RateLimiter;
+
+    abstract protected function makeAuditLog(string $dataDir): AuditLog;
+
+    /** Appends a row, through the backend's own storage, that no AuditEvent could produce (actor is empty). */
+    abstract protected function writeMalformedAuditRow(string $dataDir): void;
 
     /**
      * Backend-specific: the JSON backend keeps one directory per session and
@@ -698,5 +707,125 @@ abstract class StorageConformanceTest extends TestCase
         );
         self::assertSame(RateLimiter::MAX_ATTEMPTS, $state->attempts);
         self::assertSame(RateLimiter::LOCKOUT_SECONDS, $state->retryAfter(1000));
+    }
+
+    private function auditUser(): Principal
+    {
+        return Principal::forUser(new User(3, 'owner', Role::OWNER, new Credential('h', 'argon2id', 1, 1)), Channel::BROWSER);
+    }
+
+    public function testAnEventCarriesItsActorsLabel(): void
+    {
+        self::assertSame('user:3', AuditEvent::by($this->auditUser(), AuditEvent::LOGIN)->actor);
+        self::assertSame(
+            'anonymous',
+            AuditEvent::by(Principal::anonymous(Channel::BROWSER), AuditEvent::LOGIN_FAILED)->actor
+        );
+    }
+
+    public function testAuditLogStartsEmpty(): void
+    {
+        self::assertSame([], $this->makeAuditLog($this->dataDir)->recent());
+    }
+
+    public function testRecordedEventsComeBackNewestFirst(): void
+    {
+        $log = $this->makeAuditLog($this->dataDir);
+        $log->record(AuditEvent::by($this->auditUser(), AuditEvent::INSTALL, '1.2.3.4', null, [], 1000));
+        $log->record(AuditEvent::by($this->auditUser(), AuditEvent::LOGIN, '1.2.3.4', null, [], 2000));
+
+        $events = $this->makeAuditLog($this->dataDir)->recent();
+
+        self::assertCount(2, $events);
+        self::assertSame(AuditEvent::LOGIN, $events[0]->event);
+        self::assertSame(AuditEvent::INSTALL, $events[1]->event);
+    }
+
+    public function testEqualTimestampsComeBackInInsertionOrderNewestFirst(): void
+    {
+        $log = $this->makeAuditLog($this->dataDir);
+        $log->record(AuditEvent::by($this->auditUser(), AuditEvent::INSTALL, null, null, [], 1000));
+        $log->record(AuditEvent::by($this->auditUser(), AuditEvent::LOGIN, null, null, [], 1000));
+        $log->record(AuditEvent::by($this->auditUser(), AuditEvent::LOGOUT, null, null, [], 1000));
+
+        $events = $log->recent();
+
+        self::assertSame(
+            [AuditEvent::LOGOUT, AuditEvent::LOGIN, AuditEvent::INSTALL],
+            array_map(static fn (AuditEvent $e): string => $e->event, $events)
+        );
+    }
+
+    public function testEveryFieldRoundTrips(): void
+    {
+        $log = $this->makeAuditLog($this->dataDir);
+        $log->record(AuditEvent::by(
+            $this->auditUser(),
+            AuditEvent::CONFIG_CHANGE,
+            '1.2.3.4',
+            'model',
+            ['from' => 'a', 'to' => 'b'],
+            1000
+        ));
+
+        $event = $this->makeAuditLog($this->dataDir)->recent()[0];
+
+        self::assertSame(1000, $event->at);
+        self::assertSame('user:3', $event->actor);
+        self::assertSame(AuditEvent::CONFIG_CHANGE, $event->event);
+        self::assertSame('model', $event->subject);
+        self::assertSame(['from' => 'a', 'to' => 'b'], $event->meta);
+        self::assertSame('1.2.3.4', $event->ip);
+    }
+
+    public function testAtDefaultsToNow(): void
+    {
+        $before = time();
+        $event = AuditEvent::by($this->auditUser(), AuditEvent::LOGIN);
+
+        self::assertGreaterThanOrEqual($before, $event->at);
+        self::assertLessThanOrEqual(time(), $event->at);
+    }
+
+    public function testRecentHonoursItsLimit(): void
+    {
+        $log = $this->makeAuditLog($this->dataDir);
+
+        for ($i = 1; $i <= 5; $i++) {
+            $log->record(AuditEvent::by($this->auditUser(), AuditEvent::LOGIN, null, null, [], 1000 + $i));
+        }
+
+        self::assertCount(2, $log->recent(2));
+        self::assertSame(1005, $log->recent(1)[0]->at);
+        self::assertSame([], $log->recent(0));
+        self::assertSame([], $log->recent(-3));
+    }
+
+    public function testASecretPassedInMetaIsNotWrittenVerbatim(): void
+    {
+        // Nothing should ever put a key here, but the audit log is the file most
+        // likely to be pasted into a support thread, so it redacts by field name.
+        $log = $this->makeAuditLog($this->dataDir);
+        $log->record(AuditEvent::by(
+            $this->auditUser(),
+            AuditEvent::CONFIG_CHANGE,
+            null,
+            'api_key',
+            ['api_key' => 'sk-ant-secret'],
+            1000
+        ));
+
+        $event = $this->makeAuditLog($this->dataDir)->recent()[0];
+
+        self::assertSame('[redacted]', $event->meta['api_key']);
+    }
+
+    public function testAMalformedAuditRowFailsClosed(): void
+    {
+        $this->makeAuditLog($this->dataDir)->record(AuditEvent::by($this->auditUser(), AuditEvent::LOGIN, null, null, [], 1000));
+        $this->writeMalformedAuditRow($this->dataDir);
+
+        $this->expectException(StorageException::class);
+        $this->makeAuditLog($this->dataDir)->recent();
     }
 }

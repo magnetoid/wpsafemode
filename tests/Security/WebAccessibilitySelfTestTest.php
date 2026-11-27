@@ -26,14 +26,15 @@ final class WebAccessibilitySelfTestTest extends TestCase
         rmdir($this->dir);
     }
 
-    public function testAnUnreachableUrlReportsNotReachable(): void
+    public function testAConnectionFailureIsInconclusiveAndBlocksTheApiKey(): void
     {
-        // Port 1 on localhost refuses immediately: a connection failure is the
-        // same shape as a correctly denied directory.
+        // Port 1 on localhost refuses immediately. A server that cannot reach
+        // its own site has not proven the directory is protected.
         $result = WebAccessibilitySelfTest::run($this->dir, 'http://127.0.0.1:1/wpsm');
 
         self::assertFalse($result->reachable);
-        self::assertFalse($result->blocksApiKey());
+        self::assertTrue($result->inconclusive);
+        self::assertTrue($result->blocksApiKey());
     }
 
     public function testTheCanaryIsAlwaysCleanedUp(): void
@@ -84,6 +85,62 @@ final class WebAccessibilitySelfTestTest extends TestCase
         ]);
 
         self::assertSame('https://example.com/wpsm-a1b2c3', $url);
+    }
+
+    public function testAServedButMissingCanaryReportsNotReachable(): void
+    {
+        $server = getenv('WPSM_SELFTEST_URL');
+
+        if ($server === false || $server === '') {
+            self::markTestSkipped('Set WPSM_SELFTEST_URL to a running server that does not serve the data dir.');
+        }
+
+        // The temp dir is not under the server's docroot, so the server answers 404.
+        $result = WebAccessibilitySelfTest::run($this->dir, $server);
+
+        self::assertFalse($result->reachable);
+        self::assertFalse($result->inconclusive);
+        self::assertFalse($result->blocksApiKey());
+    }
+
+    /** @dataProvider badHosts */
+    public function testBaseUrlRefusesAMalformedHost(string $host): void
+    {
+        self::assertNull(WebAccessibilitySelfTest::baseUrlFrom(['HTTP_HOST' => $host, 'SCRIPT_NAME' => '/index.php']));
+    }
+
+    /** @return array<string, array{string}> */
+    public function badHosts(): array
+    {
+        return [
+            'path and query' => ['10.0.0.5:8080/admin?'],
+            'fragment'       => ['evil#'],
+            'space'          => ['a b'],
+            'header inject'  => ["host\r\nX: y"],
+            'empty'          => [''],
+            'userinfo'       => ['user@host'],
+            'trailing nl'    => ["example.com\n"],
+        ];
+    }
+
+    /** @dataProvider goodHosts */
+    public function testBaseUrlAcceptsAPlainHost(string $host): void
+    {
+        self::assertSame(
+            'http://' . $host,
+            WebAccessibilitySelfTest::baseUrlFrom(['HTTP_HOST' => $host, 'SCRIPT_NAME' => '/index.php'])
+        );
+    }
+
+    /** @return array<string, array{string}> */
+    public function goodHosts(): array
+    {
+        return [
+            'domain'    => ['example.com'],
+            'port'      => ['example.com:8443'],
+            'ipv4 port' => ['127.0.0.1:8125'],
+            'ipv6 port' => ['[::1]:8080'],
+        ];
     }
 
     public function testBaseUrlIsNullWhenTheHostIsUnknown(): void

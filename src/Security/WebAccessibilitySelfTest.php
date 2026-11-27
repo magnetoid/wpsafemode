@@ -40,44 +40,64 @@ final class WebAccessibilitySelfTest
         $url = rtrim($baseUrl, '/') . '/data/' . $name;
 
         try {
-            $body = self::fetch($url);
+            $response = self::fetch($url);
         } finally {
             @unlink($path);
         }
 
-        if ($body === null) {
+        if ($response === null) {
             return new SelfTestResult(
                 false,
                 true,
                 'No way to make an HTTP request was available (cURL and remote file access are both disabled), '
-                    . 'so the data directory could not be checked.',
+                    . 'so the data directory could not be checked. Open ' . $url . ' in a browser yourself '
+                    . 'and confirm it is refused.',
                 $url,
                 $now
             );
         }
 
-        if (strpos($body, $secret) !== false) {
+        $status = $response['status'];
+        $body = $response['body'];
+
+        if ($status === 200 && $body === $secret) {
             return new SelfTestResult(
                 true,
                 false,
-                'The data directory is readable over the web. Anything stored there — including the API key — '
+                'The data directory is readable over the web. Anything stored there, including the API key, '
                     . 'can be downloaded by anyone who guesses the filename.',
                 $url,
                 $now
             );
         }
 
+        // The server answered and did not serve the file.
+        if ($status === 200 || in_array($status, [401, 403, 404, 410], true)) {
+            return new SelfTestResult(
+                false,
+                false,
+                'The data directory is not readable over the web.',
+                $url,
+                $now
+            );
+        }
+
+        // Transport failure, redirect, 5xx, 429 or anything else: undecided, so fail closed.
         return new SelfTestResult(
             false,
-            false,
-            'The data directory is not readable over the web.',
+            true,
+            'This server could not check its own URL (loopback requests may be blocked, or the request failed '
+                . 'or was redirected). Open ' . $url . ' in a browser yourself and confirm it is refused.',
             $url,
             $now
         );
     }
 
-    /** Returns the body, '' for a non-200, or null when no transport exists. */
-    private static function fetch(string $url): ?string
+    /**
+     * @return array{status: int, body: string}|null status 0 means the request failed;
+     *         null means no HTTP client exists. Redirects are never followed.
+     */
+    private static function fetch(string $url): ?array
     {
         if (function_exists('curl_init')) {
             $handle = curl_init($url);
@@ -99,22 +119,39 @@ final class WebAccessibilitySelfTest
                 $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
 
                 if ($body === false) {
-                    return '';
+                    return ['status' => 0, 'body' => ''];
                 }
 
-                return $status === 200 ? (string) $body : '';
+                return ['status' => $status, 'body' => (string) $body];
             }
         }
 
         if (filter_var(ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOLEAN)) {
             $context = stream_context_create([
-                'http' => ['timeout' => self::TIMEOUT_SECONDS, 'ignore_errors' => true],
+                'http' => [
+                    'timeout'         => self::TIMEOUT_SECONDS,
+                    'ignore_errors'   => true,
+                    'follow_location' => 0,
+                ],
                 'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false],
             ]);
 
             $body = @file_get_contents($url, false, $context);
+            $status = 0;
 
-            return $body === false ? '' : (string) $body;
+            // PHP 8.4+ deprecates the magic local variable; 8.0 has only the variable.
+            if (function_exists('http_get_last_response_headers')) {
+                $headers = http_get_last_response_headers() ?? [];
+            } else {
+                // @phpstan-ignore-next-line set by file_get_contents in this scope
+                $headers = isset($http_response_header) ? $http_response_header : [];
+            }
+
+            if ($headers !== [] && preg_match('~^HTTP/\S+\s+(\d{3})~', (string) $headers[0], $m) === 1) {
+                $status = (int) $m[1];
+            }
+
+            return ['status' => $body === false ? 0 : $status, 'body' => $body === false ? '' : (string) $body];
         }
 
         return null;
@@ -129,7 +166,13 @@ final class WebAccessibilitySelfTest
     {
         $host = (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? '');
 
-        if ($host === '') {
+        // The Host header is client-controlled. Anything that is not a plain
+        // host[:port] could truncate the fixed path suffix and aim the request
+        // elsewhere (SSRF), so refuse it.
+        $valid = preg_match('/^[A-Za-z0-9.-]+(:[0-9]{1,5})?\z/', $host) === 1
+            || preg_match('/^\[[0-9A-Fa-f:.]+\](:[0-9]{1,5})?\z/', $host) === 1;
+
+        if (!$valid) {
             return null;
         }
 

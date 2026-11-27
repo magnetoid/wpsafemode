@@ -35,5 +35,5 @@ test-host:
 	vendor/bin/phpunit
 
 check-host:
-	vendor/bin/phpstan analyse --no-progress
+	vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 	vendor/bin/phpunit

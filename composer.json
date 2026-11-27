@@ -14,7 +14,7 @@
     },
     "scripts": {
         "test": "phpunit",
-        "compat": "phpstan analyse",
+        "compat": "phpstan analyse --memory-limit=1G",
         "check": [
             "@compat",
             "@test"

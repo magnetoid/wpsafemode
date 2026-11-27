@@ -205,29 +205,43 @@ final class KeyVault
         $path = $this->dataDir . '/' . self::SECRET_FILE;
 
         if (is_file($path) && (int) @filesize($path) > 0) {
-            return $this->readStoredSecret($path);
-        }
-
-        if (is_file($path)) {
-            // Review round 3: a TRULY zero-length file is the crash window
-            // of GuardedJson::createExclusive()'s fopen('xb') fallback
-            // (used when hard links are unavailable) — claimed, but the
-            // process died before a single content byte landed. Unlike
-            // round 1's IMPORTANT 2 concern (an existing-but-unusable file
-            // might be a corrupted, previously-working secret, and
-            // replacing it would destroy an API key already encrypted
-            // under it), an empty file provably never held a secret: there
-            // is nothing here that replacing it could destroy. It is
-            // removed and treated the same as a genuinely missing file,
-            // restoring the self-healing behaviour the O_CREAT|O_EXCL
-            // round removed, without reintroducing the silent re-key of a
-            // corrupt-but-non-empty vault (that still throws above).
-            @unlink($path);
+            try {
+                return $this->readStoredSecret($path);
+            } catch (StorageException) {
+                // On a host without hard links the creator writes into the
+                // file it has just created, so a read can land mid-write.
+                // Decide again under the lock, after any creator is done.
+            }
         }
 
         DataDir::ensure($this->dataDir);
 
-        return $this->createMasterSecret($path);
+        // Every creator holds this lock from creating the file until its
+        // secret is written, so whatever is seen under it is final.
+        return GuardedJson::withExclusiveLock($path, function () use ($path): string {
+            clearstatcache(true, $path);
+
+            if (is_file($path) && (int) @filesize($path) > 0) {
+                // Unusable here means corrupt, not mid-write: that throws.
+                return $this->readStoredSecret($path);
+            }
+
+            if (is_file($path)) {
+                // Review round 3: a zero-length file is the crash window
+                // of GuardedJson::createExclusive()'s fopen('xb') fallback
+                // (used when hard links are unavailable): claimed, but the
+                // process died before a byte landed. It never held a
+                // secret, so replacing it destroys nothing. Seen under the
+                // lock it cannot belong to a live writer, which outside the
+                // lock it could (PR review): deleting a live writer's file
+                // would leave its secret in a deleted file and every key it
+                // encrypted undecryptable. A corrupt non-empty vault still
+                // throws above.
+                @unlink($path);
+            }
+
+            return $this->createMasterSecret($path);
+        });
     }
 
     /**

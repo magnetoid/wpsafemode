@@ -10,6 +10,7 @@ use WPSafeMode\Security\DataDir;
 use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Security\KeyVault;
 use WPSafeMode\Storage\Contracts\StorageException;
+use WPSafeMode\Tests\Support\HeldLock;
 
 final class KeyVaultTest extends TestCase
 {
@@ -424,6 +425,35 @@ final class KeyVaultTest extends TestCase
 
         self::assertSame('sk-ant-secret', $vault->decrypt($envelope));
         self::assertGreaterThan(0, filesize($this->dir . '/keyvault.php'));
+    }
+
+    // --- PR review: an empty file may belong to a live writer ----------------
+
+    public function testAnEmptyVaultFileThatALiveRequestIsWritingIsNotReplaced(): void
+    {
+        $path = $this->dir . '/keyvault.php';
+        $envelope = null;
+
+        // Another first request, on a host without hard links, has created
+        // keyvault.php with fopen('xb') and not yet written its secret. This
+        // request encrypts meanwhile. Unlocked, it would take the empty file
+        // for a crash remnant, delete it and mint a second secret, and the
+        // other request's secret would land in the deleted file: anything it
+        // encrypted could never be decrypted again.
+        $theirSecret = HeldLock::run(
+            $path,
+            '$h = fopen($path, "xb"); chmod($path, 0600);',
+            '$secret = base64_encode(random_bytes(32));'
+                . ' fwrite($h, \WPSafeMode\Security\DataDir::GUARD . json_encode(["secret" => $secret, "created_at" => time()]));'
+                . ' fclose($h);'
+                . ' echo $secret;',
+            function () use (&$envelope): void {
+                $envelope = (new KeyVault($this->dir))->encrypt('sk-ant-secret');
+            }
+        );
+
+        self::assertSame($theirSecret, GuardedJson::read($path)['secret'] ?? null);
+        self::assertSame('sk-ant-secret', (new KeyVault($this->dir))->decrypt((string) $envelope));
     }
 
     public function testCreateMasterSecretNamesTheRealCauseWhenNeitherMechanismCanCreateTheFile(): void

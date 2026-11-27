@@ -62,7 +62,39 @@ final class StorageFactory
     {
         DataDir::ensure($dataDir);
 
-        $record = GuardedJson::read($dataDir . '/install.php');
+        $path = $dataDir . '/install.php';
+        $decision = self::decide(GuardedJson::read($path), $env);
+
+        if ($decision['dirty']) {
+            // The first requests on a fresh copy race to choose the backend
+            // and the SQLite filename. Each one re-reads and decides again
+            // under the lock, so the first to get in records its choice and
+            // every other request adopts that record instead of minting a
+            // filename of its own. A complete record never takes the lock.
+            $decision = GuardedJson::withExclusiveLock($path, static function () use ($path, $env): array {
+                $decision = self::decide(GuardedJson::read($path), $env);
+
+                if ($decision['dirty']) {
+                    GuardedJson::write($path, $decision['record']);
+                }
+
+                return $decision;
+            });
+        }
+
+        return $decision['backend'] === self::BACKEND_SQLITE
+            ? new SqliteStorage($dataDir, (string) $decision['sqlite_file'])
+            : new JsonStorage($dataDir);
+    }
+
+    /**
+     * What this install's record says, plus whatever must be added to it.
+     *
+     * @param array<string, mixed> $record
+     * @return array{record: array<string, mixed>, backend: string, sqlite_file: ?string, dirty: bool}
+     */
+    private static function decide(array $record, EnvironmentReport $env): array
+    {
         $recorded = isset($record['backend']) ? (string) $record['backend'] : null;
 
         $backend = self::chooseBackend($env->hasPdoSqlite, $recorded === '' ? null : $recorded);
@@ -94,19 +126,7 @@ final class StorageFactory
             $dirty = true;
         }
 
-        if ($dirty) {
-            GuardedJson::write($dataDir . '/install.php', $record);
-        }
-
-        // Uses the value just decided above, not a fresh re-read of
-        // install.php: re-reading here would trust whatever a concurrent
-        // request wrote in the gap between this request's own write and its
-        // next read, so two requests racing to open the same fresh install
-        // could each end up constructing a SqliteStorage over a *different*
-        // filename than the one they themselves just recorded.
-        return $backend === self::BACKEND_SQLITE
-            ? new SqliteStorage($dataDir, (string) $sqliteFile)
-            : new JsonStorage($dataDir);
+        return ['record' => $record, 'backend' => $backend, 'sqlite_file' => $sqliteFile, 'dirty' => $dirty];
     }
 
     /** The recorded SQLite filename, or null when this install has not recorded one yet. */

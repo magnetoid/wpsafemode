@@ -9,6 +9,7 @@ use WPSafeMode\Core\EnvironmentReport;
 use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\StorageFactory;
+use WPSafeMode\Tests\Support\HeldLock;
 
 final class StorageFactoryTest extends TestCase
 {
@@ -194,5 +195,37 @@ final class StorageFactoryTest extends TestCase
         $second = GuardedJson::read($dir . '/install.php');
 
         self::assertSame($first['sqlite_file'], $second['sqlite_file']);
+    }
+
+    // --- PR review: the first record is chosen under a lock -------------
+
+    public function testAnOpenRacingAnotherFirstOpenUsesTheDatabaseThatEndsUpRecorded(): void
+    {
+        if (!extension_loaded('pdo_sqlite')) {
+            self::markTestSkipped('Needs pdo_sqlite.');
+        }
+
+        $dir = $this->makeTempDir();
+        $path = $dir . '/install.php';
+
+        // Another first request has found no record and is choosing its
+        // filename under the lock. This request opens meanwhile and writes.
+        // Unlocked, it would mint its own filename, write into that database,
+        // and lose the record to the other request's later write, so every
+        // later request would open a database without this write in it.
+        $recorded = HeldLock::run(
+            $path,
+            '',
+            '$file = "store-" . bin2hex(random_bytes(16)) . ".db";'
+                . ' \WPSafeMode\Security\GuardedJson::write($path, ["backend" => "sqlite", "sqlite_file" => $file]);'
+                . ' echo $file;',
+            function () use ($dir): void {
+                StorageFactory::open($dir, $this->makeEnv(true))->config()->set('probe', 'written');
+            }
+        );
+
+        self::assertSame($recorded, GuardedJson::read($path)['sqlite_file'] ?? null);
+        self::assertSame('written', StorageFactory::open($dir, $this->makeEnv(true))->config()->get('probe'));
+        self::assertSame([$recorded], array_map('basename', glob($dir . '/store-*.db') ?: []));
     }
 }

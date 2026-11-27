@@ -1,5 +1,7 @@
 # M1 — Installer and Security Implementation Plan
 
+> **Status, 2026-11-25:** Tasks 1–4 are built. Tasks 5–13 are superseded by `2026-11-25-m1-recut-identity-installer.md`, which reuses parts of them by task name. Do not execute Tasks 5–13 from this file.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the tool refuse to do anything until it has been installed, and make an installed copy defensible — password-gated, rate-limited, CSRF-protected, with its data directory proven unreachable over HTTP before an API key is ever accepted.

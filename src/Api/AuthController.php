@@ -27,6 +27,10 @@ final class AuthController
 
     public function login(Request $request): Response
     {
+        if (!$request->bodyHasTypes(['login' => 'string', 'password' => 'string'])) {
+            return Response::badRequest();
+        }
+
         $secret = $this->csrfSecret();
 
         if ($secret === null) {
@@ -34,8 +38,8 @@ final class AuthController
         }
 
         $body = $request->json();
-        $login = is_string($body['login'] ?? null) ? $body['login'] : '';
-        $password = is_string($body['password'] ?? null) ? $body['password'] : '';
+        $login = $body['login'] ?? '';
+        $password = $body['password'] ?? '';
         $now = time();
 
         $result = $this->sessions->login($login, $password, $request->clientIp(), $request->userAgent(), $now);

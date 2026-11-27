@@ -149,6 +149,33 @@ final class Request
         return rtrim(dirname(str_replace('\\', '/', $this->scriptName)), '/');
     }
 
+    /**
+     * True when every listed field the JSON body carries has its declared
+     * type. An absent field passes, and the caller applies its default; a
+     * present one of any other type makes the whole request malformed, so a
+     * string "false" is never read as a yes and an array never becomes text.
+     *
+     * @param array<string, string> $types field => 'string' or 'bool'
+     */
+    public function bodyHasTypes(array $types): bool
+    {
+        $body = $this->json();
+
+        foreach ($types as $field => $type) {
+            if (!array_key_exists($field, $body)) {
+                continue;
+            }
+
+            $ok = $type === 'bool' ? is_bool($body[$field]) : is_string($body[$field]);
+
+            if (!$ok) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /** @return array<string, mixed> */
     public function json(): array
     {

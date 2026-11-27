@@ -13,7 +13,9 @@ use WPSafeMode\Security\GuardedJson;
 use WPSafeMode\Security\KeyVault;
 use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Storage\Contracts\Storage;
+use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\StorageFactory;
+use WPSafeMode\Tests\Support\FailingStorage;
 
 final class InstallControllerTest extends TestCase
 {
@@ -230,5 +232,124 @@ final class InstallControllerTest extends TestCase
         $done = $this->controller->finish($this->request(['token' => $this->token]));
         self::assertSame(200, $done->status);
         self::assertTrue($this->installer->state()->installed);
+    }
+
+    /** @return array<string, array{0: string, 1: array<string, mixed>}> */
+    public static function malformedBodies(): array
+    {
+        return [
+            'token as a number'          => ['verifyToken', ['token' => 5]],
+            'login as an array'          => ['createOwner', ['login' => ['a'], 'password' => self::STRONG]],
+            'password as an array'       => ['createOwner', ['login' => 'owner', 'password' => [self::STRONG]]],
+            'api_key as a number'        => ['apiKey', ['api_key' => 12345, 'acknowledged_risk' => true]],
+            'acknowledged_risk "false"'  => ['apiKey', ['api_key' => 'sk-ant-key', 'acknowledged_risk' => 'false']],
+            'acknowledged_risk 1'        => ['apiKey', ['api_key' => 'sk-ant-key', 'acknowledged_risk' => 1]],
+            'name as an array'           => ['rename', ['name' => ['wpsm-abcabcabc']]],
+            'token as an array (finish)' => ['finish', ['token' => ['x']]],
+        ];
+    }
+
+    /**
+     * @dataProvider malformedBodies
+     * @param array<string, mixed> $body
+     */
+    public function testABodyFieldOfTheWrongTypeIsABadRequest(string $action, array $body): void
+    {
+        if ($action === 'apiKey') {
+            $this->installer->createOwner('owner', self::STRONG);
+        }
+
+        $before = count($this->storage->users()->all());
+        $response = $this->controller->$action($this->request($body + ['token' => $this->token]));
+
+        self::assertSame(422, $response->status);
+        self::assertSame(['error' => 'bad_request'], $this->decode($response));
+        self::assertCount($before, $this->storage->users()->all());
+        self::assertFalse($this->storage->config()->has('api_key'));
+        self::assertFalse($this->installer->state()->installed);
+    }
+
+    /** @return array<string, array{0: string}> */
+    public static function faultyWrites(): array
+    {
+        return ['api key' => ['apiKey'], 'finish' => ['finish']];
+    }
+
+    /**
+     * A storage fault is not a refusal the user can act on: it is rethrown,
+     * so the composition root answers the generic 500 with no path in it.
+     *
+     * @dataProvider faultyWrites
+     */
+    public function testAStorageFaultIsRethrownNotReportedAsARefusal(string $action): void
+    {
+        $this->installer->createOwner('owner', self::STRONG);
+        $failing = new FailingStorage($this->storage, static fn (): bool => true);
+        $installer = new Installer($failing, new KeyVault($this->dir), new PasswordHasher(), $this->dir, Environment::probe($this->dir));
+        $controller = new InstallController($installer, $this->dir . '/never-renamed');
+
+        $this->expectException(StorageException::class);
+        $this->expectExceptionMessage(FailingStorage::MESSAGE);
+
+        $controller->$action($this->request(['token' => $this->token, 'api_key' => 'sk-ant-key', 'acknowledged_risk' => true]));
+    }
+
+    public function testRefusalsAreStill422WithAPathFreeMessage(): void
+    {
+        $noOwner = $this->controller->finish($this->request(['token' => $this->token]));
+        self::assertSame(422, $noOwner->status);
+        self::assertSame('incomplete', $this->decode($noOwner)['error']);
+
+        $this->installer->createOwner('owner', self::STRONG);
+
+        foreach ([
+            ['api_key' => '   ', 'acknowledged_risk' => true],
+            ['api_key' => 'sk-ant-key', 'acknowledged_risk' => false],
+            ['api_key' => 'sk-ant-key'],
+        ] as $body) {
+            $response = $this->controller->apiKey($this->request($body + ['token' => $this->token]));
+
+            self::assertSame(422, $response->status);
+            self::assertSame('refused', $this->decode($response)['error']);
+            self::assertStringNotContainsString($this->dir, $response->body);
+        }
+
+        self::assertFalse($this->storage->config()->has('api_key'));
+    }
+
+    public function testAWeakPasswordAnswersTheListOfWeaknesses(): void
+    {
+        $password = "password\0";
+        $response = $this->controller->createOwner(
+            $this->request(['token' => $this->token, 'login' => 'owner', 'password' => $password])
+        );
+        $body = $this->decode($response);
+
+        self::assertSame(422, $response->status);
+        self::assertSame(PasswordHasher::weaknesses($password), $body['weaknesses']);
+        self::assertGreaterThanOrEqual(3, count($body['weaknesses']));
+    }
+
+    public function testStateNeverAnswersTheInstallToken(): void
+    {
+        $answers = [$this->controller->state($this->request([]))->body];
+
+        $this->installer->createOwner('owner', self::STRONG);
+        $answers[] = $this->controller->state($this->request([]))->body;
+
+        // A lost token is written again while an owner exists: still not sent.
+        unlink($this->dir . '/install-token.php');
+        $answers[] = $this->controller->state($this->request([]))->body;
+        $reissued = (string) (GuardedJson::read($this->dir . '/install-token.php')['token'] ?? '');
+        self::assertNotSame('', $reissued);
+
+        $this->installer->finalize('203.0.113.9');
+        $answers[] = $this->controller->state($this->request([]))->body;
+
+        foreach ($answers as $i => $body) {
+            self::assertStringNotContainsString($this->token, $body, 'state answer ' . $i);
+            self::assertStringNotContainsString($reissued, $body, 'state answer ' . $i);
+            self::assertArrayNotHasKey('token', (array) json_decode($body, true), 'state answer ' . $i);
+        }
     }
 }

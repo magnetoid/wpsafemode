@@ -98,6 +98,12 @@ final class PasswordHasher
             $problems[] = 'This is a single repeated character.';
         }
 
+        // Signing in refuses a NUL byte on every path (bcrypt cannot hash
+        // one), so an owner created with one could never sign in.
+        if (strpos($password, "\0") !== false) {
+            $problems[] = 'Remove the invisible NUL character. A password cannot contain one.';
+        }
+
         return $problems;
     }
 }

@@ -20,6 +20,10 @@ final class AdminController
 
     public function rename(Request $request): Response
     {
+        if (!$request->bodyHasTypes(['name' => 'string'])) {
+            return Response::badRequest();
+        }
+
         $name = $request->json()['name'] ?? SelfRename::suggest();
 
         if (!is_string($name) || !SelfRename::isSafeName($name)) {

@@ -145,11 +145,19 @@ final class UninstallEndpointTest extends TestCase
     {
         $owner = $this->install()[Role::OWNER];
 
-        foreach ([[], ['confirm' => 'delete'], ['confirm' => ['DELETE']], ['confirm' => true], ['confirm' => 'DELETE ']] as $body) {
+        foreach ([[], ['confirm' => 'delete'], ['confirm' => 'DELETE ']] as $body) {
             $response = $this->post($body, $owner);
 
             self::assertSame(422, $response->status);
             self::assertSame('confirmation_required', $this->decode($response)['error']);
+        }
+
+        // Not a string at all: a malformed request, not a wrong answer.
+        foreach ([['confirm' => ['DELETE']], ['confirm' => true], ['confirm' => null]] as $body) {
+            $response = $this->post($body, $owner);
+
+            self::assertSame(422, $response->status);
+            self::assertSame(['error' => 'bad_request'], $this->decode($response));
         }
 
         self::assertDirectoryExists($this->appDir);

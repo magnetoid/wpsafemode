@@ -79,4 +79,12 @@ final class PasswordHasherTest extends TestCase
 
         self::assertSame([], PasswordHasher::weaknesses('correct horse battery staple'));
     }
+
+    public function testANulByteIsAWeaknessBecauseNoLoginCouldAcceptIt(): void
+    {
+        $weaknesses = PasswordHasher::weaknesses("correct horse\0battery staple");
+
+        self::assertCount(1, $weaknesses);
+        self::assertStringContainsString('NUL', $weaknesses[0]);
+    }
 }

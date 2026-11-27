@@ -7,6 +7,7 @@ namespace WPSafeMode\Api;
 use WPSafeMode\Core\Router;
 use WPSafeMode\Installer\Installer;
 use WPSafeMode\Security\AuthSessions;
+use WPSafeMode\Security\Channel;
 use WPSafeMode\Security\Permission;
 use WPSafeMode\Storage\Contracts\Storage;
 
@@ -28,13 +29,13 @@ final class Routes
         $admin = new AdminController($storage, $appDir);
         $auth = new AuthController($storage, $sessions, $installer);
 
-        $router->add('GET', '/api/install/state', [$install, 'state'], Permission::OPEN, ['browser'], true);
-        $router->add('POST', '/api/install/token', [$install, 'verifyToken'], Permission::OPEN, ['browser'], true);
-        $router->add('POST', '/api/install/owner', [$install, 'createOwner'], Permission::OPEN, ['browser'], true);
-        $router->add('POST', '/api/install/self-test', [$install, 'selfTest'], Permission::OPEN, ['browser'], true);
-        $router->add('POST', '/api/install/api-key', [$install, 'apiKey'], Permission::OPEN, ['browser'], true);
-        $router->add('POST', '/api/install/finish', [$install, 'finish'], Permission::OPEN, ['browser'], true);
-        $router->add('POST', '/api/install/rename', [$install, 'rename'], Permission::OPEN, ['browser'], true);
+        $router->add('GET', '/api/install/state', [$install, 'state'], Permission::OPEN, [Channel::BROWSER], true);
+        $router->add('POST', '/api/install/token', [$install, 'verifyToken'], Permission::OPEN, [Channel::BROWSER], true);
+        $router->add('POST', '/api/install/owner', [$install, 'createOwner'], Permission::OPEN, [Channel::BROWSER], true);
+        $router->add('POST', '/api/install/self-test', [$install, 'selfTest'], Permission::OPEN, [Channel::BROWSER], true);
+        $router->add('POST', '/api/install/api-key', [$install, 'apiKey'], Permission::OPEN, [Channel::BROWSER], true);
+        $router->add('POST', '/api/install/finish', [$install, 'finish'], Permission::OPEN, [Channel::BROWSER], true);
+        $router->add('POST', '/api/install/rename', [$install, 'rename'], Permission::OPEN, [Channel::BROWSER], true);
 
         $router->add('POST', '/api/auth/login', [$auth, 'login'], Permission::OPEN);
         $router->add('POST', '/api/auth/logout', [$auth, 'logout'], Permission::READ);

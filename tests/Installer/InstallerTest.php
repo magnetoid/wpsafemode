@@ -10,8 +10,10 @@ use WPSafeMode\Installer\Installer;
 use WPSafeMode\Security\KeyVault;
 use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Security\Role;
+use WPSafeMode\Storage\Contracts\Storage;
 use WPSafeMode\Storage\Contracts\StorageException;
 use WPSafeMode\Storage\StorageFactory;
+use WPSafeMode\Tests\Support\FailingStorage;
 
 final class InstallerTest extends TestCase
 {
@@ -306,5 +308,153 @@ final class InstallerTest extends TestCase
             static fn ($e): bool => $e->event === 'install'
         );
         self::assertCount(1, $installs);
+    }
+
+    private function installerOver(Storage $storage, string $dir): Installer
+    {
+        return new Installer($storage, new KeyVault($dir), new PasswordHasher(), $dir, Environment::probe($dir));
+    }
+
+    public function testAFailedInstalledAtWriteLeavesACopyThatCanStillBeFinished(): void
+    {
+        $failing = FailingStorage::onKey(StorageFactory::create($this->dir, 'json'), 'installed_at');
+        $installer = $this->installerOver($failing, $this->dir);
+        $installer->createOwner('owner', self::STRONG);
+
+        try {
+            $installer->finalize('1.2.3.4');
+            self::fail('finalize() reported success although installed_at was not written');
+        } catch (StorageException $e) {
+            self::assertSame(FailingStorage::MESSAGE, $e->getMessage());
+        }
+
+        self::assertFalse($this->installer->state()->installed);
+
+        $this->installer->finalize('1.2.3.4');
+
+        self::assertTrue($this->installer->state()->installed);
+        self::assertNotSame('', (string) StorageFactory::create($this->dir, 'json')->config()->get('install_id'));
+    }
+
+    /**
+     * A request can die at any write. Whichever one it is, the copy is
+     * either installed with its CSRF secret and posture in place, or not
+     * installed and finishable: never installed and unable to sign anyone in.
+     */
+    public function testACrashAtAnyFinalizeWriteNeverLeavesAnInstalledCopyWithoutItsSecret(): void
+    {
+        for ($crashAt = 1; $crashAt <= 3; $crashAt++) {
+            $dir = $this->dir . '/crash-' . $crashAt;
+            mkdir($dir, 0700, true);
+            $real = StorageFactory::create($dir, 'json');
+            $failing = new FailingStorage($real, static fn (string $key, int $write): bool => $write === $crashAt);
+            $installer = $this->installerOver($failing, $dir);
+            $installer->createOwner('owner', self::STRONG);
+
+            try {
+                $installer->finalize('1.2.3.4');
+                self::fail('finalize() survived a failed write ' . $crashAt);
+            } catch (StorageException $e) {
+                // The crash.
+            }
+
+            $config = $real->config();
+
+            if ($config->get('installed_at') !== null) {
+                self::assertNotSame('', (string) $config->get('install_id'), 'installed without a CSRF secret after write ' . $crashAt);
+                self::assertSame('emergency', $config->get('posture'), 'installed without a posture after write ' . $crashAt);
+                continue;
+            }
+
+            $retry = $this->installerOver($real, $dir);
+            $retry->finalize('1.2.3.4');
+            self::assertTrue($retry->state()->installed, 'not finishable after write ' . $crashAt);
+            self::assertNotSame('', (string) $config->get('install_id'));
+        }
+    }
+
+    public function testInstalledAtIsTheLastConfigWriteOfFinalize(): void
+    {
+        $recorder = new FailingStorage(StorageFactory::create($this->dir, 'json'), static fn (): bool => false);
+        $installer = $this->installerOver($recorder, $this->dir);
+        $installer->createOwner('owner', self::STRONG);
+        $installer->finalize('1.2.3.4');
+
+        self::assertSame('installed_at', $recorder->written[count($recorder->written) - 1]);
+        self::assertContains('install_id', $recorder->written);
+        self::assertContains('posture', $recorder->written);
+    }
+
+    public function testEveryUserFacingRefusalIsCoded(): void
+    {
+        $refusals = [
+            'no owner for the key'   => [fn () => $this->installer->storeApiKey('sk-ant-key', true, self::UNREACHABLE), Installer::ERR_NO_OWNER],
+            'no owner to finish'     => [fn () => $this->installer->finalize('1.2.3.4'), Installer::ERR_NO_OWNER],
+        ];
+
+        foreach ($refusals as $name => [$call, $code]) {
+            try {
+                $call();
+                self::fail($name . ' was not refused');
+            } catch (StorageException $e) {
+                self::assertSame($code, $e->getCode(), $name);
+            }
+        }
+
+        $this->installer->createOwner('owner', self::STRONG);
+
+        $refusals = [
+            'empty key'          => [fn () => $this->installer->storeApiKey('  ', true, self::UNREACHABLE), Installer::ERR_EMPTY_KEY],
+            'unacknowledged key' => [fn () => $this->installer->storeApiKey('sk-ant-key', false, self::UNREACHABLE), Installer::ERR_EXPOSED],
+        ];
+
+        foreach ($refusals as $name => [$call, $code]) {
+            try {
+                $call();
+                self::fail($name . ' was not refused');
+            } catch (StorageException $e) {
+                self::assertSame($code, $e->getCode(), $name);
+                self::assertStringNotContainsString($this->dir, $e->getMessage(), $name);
+            }
+        }
+
+        $this->installer->finalize('1.2.3.4');
+
+        try {
+            $this->installer->finalize('1.2.3.4');
+            self::fail('A second finalize was not refused');
+        } catch (StorageException $e) {
+            self::assertSame(Installer::ERR_ALREADY_INSTALLED, $e->getCode());
+        }
+    }
+
+    public function testTheKeysAuditRowRecordsTheAcknowledgementAndTheOutcome(): void
+    {
+        $this->installer->createOwner('owner', self::STRONG);
+        $this->installer->storeApiKey('sk-ant-key', true, self::UNREACHABLE);
+
+        $rows = array_values(array_filter(
+            StorageFactory::create($this->dir, 'json')->auditLog()->recent(),
+            static fn ($e): bool => $e->event === 'self_test'
+        ));
+
+        self::assertCount(1, $rows);
+        self::assertTrue($rows[0]->meta['acknowledged_risk'] ?? null);
+        self::assertSame('inconclusive', $rows[0]->meta['outcome'] ?? null);
+        self::assertFalse($rows[0]->meta['reachable'] ?? null);
+        self::assertTrue($rows[0]->meta['inconclusive'] ?? null);
+    }
+
+    public function testAnOwnerPasswordWithANulByteIsRefusedAsAWeakness(): void
+    {
+        try {
+            $this->installer->createOwner('owner', "correct horse\0battery staple");
+            self::fail('A password no login could ever accept was stored');
+        } catch (StorageException $e) {
+            self::assertSame(Installer::ERR_WEAK_PASSWORD, $e->getCode());
+            self::assertStringContainsString('NUL', $e->getMessage());
+        }
+
+        self::assertFalse($this->installer->state()->hasOwner);
     }
 }

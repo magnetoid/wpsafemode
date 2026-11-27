@@ -43,6 +43,12 @@ final class Response
         return self::json(['error' => 'not_found'], 404);
     }
 
+    /** A body field of the wrong type: the request is malformed, whatever it holds. */
+    public static function badRequest(): self
+    {
+        return self::json(['error' => 'bad_request'], 422);
+    }
+
     public static function methodNotAllowed(): self
     {
         return self::json(['error' => 'method_not_allowed'], 405);

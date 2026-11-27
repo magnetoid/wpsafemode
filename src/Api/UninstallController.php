@@ -22,9 +22,11 @@ final class UninstallController
     {
         // Typed confirmation rather than a bare POST: this is irreversible and
         // reachable from an authenticated session, so a mis-click must not do it.
-        $confirm = $request->json()['confirm'] ?? null;
+        if (!$request->bodyHasTypes(['confirm' => 'string'])) {
+            return Response::badRequest();
+        }
 
-        if (!is_string($confirm) || $confirm !== 'DELETE') {
+        if (($request->json()['confirm'] ?? null) !== 'DELETE') {
             return Response::json(['error' => 'confirmation_required'], 422);
         }
 

@@ -207,4 +207,28 @@ final class AuthControllerTest extends TestCase
         self::assertSame(500, $me->status);
         self::assertSame('corrupt_install', $this->decode($me)['error']);
     }
+
+    public function testALoginBodyOfTheWrongTypeIsABadRequestAndCountsNothing(): void
+    {
+        foreach ([
+            ['login' => ['owner'], 'password' => self::PASSWORD],
+            ['login' => 'owner', 'password' => [self::PASSWORD]],
+            ['login' => 'owner', 'password' => 12345678901234],
+            ['login' => null, 'password' => self::PASSWORD],
+        ] as $body) {
+            $response = $this->controller->login(new Request(
+                'POST',
+                '/api/auth/login',
+                '/index.php',
+                (string) json_encode($body),
+                ['REMOTE_ADDR' => '203.0.113.7', 'HTTP_USER_AGENT' => self::UA]
+            ));
+
+            self::assertSame(422, $response->status);
+            self::assertSame(['error' => 'bad_request'], $this->decode($response));
+            self::assertArrayNotHasKey('Set-Cookie', $response->headers);
+        }
+
+        self::assertSame(0, $this->storage->rateLimiter()->peek('login:203.0.113.7', time())->attempts);
+    }
 }

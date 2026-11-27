@@ -34,10 +34,18 @@ final class Installer
     public const STEP_API_KEY = 'api_key';
     public const STEP_DONE    = 'done';
 
-    /** StorageException codes createOwner() throws, so callers map causes without matching text. */
-    public const ERR_WEAK_PASSWORD = 1;
-    public const ERR_BAD_LOGIN     = 2;
-    public const ERR_OWNER_EXISTS  = 3;
+    /**
+     * StorageException codes for the refusals a user can act on, so callers
+     * map causes without matching text. Each coded message is fixed and
+     * carries no server path; anything uncoded is a fault, not a refusal.
+     */
+    public const ERR_WEAK_PASSWORD     = 1;
+    public const ERR_BAD_LOGIN         = 2;
+    public const ERR_OWNER_EXISTS      = 3;
+    public const ERR_NO_OWNER          = 4;
+    public const ERR_EMPTY_KEY         = 5;
+    public const ERR_EXPOSED           = 6;
+    public const ERR_ALREADY_INSTALLED = 7;
 
     private const TOKEN_FILE = 'install-token.php';
 
@@ -155,6 +163,10 @@ final class Installer
         return $this->lastSelfTest = WebAccessibilitySelfTest::run($this->dataDir, $baseUrl);
     }
 
+    /**
+     * @throws StorageException coded ERR_ALREADY_INSTALLED, ERR_NO_OWNER,
+     *         ERR_EMPTY_KEY or ERR_EXPOSED for a refusal; uncoded for a fault
+     */
     public function storeApiKey(string $key, bool $acknowledgedRisk, string $baseUrl): void
     {
         $this->assertNotInstalled();
@@ -163,13 +175,14 @@ final class Installer
         $key = trim($key);
 
         if ($key === '') {
-            throw new StorageException('The API key is empty.');
+            throw new StorageException('The API key is empty.', self::ERR_EMPTY_KEY);
         }
 
         $result = $this->runSelfTest($baseUrl);
 
         if ($result->blocksApiKey() && !$acknowledgedRisk) {
-            throw new StorageException($result->detail);
+            // The detail names only the public URL that was checked.
+            throw new StorageException($result->detail, self::ERR_EXPOSED);
         }
 
         $this->storage->config()->set('api_key', $this->vault->encrypt($key));
@@ -180,19 +193,35 @@ final class Installer
             AuditEvent::SELF_TEST,
             null,
             'data_dir',
-            ['reachable' => $result->reachable, 'inconclusive' => $result->inconclusive]
+            [
+                'outcome'           => $result->reachable ? 'reachable' : ($result->inconclusive ? 'inconclusive' : 'not_reachable'),
+                'reachable'         => $result->reachable,
+                'inconclusive'      => $result->inconclusive,
+                // Whether the owner stored the key over a warning.
+                'acknowledged_risk' => $acknowledgedRisk,
+            ]
         ));
     }
 
+    /**
+     * @throws StorageException coded ERR_ALREADY_INSTALLED or ERR_NO_OWNER for
+     *         a refusal; uncoded for a fault
+     */
     public function finalize(string $ip): void
     {
         $this->assertNotInstalled();
         $owner = $this->owner('Create the owner before finishing setup.');
 
+        // installed_at is the commit point, so it is written last. Everything
+        // an installed copy needs (the CSRF secret above all) exists before
+        // it: a request that dies here leaves a copy that is not installed
+        // and can be finished again, never one that is installed and cannot
+        // sign anyone in.
+        $config = $this->storage->config();
         // The installer does not ask about posture; every copy starts in emergency.
-        $this->storage->config()->set('posture', 'emergency');
-        $this->storage->config()->set('installed_at', (string) time());
-        $this->storage->config()->set('install_id', bin2hex(random_bytes(8)));
+        $config->set('posture', 'emergency');
+        $config->set('install_id', bin2hex(random_bytes(8)));
+        $config->set('installed_at', (string) time());
 
         // The token has done its job; leaving it is one more secret to leak.
         // Best effort only: the installed_at check above is the gate.
@@ -218,7 +247,7 @@ final class Installer
     private function assertNotInstalled(): void
     {
         if ($this->isInstalled()) {
-            throw new StorageException('This copy is already installed.');
+            throw new StorageException('This copy is already installed.', self::ERR_ALREADY_INSTALLED);
         }
     }
 
@@ -227,7 +256,7 @@ final class Installer
         $users = $this->storage->users()->all();
 
         if ($users === []) {
-            throw new StorageException($messageIfNone);
+            throw new StorageException($messageIfNone, self::ERR_NO_OWNER);
         }
 
         return $users[0];

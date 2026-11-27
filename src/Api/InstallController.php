@@ -8,8 +8,9 @@ use WPSafeMode\Core\Request;
 use WPSafeMode\Core\Response;
 use WPSafeMode\Installer\Installer;
 use WPSafeMode\Installer\SelfRename;
-use WPSafeMode\Storage\AuditEvent;
+use WPSafeMode\Security\PasswordHasher;
 use WPSafeMode\Security\WebAccessibilitySelfTest;
+use WPSafeMode\Storage\AuditEvent;
 use WPSafeMode\Storage\Contracts\StorageException;
 
 /**
@@ -39,6 +40,10 @@ final class InstallController
 
     public function verifyToken(Request $request): Response
     {
+        if (!$request->bodyHasTypes(['token' => 'string'])) {
+            return Response::badRequest();
+        }
+
         return $this->tokenOk($request)
             ? Response::json(['ok' => true])
             : $this->badToken();
@@ -46,18 +51,29 @@ final class InstallController
 
     public function createOwner(Request $request): Response
     {
+        if (!$request->bodyHasTypes(['token' => 'string', 'login' => 'string', 'password' => 'string'])) {
+            return Response::badRequest();
+        }
+
         if (!$this->tokenOk($request)) {
             return $this->badToken();
         }
 
         $body = $request->json();
+        $password = $body['password'] ?? '';
 
         try {
-            $this->installer->createOwner((string) ($body['login'] ?? ''), (string) ($body['password'] ?? ''));
+            $this->installer->createOwner($body['login'] ?? '', $password);
         } catch (StorageException $e) {
             switch ($e->getCode()) {
                 case Installer::ERR_WEAK_PASSWORD:
-                    return Response::json(['error' => 'weak_password', 'message' => $e->getMessage()], 422);
+                    // The list as well as the sentence, so the page never
+                    // has to split prose back into items.
+                    return Response::json([
+                        'error'      => 'weak_password',
+                        'message'    => $e->getMessage(),
+                        'weaknesses' => PasswordHasher::weaknesses($password),
+                    ], 422);
                 case Installer::ERR_BAD_LOGIN:
                     return Response::json(['error' => 'bad_login', 'message' => $e->getMessage()], 422);
                 case Installer::ERR_OWNER_EXISTS:
@@ -72,6 +88,10 @@ final class InstallController
 
     public function selfTest(Request $request): Response
     {
+        if (!$request->bodyHasTypes(['token' => 'string'])) {
+            return Response::badRequest();
+        }
+
         // The self-test writes into data/ and makes an outbound request, so
         // it is not anonymous.
         if (!$this->tokenOk($request)) {
@@ -89,6 +109,10 @@ final class InstallController
 
     public function apiKey(Request $request): Response
     {
+        if (!$request->bodyHasTypes(['token' => 'string', 'api_key' => 'string', 'acknowledged_risk' => 'bool'])) {
+            return Response::badRequest();
+        }
+
         if (!$this->tokenOk($request)) {
             return $this->badToken();
         }
@@ -98,12 +122,22 @@ final class InstallController
 
         try {
             $this->installer->storeApiKey(
-                (string) ($body['api_key'] ?? ''),
-                (bool) ($body['acknowledged_risk'] ?? false),
+                $body['api_key'] ?? '',
+                ($body['acknowledged_risk'] ?? false) === true,
                 $baseUrl ?? 'http://127.0.0.1:1'
             );
         } catch (StorageException $e) {
-            return Response::json(['error' => 'refused', 'message' => $e->getMessage()], 422);
+            switch ($e->getCode()) {
+                case Installer::ERR_EMPTY_KEY:
+                case Installer::ERR_EXPOSED:
+                case Installer::ERR_NO_OWNER:
+                    return Response::json(['error' => 'refused', 'message' => $e->getMessage()], 422);
+                case Installer::ERR_ALREADY_INSTALLED:
+                    return Response::json(['error' => 'already_installed'], 409);
+                default:
+                    // A fault, not a refusal: the composition root answers it.
+                    throw $e;
+            }
         }
 
         return Response::json($this->installer->state()->toArray());
@@ -111,6 +145,10 @@ final class InstallController
 
     public function finish(Request $request): Response
     {
+        if (!$request->bodyHasTypes(['token' => 'string'])) {
+            return Response::badRequest();
+        }
+
         if (!$this->tokenOk($request)) {
             return $this->badToken();
         }
@@ -118,7 +156,14 @@ final class InstallController
         try {
             $this->installer->finalize($request->clientIp());
         } catch (StorageException $e) {
-            return Response::json(['error' => 'incomplete', 'message' => $e->getMessage()], 422);
+            switch ($e->getCode()) {
+                case Installer::ERR_NO_OWNER:
+                    return Response::json(['error' => 'incomplete', 'message' => $e->getMessage()], 422);
+                case Installer::ERR_ALREADY_INSTALLED:
+                    return Response::json(['error' => 'already_installed'], 409);
+                default:
+                    throw $e;
+            }
         }
 
         return Response::json($this->installer->state()->toPublicArray());
@@ -126,6 +171,10 @@ final class InstallController
 
     public function rename(Request $request): Response
     {
+        if (!$request->bodyHasTypes(['token' => 'string', 'name' => 'string'])) {
+            return Response::badRequest();
+        }
+
         if (!$this->tokenOk($request)) {
             return $this->badToken();
         }

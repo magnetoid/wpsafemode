@@ -133,12 +133,17 @@ final class RenameEndpointsTest extends TestCase
     {
         $this->installer->issueToken();
 
-        foreach ([[], ['token' => 'not-the-token'], ['token' => 5]] as $body) {
+        foreach ([[], ['token' => 'not-the-token']] as $body) {
             $response = $this->post('/api/install/rename', $body + ['name' => self::NAME]);
 
             self::assertSame(403, $response->status);
             self::assertSame('bad_token', $this->decode($response)['error']);
         }
+
+        // A token that is not a string is a malformed request.
+        $response = $this->post('/api/install/rename', ['token' => 5, 'name' => self::NAME]);
+        self::assertSame(422, $response->status);
+        self::assertSame('bad_request', $this->decode($response)['error']);
 
         self::assertDirectoryExists($this->appDir);
         self::assertDirectoryDoesNotExist($this->parent . '/' . self::NAME);
@@ -166,11 +171,18 @@ final class RenameEndpointsTest extends TestCase
     {
         $token = $this->installer->issueToken();
 
-        foreach (['../escape', 'a/b', ['x'], 7] as $bad) {
+        foreach (['../escape', 'a/b', 'ab', ''] as $bad) {
             $response = $this->post('/api/install/rename', ['token' => $token, 'name' => $bad]);
 
             self::assertSame(422, $response->status);
             self::assertSame('rename_failed', $this->decode($response)['error']);
+        }
+
+        foreach ([['x'], 7, null] as $bad) {
+            $response = $this->post('/api/install/rename', ['token' => $token, 'name' => $bad]);
+
+            self::assertSame(422, $response->status);
+            self::assertSame(['error' => 'bad_request'], $this->decode($response));
         }
 
         self::assertDirectoryExists($this->appDir);
@@ -260,5 +272,24 @@ final class RenameEndpointsTest extends TestCase
         $events = $this->storage->auditLog()->recent(2);
         self::assertSame(['to' => self::NAME, 'outcome' => 'failed'], $events[0]->meta);
         self::assertSame(['to' => self::NAME], $events[1]->meta);
+    }
+
+    public function testAnOwnerRenameWithANonStringNameIsABadRequest(): void
+    {
+        $owner = $this->install()[Role::OWNER];
+
+        foreach ([['x'], 7, true, 'a/b'] as $bad) {
+            $response = $this->post(
+                '/api/admin/rename',
+                ['name' => $bad],
+                $owner,
+                ['HTTP_X_WPSM_CSRF' => Csrf::issue($owner, self::SECRET)]
+            );
+
+            self::assertSame(422, $response->status);
+            self::assertSame(is_string($bad) ? 'rename_failed' : 'bad_request', $this->decode($response)['error']);
+        }
+
+        self::assertDirectoryExists($this->appDir);
     }
 }
